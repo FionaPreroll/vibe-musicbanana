@@ -55,7 +55,7 @@ Only public profiles are served until there is a login. A year starts at midnigh
 
 ## Scrobbling
 
-musicbanana speaks the part of the [ListenBrainz API](https://listenbrainz.readthedocs.io/en/latest/users/api/core.html) that players use to scrobble, under `/api/listenbrainz/1/`: `POST submit-listens` (`single`, `import` and `playing_now`) and `GET validate-token`. Limits, checks and error responses follow listenbrainz-server. A listen keeps the strings and extra data (`additional_info`) exactly as sent and is matched to the catalog through the alias tables; unknown artists, albums and tracks are created. A second listen at the same second is skipped, so clients can safely resend.
+musicbanana speaks the part of the [ListenBrainz API](https://listenbrainz.readthedocs.io/en/latest/users/api/core.html) that players use to scrobble, under `/api/listenbrainz/1/`: `POST submit-listens` (`single`, `import` and `playing_now`) and `GET validate-token`. Limits, checks and error responses follow listenbrainz-server. A listen keeps the strings and extra data (`additional_info`) exactly as sent and is matched to the catalog through the alias tables; unknown artists, albums and tracks are created. A second listen at the same second is skipped, so clients can safely resend. So is a listen of the same track that follows another one sooner than a player counts a play (half the track, at most four minutes, 15 seconds when the length is unknown): nobody plays a track twice that fast, so it comes from a second scrobbler or a play sent twice.
 
 Every client gets its own token, which belongs to one profile. Tokens are created on the command line for now (the binary is `musicbanana`, or `cargo run --release --` in `backend/`):
 
