@@ -18,15 +18,23 @@ Design notes and decisions: [docs/design.md](docs/design.md) (German).
 Requirements: Rust (stable), Node 22+, Docker (or any PostgreSQL 16+).
 
 ```sh
-docker compose up -d db                 # PostgreSQL on localhost:5432
+docker compose up -d db                       # PostgreSQL on localhost:5432
 cp backend/.env.example backend/.env
 
-cargo install sqlx-cli --no-default-features --features postgres,rustls
-cd backend && cargo sqlx migrate run && cargo run     # API on http://127.0.0.1:3000
-cd frontend && npm install && npm run dev             # UI on http://localhost:5173, proxies /api
+cd backend && cargo run                       # applies migrations, API on http://127.0.0.1:3000
+cd frontend && npm install && npm run dev     # UI on http://localhost:5173, proxies /api
 ```
 
-After changing a `query!` macro or a migration, run `cargo sqlx prepare` in `backend/` and commit the updated `.sqlx/` files.
+### Changing SQL
+
+sqlx checks every `query!` at compile time. Builds use the committed query cache in `backend/.sqlx/` (`SQLX_OFFLINE=true` in `.cargo/config.toml`), so they work without a database. After adding or changing a query or a migration, refresh the cache against a migrated database and commit the updated `.sqlx/` files:
+
+```sh
+cargo install sqlx-cli --version '~0.9' --no-default-features --features postgres,rustls   # once
+cd backend && cargo sqlx migrate run && cargo sqlx prepare
+```
+
+Until then the build fails with "no cached data for this query". To check queries live while editing, run with `SQLX_OFFLINE=false` against a migrated database.
 
 Checks (the same ones CI runs):
 
