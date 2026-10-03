@@ -1,27 +1,36 @@
 <script lang="ts">
-	type Health = { status: string; listens: number };
+	import { listenCount } from '#lib/format.ts';
+	import type { PageProps } from './$types';
 
-	const health: Promise<Health> = fetch('/api/health').then((res) => {
-		if (!res.ok) throw new Error(`HTTP ${res.status}`);
-		return res.json();
-	});
+	let { data }: PageProps = $props();
 </script>
 
 <svelte:head>
 	<title>musicbanana</title>
 </svelte:head>
 
-<main class="mx-auto max-w-2xl p-8">
-	<h1 class="text-4xl font-bold">musicbanana 🍌</h1>
-	<p class="mt-2 text-gray-600">A free place for your listening history.</p>
+<main class="mx-auto max-w-2xl px-4 pb-16 sm:px-8">
+	<p class="mt-6 text-stone-600">A free place for your listening history.</p>
 
-	<p class="mt-8 text-sm">
-		{#await health}
-			Checking backend…
-		{:then h}
-			Backend {h.status}, {h.listens} listens stored.
-		{:catch err}
-			<span class="text-red-600">Backend unreachable ({err.message}).</span>
-		{/await}
-	</p>
+	<h2 class="mt-10 mb-2 text-sm font-semibold tracking-wide text-stone-500 uppercase">Profiles</h2>
+	{#if data.profiles.length === 0}
+		<p class="text-sm text-stone-500">No public profiles yet.</p>
+	{:else}
+		<ul class="divide-y divide-stone-200">
+			{#each data.profiles as profile (`${profile.username}/${profile.slug}`)}
+				<li class="flex items-baseline justify-between gap-4 py-2">
+					<a
+						class="font-medium hover:underline"
+						href="/u/{profile.username}{profile.slug === 'default' ? '' : `/${profile.slug}`}"
+					>
+						{profile.username}
+						{#if profile.slug !== 'default'}<span class="font-normal text-stone-500">
+								/ {profile.name}</span
+							>{/if}
+					</a>
+					<span class="text-sm text-stone-500 tabular-nums">{listenCount(profile.listens)}</span>
+				</li>
+			{/each}
+		</ul>
+	{/if}
 </main>

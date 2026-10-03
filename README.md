@@ -43,6 +43,15 @@ cd backend && cargo fmt --check && cargo clippy --all-targets -- -D warnings && 
 cd frontend && npm run lint && npm run check && npm run build
 ```
 
+## Pages and API
+
+| Page | Data from |
+|---|---|
+| `/` lists the public profiles | `GET /api/profiles` |
+| `/u/<username>` (default profile) or `/u/<username>/<slug>`: listens per year, top artists, albums and tracks, recent listens; `?year=2012` narrows everything to one year | `GET /api/profiles/<username>/<slug>?tz=`, `…/top/{artists,releases,recordings}?year=&tz=&limit=`, `…/listens?before=&limit=` |
+
+Only public profiles are served until there is a login. A year starts at midnight in `tz` (an IANA name such as `Europe/Berlin`, UTC by default); the frontend sends the browser's time zone. `listens` pages backwards: pass a page's `next` as `before`.
+
 ## Importing the old musicbanana-php database
 
 The importer reads the `mb_*` tables straight from MySQL/MariaDB and writes into an empty musicbanana database (it refuses to run twice). It repairs double-encoded names, follows old merges and wraps the old MD5 password hashes in argon2id; details in [docs/design.md](docs/design.md).
@@ -53,7 +62,7 @@ DATABASE_URL=postgres://postgres@127.0.0.1:5432/musicbanana \
   cargo run --release -- import-php --from mysql://root@127.0.0.1:3306/musicbanana
 ```
 
-It prints a summary (accounts, artists, listens, skipped rows, repaired names). The import test (`tests/import_php.rs`) runs against a MySQL server named by `LEGACY_MYSQL_URL` and is skipped without it.
+It prints a summary (accounts, artists, listens, skipped rows, repaired names). Afterwards the history is at `/u/<old username>`. The import test (`tests/import_php.rs`) runs against a MySQL server named by `LEGACY_MYSQL_URL` and is skipped without it.
 
 ## Production-ish
 
