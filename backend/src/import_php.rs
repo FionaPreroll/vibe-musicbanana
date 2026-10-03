@@ -436,7 +436,7 @@ pub async fn write(db: &PgPool, data: &LegacyData) -> anyhow::Result<Report> {
         };
         let title = repaired.fix(&t.title);
         let key = (artist_id, name_key(&title));
-        let length_ms = (t.length > 0).then(|| (t.length * 1000) as i32);
+        let length_ms = seconds_to_ms(t.length);
         let recording_id = if let (true, Some(&id)) =
             (target.id != t.id, new_recording.get(&target.id))
         {
@@ -542,13 +542,22 @@ struct Repairs {
 }
 
 impl Repairs {
+    /// Mojibake repair, plus dropping NUL characters, which MySQL allows in
+    /// strings but PostgreSQL text cannot hold.
     fn fix(&mut self, s: &str) -> String {
         let fixed = repair_mojibake(s);
         if fixed != s {
             self.count += 1;
         }
-        fixed.into_owned()
+        fixed.replace('\0', "")
     }
+}
+
+/// Track length in seconds → milliseconds; 0 and absurd values become unknown.
+fn seconds_to_ms(seconds: i64) -> Option<i32> {
+    i32::try_from(seconds.saturating_mul(1000))
+        .ok()
+        .filter(|&ms| ms > 0)
 }
 
 #[derive(Default)]
@@ -619,6 +628,21 @@ impl ListenBatch {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_lose_nul_characters() {
+        let mut repairs = Repairs::default();
+        assert_eq!(repairs.fix("Junge\0"), "Junge");
+        assert_eq!(repairs.fix("Die Ã„rzte\0"), "Die Ärzte");
+        assert_eq!(repairs.count, 1);
+    }
+
+    #[test]
+    fn track_lengths_convert_to_milliseconds() {
+        assert_eq!(seconds_to_ms(240), Some(240_000));
+        assert_eq!(seconds_to_ms(0), None);
+        assert_eq!(seconds_to_ms(4_294_967_295), None, "u32::MAX seconds");
+    }
 
     #[test]
     fn canonical_follows_chains_and_survives_cycles() {
