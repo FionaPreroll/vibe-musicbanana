@@ -1,7 +1,8 @@
 # musicbanana with its own PostgreSQL, to run next to Navidrome.
 #
 #   cp .env.example .env    # then set the database password
-#   docker compose up -d --build
+#   docker compose pull     # the image CI publishes from main
+#   docker compose up -d    # builds it from this checkout if it was not pulled
 #
 # The web interface and the scrobble API listen on port 3000 (MUSICBANANA_PORT).
 # README.md, "Running with Docker", has the Navidrome settings, tokens, moving
@@ -11,8 +12,8 @@ name: musicbanana
 
 services:
   musicbanana:
+    image: ghcr.io/fionapreroll/vibe-musicbanana:latest
     build: ..
-    image: musicbanana
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://musicbanana:${MUSICBANANA_DB_PASSWORD:?set MUSICBANANA_DB_PASSWORD in .env}@db:5432/musicbanana

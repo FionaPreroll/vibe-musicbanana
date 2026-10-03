@@ -98,16 +98,20 @@ It prints a summary (accounts, artists, listens, skipped rows, repaired names). 
 
 ## Running with Docker
 
-`Dockerfile` builds one image with the server and the frontend, and `deploy/compose.yaml` runs it together with its own PostgreSQL. On the machine that runs Navidrome:
+`Dockerfile` builds one image with the server and the frontend. CI publishes it for every change on main that passed all checks, as `ghcr.io/fionapreroll/vibe-musicbanana:latest` and `:sha-<commit>`, for x86-64 (linux/amd64). `deploy/compose.yaml` runs it together with its own PostgreSQL. On the machine that runs Navidrome:
 
 ```sh
 git clone https://github.com/FionaPreroll/vibe-musicbanana.git musicbanana
 cd musicbanana/deploy
 cp .env.example .env    # set MUSICBANANA_DB_PASSWORD, e.g. to the output of `openssl rand -hex 24`
-docker compose up -d --build
+docker login ghcr.io    # once: your GitHub user name, and a token with read:packages as password
+docker compose pull
+docker compose up -d
 ```
 
-The first build takes a while (a Rust release build). Afterwards the web interface is at `http://<server>:3000`; `MUSICBANANA_PORT` in `.env` changes the port. Commands of the binary run inside the container, for example the token for Navidrome:
+The image is private like the repository, hence the login; once the package is public (GitHub, package settings, "Change visibility"), pulling needs none, and the code stays private. An image that could not be pulled is built from the checkout instead, which takes a while (a Rust release build); `docker compose up -d --build` always builds.
+
+Afterwards the web interface is at `http://<server>:3000`; `MUSICBANANA_PORT` in `.env` changes the port. Commands of the binary run inside the container, for example the token for Navidrome:
 
 ```sh
 docker compose exec musicbanana musicbanana token create --user <username> --label Navidrome
@@ -129,7 +133,7 @@ docker compose exec -T db pg_restore -U musicbanana -d musicbanana --clean --if-
 docker compose start musicbanana
 ```
 
-**Updates:** `git pull && docker compose up -d --build`. Migrations run when the server starts.
+**Updates:** `docker compose pull && docker compose up -d`, or `git pull && docker compose up -d --build` to build it yourself. Migrations run when the server starts.
 
 **Backups:** `docker compose exec -T db pg_dump -U musicbanana -Fc musicbanana > musicbanana-$(date +%F).dump`, restored as above.
 
