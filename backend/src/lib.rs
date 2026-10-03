@@ -1,3 +1,7 @@
+pub mod auth;
+pub mod catalog;
+pub mod import_php;
+
 use std::path::Path;
 
 use axum::{

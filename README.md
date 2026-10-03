@@ -35,6 +35,18 @@ cd backend && cargo fmt --check && cargo clippy --all-targets -- -D warnings && 
 cd frontend && npm run lint && npm run check && npm run build
 ```
 
+## Importing the old musicbanana-php database
+
+The importer reads the `mb_*` tables straight from MySQL/MariaDB and writes into an empty musicbanana database (it refuses to run twice). It repairs double-encoded names, follows old merges and wraps the old MD5 password hashes in argon2id; details in [docs/design.md](docs/design.md).
+
+```sh
+cd backend
+DATABASE_URL=postgres://postgres@127.0.0.1:5432/musicbanana \
+  cargo run --release -- import-php --from mysql://root@127.0.0.1:3306/musicbanana
+```
+
+It prints a summary (accounts, artists, listens, skipped rows, repaired names). The import test (`tests/import_php.rs`) runs against a MySQL server named by `LEGACY_MYSQL_URL` and is skipped without it.
+
 ## Production-ish
 
 ```sh

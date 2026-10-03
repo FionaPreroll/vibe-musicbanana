@@ -24,10 +24,23 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      mariadb:
+        # Source database for the musicbanana-php import test.
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       # Builds use the committed .sqlx cache; tests need a server to create per-test databases.
       SQLX_OFFLINE: "true"
       DATABASE_URL: postgres://postgres@localhost:5432/postgres
+      LEGACY_MYSQL_URL: mysql://root:root@127.0.0.1:3306
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
