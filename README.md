@@ -50,8 +50,9 @@ cd frontend && pnpm lint && pnpm check && pnpm build
 |---|---|
 | `/` lists the public profiles | `GET /api/profiles` |
 | `/u/<username>` (default profile) or `/u/<username>/<slug>`: listens per year, top artists, albums and tracks, recent listens, what is playing now; `?year=2012` narrows everything to one year | `GET /api/profiles/<username>/<slug>?tz=`, `…/top/{artists,releases,recordings}?year=&tz=&limit=`, `…/listens?before=&limit=`, `…/now-playing` |
+| `/u/<username>/artist/<id>`, `…/album/<id>` and `…/track/<id>` (after the slug for other profiles): listens per month, first and last listen, phases of heavy listening, the albums and tracks heard | `GET /api/profiles/<username>/<slug>/{artists,releases,recordings}/<id>?tz=` |
 
-Only public profiles are served until there is a login. A year starts at midnight in `tz` (an IANA name such as `Europe/Berlin`, UTC by default); the frontend sends the browser's time zone. `listens` pages backwards: pass a page's `next` as `before`. `now-playing` is `null` when nothing plays; the open page asks again every 30 seconds and adds new listens on top.
+Only public profiles are served until there is a login. A year starts at midnight in `tz` (an IANA name such as `Europe/Berlin`, UTC by default); the frontend sends the browser's time zone. `listens` pages backwards: pass a page's `next` as `before`. `now-playing` is `null` when nothing plays; the open page asks again every 30 seconds and adds new listens on top. The months of an artist, album or track run from the profile's first listen to its last, leaving out a year or more without any listens (shown as a break); an entry that was merged into another one answers with that one.
 
 ## Scrobbling
 

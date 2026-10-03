@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.id, r.title AS name, a.name AS \"artist?\", count(*) AS \"listens!\"\n             FROM listen l\n             JOIN recording r ON r.id = l.recording_id\n             JOIN artist a ON a.id = r.artist_id\n            WHERE l.profile_id = $1\n              AND ($2::bigint IS NULL OR l.artist_id = $2)\n              AND ($3::bigint IS NULL OR l.release_id = $3)\n            GROUP BY r.id, a.id\n            ORDER BY count(*) DESC, r.title\n            LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "artist?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "7f885f87c37bd9c76d1cc15bd817250af1d295c7ca1b96b9c142a730cba9bf65"
+}

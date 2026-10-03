@@ -3,6 +3,7 @@ import {
 	ApiError,
 	getJson,
 	profileApi,
+	profilePath,
 	timeZone,
 	type ChartEntry,
 	type ChartKind,
@@ -35,7 +36,8 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 			}),
 			getJson<NowPlaying | null>(fetch, `${api}/now-playing`)
 		]);
-		return { api, year, overview, artists, releases, recordings, recent, nowPlaying };
+		const base = profilePath(params.username, params.slug);
+		return { api, base, year, overview, artists, releases, recordings, recent, nowPlaying };
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) error(404, 'There is no such profile.');
 		if (e instanceof ApiError && e.status === 400) error(400, e.message);

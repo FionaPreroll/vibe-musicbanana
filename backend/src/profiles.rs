@@ -47,14 +47,18 @@ async fn list(State(state): State<AppState>) -> Result<Json<Vec<ProfileSummary>>
     Ok(Json(profiles))
 }
 
-struct Profile {
-    id: i64,
-    username: String,
-    slug: String,
-    name: String,
+pub(crate) struct Profile {
+    pub id: i64,
+    pub username: String,
+    pub slug: String,
+    pub name: String,
 }
 
-async fn find_profile(db: &PgPool, username: &str, slug: &str) -> Result<Profile, AppError> {
+pub(crate) async fn find_profile(
+    db: &PgPool,
+    username: &str,
+    slug: &str,
+) -> Result<Profile, AppError> {
     // Cast the parameters to citext: comparing citext to text would compare case-sensitively.
     sqlx::query_as!(
         Profile,
@@ -146,13 +150,13 @@ struct TopParams {
 }
 
 #[derive(Serialize)]
-struct ChartEntry {
-    id: i64,
-    name: String,
+pub(crate) struct ChartEntry {
+    pub id: i64,
+    pub name: String,
     /// The artist of a release or recording; missing in the artist chart.
     #[serde(skip_serializing_if = "Option::is_none")]
-    artist: Option<String>,
-    listens: i64,
+    pub artist: Option<String>,
+    pub listens: i64,
 }
 
 // All three charts count listens in [lo, hi): the given year in the given time
@@ -269,6 +273,9 @@ struct ListenEntry {
     artist: String,
     track: String,
     album: Option<String>,
+    artist_id: i64,
+    recording_id: i64,
+    release_id: Option<i64>,
 }
 
 async fn listens(
@@ -282,7 +289,8 @@ async fn listens(
     // One row more than asked for tells whether there is another page.
     let mut listens = sqlx::query_as!(
         ListenEntry,
-        r#"SELECT l.listened_at, a.name AS artist, r.title AS track, rel.title AS "album?"
+        r#"SELECT l.listened_at, a.name AS artist, r.title AS track, rel.title AS "album?",
+                  l.artist_id, l.recording_id, l.release_id
              FROM listen l
              JOIN artist a ON a.id = l.artist_id
              JOIN recording r ON r.id = l.recording_id
@@ -336,7 +344,7 @@ async fn now_playing(
 
 /// The time zone for year boundaries, UTC by default. PostgreSQL knows the names
 /// (e.g. Europe/Berlin) and rejects unknown ones with invalid_parameter_value.
-async fn time_zone(db: &PgPool, tz: Option<String>) -> Result<String, AppError> {
+pub(crate) async fn time_zone(db: &PgPool, tz: Option<String>) -> Result<String, AppError> {
     let Some(tz) = tz else {
         return Ok("UTC".into());
     };

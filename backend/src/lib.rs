@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod catalog;
+mod entities;
 pub mod import_php;
 mod listenbrainz;
 mod profiles;
@@ -43,6 +44,7 @@ fn api() -> Router<AppState> {
     Router::new()
         .route("/health", get(health))
         .merge(profiles::routes())
+        .merge(entities::routes())
         .nest("/listenbrainz/1", listenbrainz::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
 }

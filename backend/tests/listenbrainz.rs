@@ -238,6 +238,9 @@ async fn a_listen_finds_its_catalog_entries_and_keeps_the_raw_data(db: PgPool) {
             "artist": "Die Ärzte",
             "track": "Unrockbar",
             "album": "Geräusch",
+            "artist_id": 1,
+            "recording_id": 1,
+            "release_id": 1,
         })
     );
 }

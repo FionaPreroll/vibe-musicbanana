@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"listens!\", min(listened_at) AS first, max(listened_at) AS last\n             FROM listen\n            WHERE profile_id = $1\n              AND ($2::bigint IS NULL OR artist_id = $2)\n              AND ($3::bigint IS NULL OR release_id = $3)\n              AND ($4::bigint IS NULL OR recording_id = $4)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "first",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "last",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "9410478bcf503689459c84b5b774aa81bdfdafb68f741f21b482a74ca99dc788"
+}
