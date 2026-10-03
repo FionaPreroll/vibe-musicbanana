@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT release_id FROM release_alias WHERE artist_id = $1 AND title_key = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "release_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "release_alias",
+            "name": "release_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "63abbf0b6ad803922b83b350fe9e15bb6e561b1000cb3ee688083b7e04eaf74d"
+}

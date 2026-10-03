@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT artist_id FROM artist_alias WHERE name_key = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "artist_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artist_alias",
+            "name": "artist_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0ba391729c25aafd4718ae3c355fe6248b90b80cc6fc54a49d600b993f5af1f0"
+}

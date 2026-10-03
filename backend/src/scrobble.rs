@@ -25,19 +25,20 @@ pub struct Listen {
 /// Stores listens and returns how many were new. A listen at a time the profile
 /// already has one for is a resubmission and gets skipped.
 pub async fn record(db: &PgPool, profile_id: i64, listens: &[Listen]) -> sqlx::Result<u64> {
-    let mut catalog = Resolver::new(db);
+    let mut conn = db.acquire().await?;
+    let mut catalog = Resolver::default();
     let mut artist_ids = Vec::with_capacity(listens.len());
     let mut recording_ids = Vec::with_capacity(listens.len());
     let mut release_ids = Vec::with_capacity(listens.len());
     for listen in listens {
-        let artist_id = catalog.artist(&listen.artist).await?;
+        let artist_id = catalog.artist(&mut conn, &listen.artist).await?;
         recording_ids.push(
             catalog
-                .recording(artist_id, &listen.track, listen.duration_ms)
+                .recording(&mut conn, artist_id, &listen.track, listen.duration_ms)
                 .await?,
         );
         release_ids.push(match &listen.album {
-            Some(album) => Some(catalog.release(artist_id, album).await?),
+            Some(album) => Some(catalog.release(&mut conn, artist_id, album).await?),
             None => None,
         });
         artist_ids.push(artist_id);
@@ -80,7 +81,7 @@ pub async fn record(db: &PgPool, profile_id: i64, listens: &[Listen]) -> sqlx::R
         &recording_ids,
         &release_ids as &[Option<i64>],
     )
-    .execute(db)
+    .execute(&mut *conn)
     .await?;
     Ok(inserted.rows_affected())
 }

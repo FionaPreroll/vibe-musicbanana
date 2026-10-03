@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO artist_alias (name_key, artist_id) VALUES ($1, $2)\n             ON CONFLICT DO NOTHING RETURNING artist_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "artist_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artist_alias",
+            "name": "artist_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fc80fb6831bbe3bf7d4edb9432499d872dc89c44bdef08041501f54ea995fc5f"
+}

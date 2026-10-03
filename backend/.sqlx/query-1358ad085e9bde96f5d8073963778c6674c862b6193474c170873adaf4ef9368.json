@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO recording_alias (artist_id, title_key, recording_id) VALUES ($1, $2, $3)\n             ON CONFLICT DO NOTHING RETURNING recording_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "recording_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "recording_alias",
+            "name": "recording_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1358ad085e9bde96f5d8073963778c6674c862b6193474c170873adaf4ef9368"
+}
