@@ -23,9 +23,9 @@ Charts (Woche, Monat, Jahr, gesamt; Artist/Album/Track) werden direkt per `GROUP
 ## Entschieden
 
 - **Stack:** Rust-Backend mit **Axum** (HTTP, tower-Middleware) und **sqlx** (rohes SQL, zur Compile-Zeit gegen das Schema geprüft, Offline-Cache in `backend/.sqlx/`). Frontend **SvelteKit + TypeScript + Tailwind** mit `adapter-static` als SPA, die das Backend ausliefert. Node wird nur zum Bauen gebraucht, nicht im Betrieb.
+- **Betrieb:** ein Docker-Image (Rust-Binary + statisches Frontend, `Dockerfile`) mit eigener Postgres in `deploy/compose.yaml`, auf dem Rechner neben Navidrome, das ebenfalls in Docker läuft. Navidrome erreicht die Scrobble-API über den veröffentlichten Port oder über ein gemeinsames Docker-Netz.
 - **Datenbank:** PostgreSQL.
 - **Scrobble-API:** ListenBrainz-kompatibel unter `/api/listenbrainz/1/` (`submit-listens`, `validate-token`). Supersonic und Ultrasonic scrobbeln über Navidrome, und Navidrome lässt die ListenBrainz-Adresse umstellen. Pro Client ein Token, gebunden an ein Profil, gespeichert als SHA-256. Prüfungen und Grenzen wie bei listenbrainz-server; Navidrome verwirft einen Listen bei 4xx und versucht es bei 5xx erneut. Neue Namen landen über die Alias-Tabellen im Katalog, fehlende Einträge werden angelegt. Audioscrobbler/last.fm 2.0 nur, falls ein Player es braucht.
-- **Betrieb:** ein Docker-Image (Rust-Binary + statisches Frontend, `Dockerfile`) mit eigener Postgres in `deploy/compose.yaml`, auf dem Rechner neben Navidrome, das ebenfalls in Docker läuft. Navidrome erreicht die Scrobble-API über den veröffentlichten Port oder über ein gemeinsames Docker-Netz.
 
 ## Noch offen
 
