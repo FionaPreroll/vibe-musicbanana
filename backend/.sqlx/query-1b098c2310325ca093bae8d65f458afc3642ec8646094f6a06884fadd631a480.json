@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "WITH span AS (\n                       SELECT coalesce(make_timestamptz($2, 1, 1, 0, 0, 0, $3), '-infinity') AS lo,\n                              coalesce(make_timestamptz($2 + 1, 1, 1, 0, 0, 0, $3), 'infinity') AS hi\n                   )\n                   SELECT a.id, a.name, NULL::text AS artist, count(*) AS \"listens!\"\n                     FROM span, listen l\n                     JOIN artist a ON a.id = l.artist_id\n                    WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi\n                    GROUP BY a.id\n                    ORDER BY count(*) DESC, a.name\n                    LIMIT $4",
+  "query": "WITH span AS (\n                       SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,\n                              coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi\n                   )\n                   SELECT a.id, a.name, NULL::text AS artist, count(*) AS \"listens!\"\n                     FROM span, listen l\n                     JOIN artist a ON a.id = l.artist_id\n                    WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi\n                    GROUP BY a.id\n                    ORDER BY count(*) DESC, a.name\n                    LIMIT $5",
   "describe": {
     "columns": [
       {
@@ -41,7 +41,8 @@
     "parameters": {
       "Left": [
         "Int8",
-        "Int4",
+        "Date",
+        "Date",
         "Text",
         "Int8"
       ]
@@ -53,5 +54,5 @@
       null
     ]
   },
-  "hash": "623fadcf675fe96298f2fda5efe2406bacbaffd564dd24af59037f82070869d3"
+  "hash": "1b098c2310325ca093bae8d65f458afc3642ec8646094f6a06884fadd631a480"
 }

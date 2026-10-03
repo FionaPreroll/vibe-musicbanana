@@ -39,6 +39,11 @@ Jedes Profil hat eine Seite pro Artist, Album und Stück (`/u/<name>/artist/<id>
 - **Monate:** vom ersten bis zum letzten Listen des Profils, damit alle Seiten eines Profils dieselbe Zeitachse haben. Ein Jahr oder mehr ganz ohne Listens im Profil, etwa zwischen dem Import von 2016 und neuen Scrobbles, fällt heraus und erscheint in der Kurve als schmaler Bruch.
 - **Phasen intensiven Hörens:** Monate mit mindestens doppelt so vielen Listens wie im Schnitt und mindestens drei, zusammengefasst über einzelne ruhigere Monate dazwischen. Der Schnitt zählt nur die Monate vom ersten bis zum letzten, in dem der Eintrag gehört wurde, sonst wäre alles eine Phase, was erst spät dazukam. Eine Phase braucht mindestens 3 % aller Listens des Eintrags; gezeigt werden höchstens die fünf größten.
 
+## Lieblinge pro Zeitraum
+
+- **Top-Listen für einen Zeitraum:** Die Top-Artists, -Alben und -Stücke des Profils gibt es für alle Zeit, die letzten 7, 30, 90 oder 365 Tage (heute mitgezählt), ein Kalenderjahr oder beliebige Tage von–bis, auch nach einer Seite offen (`?days=30`, `?year=2012`, `?from=2009-06-01&to=2009-08-31`). Tage und Jahre beginnen um Mitternacht in der Zeitzone des Browsers. Die zuletzt gehörten Listens fangen am Ende des Zeitraums an.
+- **Top-Artists über die Jahre:** ein Rangdiagramm mit einer Spalte pro Jahr, darin die zehn meistgehörten Artists in der Reihenfolge der Jahres-Top-Liste (bei Gleichstand alphabetisch). Eine Linie verbindet die Plätze eines Artists in zwei aufeinanderfolgenden Jahren. Die sechs Artists, die am längsten dabei sind, bekommen eine Farbe, alle anderen bleiben grau; Jahre ohne Listens erscheinen als schmaler Bruch. Das Diagramm hängt nicht vom gewählten Zeitraum ab, hebt aber ein gewähltes Jahr hervor.
+
 ## Altdaten: musicbanana-php (MySQL-Dump von 2016)
 
 5 User, 5.706 Artists, 9.868 Alben, 34.663 Tracks, rund 165.000 Scrobbles (2007-08 bis 2016-05) in je einer Tabelle `mb_usertracks_<user_id>`.

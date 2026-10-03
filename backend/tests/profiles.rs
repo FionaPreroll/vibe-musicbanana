@@ -89,6 +89,7 @@ async fn private_and_unknown_profiles_are_not_found(db: PgPool) {
     for uri in [
         "/api/profiles/fiona/arbeit",
         "/api/profiles/fiona/arbeit/top/artists",
+        "/api/profiles/fiona/arbeit/top/artists/years",
         "/api/profiles/fiona/arbeit/listens",
         "/api/profiles/fiona/arbeit/artists/3",
         "/api/profiles/nobody/default",
@@ -162,12 +163,99 @@ async fn yearly_charts_follow_the_time_zone(db: PgPool) {
 }
 
 #[sqlx::test(fixtures("profiles"))]
+async fn charts_for_any_period_of_days(db: PgPool) {
+    let base = "/api/profiles/fiona/default/top";
+    // The first and the last day count in full.
+    let period = "from=2016-03-01&to=2016-03-03";
+    assert_eq!(
+        chart(&get_ok(&db, &format!("{base}/artists?{period}")).await),
+        [json!(["Björk", 2]), json!(["Die Ärzte", 1])]
+    );
+    assert_eq!(
+        chart(&get_ok(&db, &format!("{base}/releases?{period}")).await),
+        [
+            json!(["Debut", "Björk", 1]),
+            json!(["Geräusch", "Die Ärzte", 1])
+        ]
+    );
+    assert_eq!(
+        chart(&get_ok(&db, &format!("{base}/recordings?{period}")).await),
+        [
+            json!(["Human Behaviour", "Björk", 1]),
+            json!(["Jóga", "Björk", 1]),
+            json!(["Unrockbar", "Die Ärzte", 1]),
+        ]
+    );
+
+    // A period can be open at either end.
+    assert_eq!(
+        chart(&get_ok(&db, &format!("{base}/artists?from=2016-03-03")).await),
+        [json!(["Die Ärzte", 2])]
+    );
+    assert_eq!(
+        chart(&get_ok(&db, &format!("{base}/artists?to=2015-06-02")).await),
+        [json!(["Die Ärzte", 2])]
+    );
+
+    // The listen at 2015-12-31 23:30 UTC is on New Year's Day in Berlin.
+    let new_year = "from=2016-01-01&to=2016-01-01";
+    assert_eq!(
+        chart(&get_ok(&db, &format!("{base}/artists?{new_year}&tz=Europe/Berlin")).await),
+        [json!(["Tiësto", 1])]
+    );
+    assert_eq!(
+        get_ok(&db, &format!("{base}/artists?{new_year}")).await,
+        json!([])
+    );
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn top_artists_of_each_year(db: PgPool) {
+    let base = "/api/profiles/fiona/default/top/artists/years";
+    let years = |json: Value| -> Vec<Value> {
+        json.as_array()
+            .unwrap()
+            .iter()
+            .map(|y| json!([y["year"], y["listens"], chart(&y["artists"])]))
+            .collect()
+    };
+
+    let berlin = get_ok(&db, &format!("{base}?tz=Europe/Berlin")).await;
+    assert_eq!(
+        years(berlin.clone()),
+        [
+            json!([2015, 3, [["Die Ärzte", 2], ["Björk", 1]]]),
+            json!([2016, 5, [["Björk", 2], ["Die Ärzte", 2], ["Tiësto", 1]]]),
+        ]
+    );
+    assert_eq!(berlin[0]["artists"][0]["id"], 1);
+
+    // Only the top of each year, but the year still counts all its listens.
+    assert_eq!(
+        years(get_ok(&db, &format!("{base}?limit=1")).await),
+        [
+            json!([2015, 4, [["Die Ärzte", 2]]]),
+            json!([2016, 4, [["Björk", 2]]]),
+        ]
+    );
+
+    let alex = get_ok(&db, "/api/profiles/alex/default/top/artists/years").await;
+    assert_eq!(years(alex), [json!([2016, 1, [["Die Ärzte", 1]]])]);
+}
+
+#[sqlx::test(fixtures("profiles"))]
 async fn bad_parameters_are_rejected(db: PgPool) {
     for uri in [
         "/api/profiles/fiona/default?tz=Mars/Olympus",
         "/api/profiles/fiona/default/top/artists?tz=Mars/Olympus",
         "/api/profiles/fiona/default/top/artists?year=0",
         "/api/profiles/fiona/default/top/artists?year=abc",
+        "/api/profiles/fiona/default/top/artists?year=2016&from=2016-01-01",
+        "/api/profiles/fiona/default/top/artists?from=yesterday",
+        "/api/profiles/fiona/default/top/artists?from=2016-02-30",
+        "/api/profiles/fiona/default/top/artists?to=0000-12-31",
+        "/api/profiles/fiona/default/top/artists?from=2016-03-04&to=2016-03-01",
+        "/api/profiles/fiona/default/top/artists/years?tz=Mars/Olympus",
         "/api/profiles/fiona/default/listens?before=yesterday",
     ] {
         assert_eq!(get(&db, uri).await.0, StatusCode::BAD_REQUEST, "GET {uri}");

@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH counts AS (\n               SELECT date_part('year', listened_at AT TIME ZONE $2)::int AS year,\n                      artist_id, count(*) AS listens\n                 FROM listen\n                WHERE profile_id = $1\n                GROUP BY 1, 2\n           ), ranked AS (\n               SELECT c.year, a.id, a.name, c.listens,\n                      sum(c.listens) OVER (PARTITION BY c.year)::bigint AS year_listens,\n                      row_number() OVER (PARTITION BY c.year ORDER BY c.listens DESC, a.name) AS rank\n                 FROM counts c\n                 JOIN artist a ON a.id = c.artist_id\n           )\n           SELECT year AS \"year!\", year_listens AS \"year_listens!\", id AS \"id!\", name AS \"name!\",\n                  listens AS \"listens!\"\n             FROM ranked\n            WHERE rank <= $3\n            ORDER BY year, rank",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "year!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "year_listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "id!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "2eabd2f07e2c8fe85bfe19593015e5f60e0b58d4448bc02fa12e6c19d6a88943"
+}

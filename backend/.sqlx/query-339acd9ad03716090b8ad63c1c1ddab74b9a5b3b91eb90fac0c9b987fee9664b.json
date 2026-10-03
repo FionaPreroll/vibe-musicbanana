@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "WITH span AS (\n                       SELECT coalesce(make_timestamptz($2, 1, 1, 0, 0, 0, $3), '-infinity') AS lo,\n                              coalesce(make_timestamptz($2 + 1, 1, 1, 0, 0, 0, $3), 'infinity') AS hi\n                   )\n                   SELECT r.id, r.title AS name, a.name AS \"artist?\", count(*) AS \"listens!\"\n                     FROM span, listen l\n                     JOIN recording r ON r.id = l.recording_id\n                     JOIN artist a ON a.id = r.artist_id\n                    WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi\n                    GROUP BY r.id, a.id\n                    ORDER BY count(*) DESC, r.title\n                    LIMIT $4",
+  "query": "WITH span AS (\n                       SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,\n                              coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi\n                   )\n                   SELECT r.id, r.title AS name, a.name AS \"artist?\", count(*) AS \"listens!\"\n                     FROM span, listen l\n                     JOIN release r ON r.id = l.release_id\n                     JOIN artist a ON a.id = r.artist_id\n                    WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi\n                    GROUP BY r.id, a.id\n                    ORDER BY count(*) DESC, r.title\n                    LIMIT $5",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Int8",
         "origin": {
           "Table": {
-            "table": "recording",
+            "table": "release",
             "name": "id"
           }
         }
@@ -20,7 +20,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "recording",
+            "table": "release",
             "name": "title"
           }
         }
@@ -46,7 +46,8 @@
     "parameters": {
       "Left": [
         "Int8",
-        "Int4",
+        "Date",
+        "Date",
         "Text",
         "Int8"
       ]
@@ -58,5 +59,5 @@
       null
     ]
   },
-  "hash": "9ead649a0a561fd9965bf7d459f1500a0aff1bcce3f2c2c4fe6761e4acf0c8fa"
+  "hash": "339acd9ad03716090b8ad63c1c1ddab74b9a5b3b91eb90fac0c9b987fee9664b"
 }
