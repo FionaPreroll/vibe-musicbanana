@@ -32,6 +32,13 @@ Charts (Woche, Monat, Jahr, gesamt; Artist/Album/Track) werden direkt per `GROUP
 - **Mehrere Profile pro Konto:** Vorschlag beibehalten.
 - **MusicBrainz:** Vorschlag zunächst nur `mbid`-Spalten, Abgleich später (Vorarbeit in musicbanana3: `brainz/`, `musicbrainz_notes`).
 
+## Seiten pro Artist, Album und Stück
+
+Jedes Profil hat eine Seite pro Artist, Album und Stück (`/u/<name>/artist/<id>`, `…/album/<id>`, `…/track/<id>`): Zahl der Listens, erster und letzter Listen, die Listens pro Monat als Kurve und darunter die meistgehörten Alben und Stücke. Die Adresse eines zusammengeführten Eintrags führt zu dem, in den er gegangen ist.
+
+- **Monate:** vom ersten bis zum letzten Listen des Profils, damit alle Seiten eines Profils dieselbe Zeitachse haben. Ein Jahr oder mehr ganz ohne Listens im Profil, etwa zwischen dem Import von 2016 und neuen Scrobbles, fällt heraus und erscheint in der Kurve als schmaler Bruch.
+- **Phasen intensiven Hörens:** Monate mit mindestens doppelt so vielen Listens wie im Schnitt und mindestens drei, zusammengefasst über einzelne ruhigere Monate dazwischen. Der Schnitt zählt nur die Monate vom ersten bis zum letzten, in dem der Eintrag gehört wurde, sonst wäre alles eine Phase, was erst spät dazukam. Eine Phase braucht mindestens 3 % aller Listens des Eintrags; gezeigt werden höchstens die fünf größten.
+
 ## Altdaten: musicbanana-php (MySQL-Dump von 2016)
 
 5 User, 5.706 Artists, 9.868 Alben, 34.663 Tracks, rund 165.000 Scrobbles (2007-08 bis 2016-05) in je einer Tabelle `mb_usertracks_<user_id>`.

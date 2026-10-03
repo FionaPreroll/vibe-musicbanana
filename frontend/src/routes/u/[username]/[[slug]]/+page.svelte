@@ -1,6 +1,12 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { getJson, type ListensPage, type NowPlaying } from '#lib/api.ts';
+	import {
+		getJson,
+		type ChartEntry,
+		type EntityKind,
+		type ListensPage,
+		type NowPlaying
+	} from '#lib/api.ts';
 	import Chart from '#lib/components/Chart.svelte';
 	import { formatDate, formatDateTime, listenCount } from '#lib/format.ts';
 	import type { PageProps } from './$types';
@@ -21,6 +27,8 @@
 			listens: listens.get(first + i) ?? 0
 		}));
 	});
+
+	const link = (kind: EntityKind) => (entry: ChartEntry) => `${data.base}/${kind}/${entry.id}`;
 
 	// Start from the loaded page again whenever the profile or year changes.
 	let listens = $derived(data.recent.listens);
@@ -151,9 +159,9 @@
 	{/if}
 
 	<div class="mt-8 grid gap-8 md:grid-cols-3">
-		<Chart title="Top artists" entries={data.artists} />
-		<Chart title="Top albums" entries={data.releases} />
-		<Chart title="Top tracks" entries={data.recordings} />
+		<Chart title="Top artists" entries={data.artists} href={link('artist')} />
+		<Chart title="Top albums" entries={data.releases} href={link('album')} />
+		<Chart title="Top tracks" entries={data.recordings} href={link('track')} />
 	</div>
 
 	<section class="mt-12">
@@ -171,9 +179,18 @@
 							datetime={listen.listened_at}>{formatDateTime(listen.listened_at)}</time
 						>
 						<span class="min-w-0 truncate">
-							<span class="font-medium">{listen.track}</span>
+							<a class="font-medium hover:underline" href="{data.base}/track/{listen.recording_id}"
+								>{listen.track}</a
+							>
 							<span class="text-stone-500">
-								· {[listen.artist, listen.album].filter(Boolean).join(' · ')}
+								· <a class="hover:underline" href="{data.base}/artist/{listen.artist_id}"
+									>{listen.artist}</a
+								>
+								{#if listen.album && listen.release_id}
+									· <a class="hover:underline" href="{data.base}/album/{listen.release_id}"
+										>{listen.album}</a
+									>
+								{/if}
 							</span>
 						</span>
 					</li>
