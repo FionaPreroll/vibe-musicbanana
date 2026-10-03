@@ -44,26 +44,22 @@ async fn imports_the_2016_php_database(db: PgPool) {
     assert_eq!(report.accounts, 3);
     assert_eq!(report.follows, 4, "friend 7 does not exist");
     // Mojibake and case duplicates collapse, old merges are followed.
-    assert_eq!(report.artists, 4);
+    assert_eq!(report.artists, 3);
     assert_eq!(report.releases, 2);
     assert_eq!(report.recordings, 5);
     assert_eq!(report.listens, 10);
     assert_eq!(report.skipped_listens, 1, "track 99 does not exist");
     assert_eq!(report.orphaned_listens, 1, "mb_usertracks_9 has no user");
-    assert_eq!(report.repaired_names, 3);
+    assert_eq!(report.repaired_names, 2);
 
     let artists: Vec<String> = sqlx::query_scalar("SELECT name FROM artist ORDER BY name")
         .fetch_all(&db)
         .await
         .unwrap();
-    assert_eq!(artists, ["Björk", "Böhse Onkelz", "Die Ärzte", "Tiësto"]);
+    assert_eq!(artists, ["Björk", "Die Ärzte", "Tiësto"]);
 
     // Every old spelling resolves through the alias table.
-    for (spelling, artist) in [
-        ("dj tiësto", "Tiësto"),
-        ("böhse onkelz", "Böhse Onkelz"),
-        ("die ärzte", "Die Ärzte"),
-    ] {
+    for (spelling, artist) in [("dj tiësto", "Tiësto"), ("die ärzte", "Die Ärzte")] {
         let name: String = sqlx::query_scalar(
             "SELECT a.name FROM artist_alias x JOIN artist a ON a.id = x.artist_id WHERE x.name_key = $1",
         )
@@ -74,7 +70,7 @@ async fn imports_the_2016_php_database(db: PgPool) {
         assert_eq!(name, artist);
     }
 
-    // Charts for fiona: Junge (album and single) and Westerland count for Die Ärzte.
+    // Charts for fiona: all three spellings of Die Ärzte count together.
     let chart: Vec<(String, i64)> = sqlx::query_as(
         "SELECT a.name, count(*) FROM listen l
            JOIN profile p ON p.id = l.profile_id
@@ -89,12 +85,25 @@ async fn imports_the_2016_php_database(db: PgPool) {
     assert_eq!(
         chart,
         [
-            ("Die Ärzte".to_owned(), 3),
+            ("Die Ärzte".to_owned(), 5),
             ("Björk".to_owned(), 2),
-            ("Böhse Onkelz".to_owned(), 2),
             ("Tiësto".to_owned(), 1),
         ]
     );
+
+    // A listen of a double-encoded entry gets repaired raw strings and the shared release.
+    let (artist_raw, album_raw, release): (String, Option<String>, Option<String>) =
+        sqlx::query_as(
+            "SELECT l.artist_raw, l.album_raw, rel.title FROM listen l
+               LEFT JOIN release rel ON rel.id = l.release_id
+              WHERE l.listened_at = to_timestamp(1187094800)",
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(artist_raw, "Die Ärzte");
+    assert_eq!(album_raw.as_deref(), Some("Geräusch"));
+    assert_eq!(release.as_deref(), Some("Geräusch"));
 
     // Raw fields keep the (repaired) old spelling, the catalog link the merged entry.
     let (track_raw, recording, album_raw, release): (

@@ -63,23 +63,23 @@ INSERT INTO mb_user (id, user, md5_password, email, registration, avatar, realna
   (3, 'sam',   'c7a4476fc64b75ead800da9ea2b7d072', '',                  '2009-01-01 10:00:00', '', '', 'unspecified', 0, '', '', '', '', '', ';1');
 
 INSERT INTO mb_artists (id, link_to_artist_id, name, times_played) VALUES
-  (1, 0, 'Böhse Onkelz', 10),
-  (2, 0, 'BÃ¶hse Onkelz', 3),
-  (3, 0, 'Die Ã„rzte', 5),
+  (1, 0, 'Die Ärzte', 10),
+  (2, 0, 'Die Ã„rzte', 3),
+  (3, 0, 'die ärzte', 5),
   (4, 0, 'Tiësto', 4),
   (5, 4, 'DJ Tiësto', 1),
   (6, 0, 'Björk', 2),
   (7, 0, 'björk', 1);
 
 INSERT INTO mb_albums (id, link_to_album_id, artist_id, title, times_played) VALUES
-  (1, 0, 1, 'Weiß', 5),
-  (2, 0, 2, 'WeiÃŸ', 1),
+  (1, 0, 1, 'Geräusch', 5),
+  (2, 0, 2, 'GerÃ¤usch', 1),
   (3, 0, 3, 'Jazz ist anders', 3),
   (4, 3, 3, 'Jazz ist anders (Bonus)', 1);
 
 INSERT INTO mb_tracks (id, link_to_track_id, artist_id, title, album_id, length, times_played) VALUES
-  (1, 0, 1, 'Nur die Besten sterben jung', 1, 240, 5),
-  (2, 0, 2, 'Nur die Besten sterben jung', 2, 241, 1),
+  (1, 0, 1, 'Unrockbar', 1, 240, 5),
+  (2, 0, 2, 'Unrockbar', 2, 241, 1),
   (3, 0, 3, 'Junge', 3, 200, 2),
   (4, 0, 3, 'Junge', 0, 200, 1),
   (5, 0, 5, 'Adagio for Strings', 0, 400, 1),

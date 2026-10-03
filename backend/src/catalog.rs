@@ -12,7 +12,7 @@ pub fn name_key(name: &str) -> String {
 }
 
 /// Undoes UTF-8 that was read as Windows-1252 and stored as UTF-8 again
-/// ("BÃ¶hse Onkelz" → "Böhse Onkelz", "Die Ã„rzte" → "Die Ärzte").
+/// ("Die Ã„rzte" → "Die Ärzte", "SÃ¶hne Mannheims" → "Söhne Mannheims").
 ///
 /// Only applied when the round trip yields valid UTF-8, so correct names such as
 /// "Björk" (whose bytes are not valid UTF-8 once mapped back) stay untouched.
@@ -79,20 +79,20 @@ mod tests {
 
     #[test]
     fn repairs_double_encoded_names() {
-        assert_eq!(repair_mojibake("BÃ¶hse Onkelz"), "Böhse Onkelz");
+        assert_eq!(repair_mojibake("SÃ¶hne Mannheims"), "Söhne Mannheims");
         assert_eq!(repair_mojibake("Kein KÃ¼nstler"), "Kein Künstler");
         assert_eq!(repair_mojibake("TiÃ«sto"), "Tiësto");
         // Ä is C3 84, and 0x84 is „ in Windows-1252.
         assert_eq!(repair_mojibake("Die Ã„rzte"), "Die Ärzte");
         // ß is C3 9F, and 0x9F is Ÿ in Windows-1252.
         assert_eq!(repair_mojibake("WeiÃŸ"), "Weiß");
-        assert_eq!(repair_mojibake("BÃƒÂ¶hse"), "Böhse");
+        assert_eq!(repair_mojibake("SÃƒÂ¶hne"), "Söhne");
     }
 
     #[test]
     fn leaves_correct_names_alone() {
         for name in [
-            "Böhse Onkelz",
+            "Söhne Mannheims",
             "Björk",
             "Die Ärzte",
             "Sigur Rós",
