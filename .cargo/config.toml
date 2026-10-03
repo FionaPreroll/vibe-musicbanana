@@ -1,0 +1,6 @@
+# sqlx checks queries at compile time. Build against the committed query cache
+# (backend/.sqlx) instead of a live database, so a build never depends on the
+# local database being migrated; the server applies migrations on startup.
+# See "Changing SQL" in the README for refreshing the cache.
+[env]
+SQLX_OFFLINE = "true"
