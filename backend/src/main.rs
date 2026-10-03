@@ -1,11 +1,18 @@
-use std::{env, path::PathBuf};
+use std::{
+    env,
+    io::{self, IsTerminal},
+    path::PathBuf,
+};
 
 use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
 use musicbanana::{AppState, import_php, router, tokens};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use time::OffsetDateTime;
-use tokio::net::TcpListener;
+use tokio::{
+    net::TcpListener,
+    signal::unix::{SignalKind, signal},
+};
 use tracing_subscriber::EnvFilter;
 
 /// musicbanana server. Configured through DATABASE_URL, LISTEN_ADDR and STATIC_DIR.
@@ -65,6 +72,8 @@ async fn main() -> anyhow::Result<()> {
             EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "musicbanana=info,tower_http=info".into()),
         )
+        // No color codes in `docker compose logs` and other redirected output.
+        .with_ansi(io::stdout().is_terminal())
         .init();
     let cli = Cli::parse();
 
@@ -153,9 +162,26 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
     let listener = TcpListener::bind(&listen_addr).await?;
     tracing::info!("listening on http://{listen_addr}");
     axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            tokio::signal::ctrl_c().await.ok();
-        })
+        .with_graceful_shutdown(shutdown_signal())
         .await?;
     Ok(())
+}
+
+/// Ctrl+C, or SIGTERM from `docker stop`. In a container the server runs as
+/// PID 1, which gets no default handler for SIGTERM and would otherwise only
+/// stop when Docker kills it after the grace period.
+async fn shutdown_signal() {
+    let terminate = async {
+        match signal(SignalKind::terminate()) {
+            Ok(mut sigterm) => {
+                sigterm.recv().await;
+            }
+            Err(_) => std::future::pending().await,
+        }
+    };
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {}
+        () = terminate => {}
+    }
+    tracing::info!("shutting down");
 }
