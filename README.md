@@ -15,14 +15,14 @@ Design notes and decisions: [docs/design.md](docs/design.md) (German).
 
 ## Development
 
-Requirements: Rust (stable), Node 22+, Docker (or any PostgreSQL 16+).
+Requirements: Rust (stable), Node 22+, pnpm (e.g. `npm install -g pnpm`; it switches to the version pinned in `frontend/package.json` by itself), Docker (or any PostgreSQL 16+).
 
 ```sh
 docker compose up -d db                       # PostgreSQL on localhost:5432
 cp backend/.env.example backend/.env
 
 cd backend && cargo run                       # applies migrations, API on http://127.0.0.1:3000
-cd frontend && npm install && npm run dev     # UI on http://localhost:5173, proxies /api
+cd frontend && pnpm install && pnpm dev       # UI on http://localhost:5173, proxies /api
 ```
 
 ### Changing SQL
@@ -40,7 +40,7 @@ Checks (the same ones CI runs):
 
 ```sh
 cd backend && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
-cd frontend && npm run lint && npm run check && npm run build
+cd frontend && pnpm lint && pnpm check && pnpm build
 ```
 
 ## Pages and API
@@ -67,7 +67,7 @@ It prints a summary (accounts, artists, listens, skipped rows, repaired names). 
 ## Production-ish
 
 ```sh
-cd frontend && npm ci && npm run build
+cd frontend && pnpm install --frozen-lockfile && pnpm build
 cd backend && cargo build --release
 STATIC_DIR=../frontend/build DATABASE_URL=postgres://… ./target/release/musicbanana
 ```
