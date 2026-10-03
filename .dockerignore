@@ -1,0 +1,11 @@
+# Only sources go into the build; everything here is rebuilt inside the image.
+.git
+.github
+**/target
+**/node_modules
+frontend/build
+frontend/.svelte-kit
+**/.env
+**/.env.*
+deploy
+docs

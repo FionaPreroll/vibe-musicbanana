@@ -69,3 +69,44 @@ jobs:
       - run: pnpm run lint
       - run: pnpm run check
       - run: pnpm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: musicbanana:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # The image starts, migrates an empty database and serves API and frontend.
+      - name: Smoke test
+        run: |
+          docker run -d --name musicbanana --network host \
+            -e DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres \
+            -e LISTEN_ADDR=127.0.0.1:3000 musicbanana:ci
+          for _ in $(seq 30); do
+            curl -sf http://127.0.0.1:3000/api/health && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:3000/api/health
+          curl -sf http://127.0.0.1:3000/u/nobody | grep -q '<html'
+      - name: Container log
+        if: always()
+        run: docker logs musicbanana || true

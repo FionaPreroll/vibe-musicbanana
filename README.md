@@ -12,6 +12,7 @@ Design notes and decisions: [docs/design.md](docs/design.md) (German).
 | `backend/migrations/` | SQL migrations, applied automatically on startup. |
 | `backend/.sqlx/` | Offline query cache so the crate builds without a database (`cargo sqlx prepare`). |
 | `frontend/` | SvelteKit + TypeScript + Tailwind, built as a static SPA (`adapter-static`). |
+| `Dockerfile`, `deploy/` | The image with server and frontend, and a compose file to run it with PostgreSQL ([Running with Docker](#running-with-docker)). |
 
 ## Development
 
@@ -95,7 +96,46 @@ DATABASE_URL=postgres://postgres@127.0.0.1:5432/musicbanana \
 
 It prints a summary (accounts, artists, listens, skipped rows, repaired names). Afterwards the history is at `/u/<old username>`. The import test (`tests/import_php.rs`) runs against a MySQL server named by `LEGACY_MYSQL_URL` and is skipped without it.
 
-## Production-ish
+## Running with Docker
+
+`Dockerfile` builds one image with the server and the frontend, and `deploy/compose.yaml` runs it together with its own PostgreSQL. On the machine that runs Navidrome:
+
+```sh
+git clone https://github.com/FionaPreroll/vibe-musicbanana.git musicbanana
+cd musicbanana/deploy
+cp .env.example .env    # set MUSICBANANA_DB_PASSWORD, e.g. to the output of `openssl rand -hex 24`
+docker compose up -d --build
+```
+
+The first build takes a while (a Rust release build). Afterwards the web interface is at `http://<server>:3000`; `MUSICBANANA_PORT` in `.env` changes the port. Commands of the binary run inside the container, for example the token for Navidrome:
+
+```sh
+docker compose exec musicbanana musicbanana token create --user <username> --label Navidrome
+```
+
+Navidrome needs the address under which its container reaches musicbanana, as `ND_LISTENBRAINZ_BASEURL` in its environment:
+
+- through the published port, with the server's address in your network: `http://192.168.1.10:3000/api/listenbrainz/1/` (not `localhost`, which inside the Navidrome container is the container itself);
+- or, when both containers share a Docker network (for example with the Navidrome service in the same compose file), by service name: `http://musicbanana:3000/api/listenbrainz/1/`.
+
+Then restart Navidrome and link the token as described [above](#navidrome-and-apps-that-play-from-it-supersonic-ultrasonic-).
+
+**Moving existing data in**, for example the database the PHP import went into:
+
+```sh
+pg_dump -Fc -d postgres://postgres@127.0.0.1:5432/musicbanana -f musicbanana.dump   # where the data is now
+docker compose stop musicbanana
+docker compose exec -T db pg_restore -U musicbanana -d musicbanana --clean --if-exists --no-owner < musicbanana.dump
+docker compose start musicbanana
+```
+
+**Updates:** `git pull && docker compose up -d --build`. Migrations run when the server starts.
+
+**Backups:** `docker compose exec -T db pg_dump -U musicbanana -Fc musicbanana > musicbanana-$(date +%F).dump`, restored as above.
+
+**Logs:** `docker compose logs -f musicbanana`.
+
+## Without Docker
 
 ```sh
 cd frontend && pnpm install --frozen-lockfile && pnpm build
