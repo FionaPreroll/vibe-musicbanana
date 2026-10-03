@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE release_alias SET release_id = $2 WHERE release_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c69e106427dc052919a37a0b28873cb3dc79725e16c5ae8d535ce7df0944bf73"
+}

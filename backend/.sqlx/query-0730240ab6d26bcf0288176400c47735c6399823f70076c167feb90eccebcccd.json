@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE artist SET merged_into = $2 WHERE merged_into = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0730240ab6d26bcf0288176400c47735c6399823f70076c167feb90eccebcccd"
+}

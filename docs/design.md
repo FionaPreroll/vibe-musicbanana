@@ -48,3 +48,13 @@ Charts (Woche, Monat, Jahr, gesamt; Artist/Album/Track) werden direkt per `GROUP
 | `mb_session`, `mb_now_playing`, Profilfelder (Obst, Buchstabe, PSYC, Jabber …) | entfällt |
 
 **Kodierung:** Ein Teil der Namen ist doppelt kodiert (UTF-8 als Windows-1252 gelesen und erneut als UTF-8 gespeichert, z.B. `Die Ã„rzte` neben `Die Ärzte`), ein Teil korrekt. Der Import repariert jeden String einzeln (nach cp1252 kodieren, als UTF-8 dekodieren, nur bei gültigem Ergebnis übernehmen). Über die Alias-Tabellen verschmelzen die so entstandenen Dubletten automatisch. Achtung bei Abfragen im Dump: die Collation `_ai_ci` ignoriert Akzente, für Textvergleiche `COLLATE utf8mb3_bin` verwenden.
+
+## Dubletten zusammenführen
+
+`musicbanana merge suggest` schlägt Einträge vor, die wie ein anderer aussehen, jeweils mit dem Befehl zum Zusammenführen (vorerst auf der Kommandozeile, im Browser später mit dem Login):
+
+- **gleiche Buchstaben:** nur Groß-/Kleinschreibung, Akzente, Satzzeichen, Leerzeichen, ein führendes „The“ oder „&“ statt „and“ unterscheiden sich („Bjork“/„Björk“, „AC/DC“/„ACDC“).
+- **ein Buchstabe Abstand:** ein Buchstabe mehr, weniger, anders oder mit dem Nachbarn vertauscht („Die Aerzte“/„Die Ärzte“). Erst ab sechs Buchstaben, weil es darunter zu oft ein anderes Wort ist („Blur“/„Blue“), und nie bei verschiedenen Ziffern („Kapitel 1“/„Kapitel 2“).
+- **Version:** derselbe Titel ohne Zusatz in Klammern, nach einem Gedankenstrich oder „feat.“ („Unrockbar (Live)“). Das kann eine andere Aufnahme sein, deshalb stehen diese Vorschläge zuletzt.
+
+Der Eintrag mit weniger Listens geht in den mit mehr, eine Version in den Titel ohne Zusatz. Alben und Stücke werden nur innerhalb eines Artists verglichen; ein Artist-Merge nimmt seine Alben und Stücke mit und führt die mit gleichem Titel (in irgendeiner bekannten Schreibweise) mit denen des Ziels zusammen. Ein Merge biegt Listens und Aliase um und setzt `merged_into`, die Rohstrings bleiben unverändert. Rückgängig machen geht noch nicht, daher `--dry-run`.

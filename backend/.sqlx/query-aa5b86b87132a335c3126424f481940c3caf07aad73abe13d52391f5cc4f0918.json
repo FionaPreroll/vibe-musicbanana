@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH moved AS (DELETE FROM release_alias WHERE artist_id = $1\n                        RETURNING title_key, release_id)\n         INSERT INTO release_alias (artist_id, title_key, release_id)\n         SELECT $2, title_key, release_id FROM moved\n         ON CONFLICT (artist_id, title_key) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aa5b86b87132a335c3126424f481940c3caf07aad73abe13d52391f5cc4f0918"
+}

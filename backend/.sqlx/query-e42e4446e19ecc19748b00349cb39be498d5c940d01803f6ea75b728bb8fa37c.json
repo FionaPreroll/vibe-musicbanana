@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE recording SET merged_into = $2 WHERE merged_into = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e42e4446e19ecc19748b00349cb39be498d5c940d01803f6ea75b728bb8fa37c"
+}

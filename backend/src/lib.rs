@@ -2,6 +2,7 @@ pub mod auth;
 pub mod catalog;
 pub mod import_php;
 mod listenbrainz;
+pub mod merge;
 mod profiles;
 pub mod scrobble;
 pub mod tokens;
