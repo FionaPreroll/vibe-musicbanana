@@ -1,4 +1,5 @@
-//! Read-only API behind the public profile pages: overview, charts and recent listens.
+//! Read-only API behind the public profile pages: overview, charts, recent listens
+//! and what is playing right now.
 //!
 //! Only public profiles are served; a private one answers 404 like an unknown one
 //! until there is a login.
@@ -20,6 +21,7 @@ pub fn routes() -> Router<AppState> {
         .route("/profiles/{username}/{slug}", get(overview))
         .route("/profiles/{username}/{slug}/top/{kind}", get(top))
         .route("/profiles/{username}/{slug}/listens", get(listens))
+        .route("/profiles/{username}/{slug}/now-playing", get(now_playing))
 }
 
 #[derive(Serialize)]
@@ -302,6 +304,34 @@ async fn listens(
         None
     };
     Ok(Json(ListensPage { listens, next }))
+}
+
+#[derive(Serialize)]
+struct NowPlaying {
+    artist: String,
+    track: String,
+    album: Option<String>,
+    #[serde(with = "time::serde::rfc3339")]
+    started_at: OffsetDateTime,
+    duration_ms: Option<i32>,
+}
+
+/// The track a client reported as playing, or `null` once it has run out.
+async fn now_playing(
+    State(state): State<AppState>,
+    Path((username, slug)): Path<(String, String)>,
+) -> Result<Json<Option<NowPlaying>>, AppError> {
+    let profile = find_profile(&state.db, &username, &slug).await?;
+    let playing = sqlx::query_as!(
+        NowPlaying,
+        "SELECT artist_raw AS artist, track_raw AS track, album_raw AS album, started_at, duration_ms
+           FROM now_playing
+          WHERE profile_id = $1 AND expires_at > now()",
+        profile.id,
+    )
+    .fetch_optional(&state.db)
+    .await?;
+    Ok(Json(playing))
 }
 
 /// The time zone for year boundaries, UTC by default. PostgreSQL knows the names

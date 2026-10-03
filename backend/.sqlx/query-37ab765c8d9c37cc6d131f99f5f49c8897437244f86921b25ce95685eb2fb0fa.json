@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT artist_raw AS artist, track_raw AS track, album_raw AS album, started_at, duration_ms\n           FROM now_playing\n          WHERE profile_id = $1 AND expires_at > now()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "artist",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "now_playing",
+            "name": "artist_raw"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "track",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "now_playing",
+            "name": "track_raw"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "album",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "now_playing",
+            "name": "album_raw"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "started_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "now_playing",
+            "name": "started_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "duration_ms",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "now_playing",
+            "name": "duration_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "37ab765c8d9c37cc6d131f99f5f49c8897437244f86921b25ce95685eb2fb0fa"
+}

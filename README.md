@@ -48,9 +48,40 @@ cd frontend && pnpm lint && pnpm check && pnpm build
 | Page | Data from |
 |---|---|
 | `/` lists the public profiles | `GET /api/profiles` |
-| `/u/<username>` (default profile) or `/u/<username>/<slug>`: listens per year, top artists, albums and tracks, recent listens; `?year=2012` narrows everything to one year | `GET /api/profiles/<username>/<slug>?tz=`, `…/top/{artists,releases,recordings}?year=&tz=&limit=`, `…/listens?before=&limit=` |
+| `/u/<username>` (default profile) or `/u/<username>/<slug>`: listens per year, top artists, albums and tracks, recent listens, what is playing now; `?year=2012` narrows everything to one year | `GET /api/profiles/<username>/<slug>?tz=`, `…/top/{artists,releases,recordings}?year=&tz=&limit=`, `…/listens?before=&limit=`, `…/now-playing` |
 
-Only public profiles are served until there is a login. A year starts at midnight in `tz` (an IANA name such as `Europe/Berlin`, UTC by default); the frontend sends the browser's time zone. `listens` pages backwards: pass a page's `next` as `before`.
+Only public profiles are served until there is a login. A year starts at midnight in `tz` (an IANA name such as `Europe/Berlin`, UTC by default); the frontend sends the browser's time zone. `listens` pages backwards: pass a page's `next` as `before`. `now-playing` is `null` when nothing plays; the open page asks again every 30 seconds and adds new listens on top.
+
+## Scrobbling
+
+musicbanana speaks the part of the [ListenBrainz API](https://listenbrainz.readthedocs.io/en/latest/users/api/core.html) that players use to scrobble, under `/api/listenbrainz/1/`: `POST submit-listens` (`single`, `import` and `playing_now`) and `GET validate-token`. Limits, checks and error responses follow listenbrainz-server. A listen keeps the strings and extra data (`additional_info`) exactly as sent and is matched to the catalog through the alias tables; unknown artists, albums and tracks are created. A second listen at the same second is skipped, so clients can safely resend.
+
+Every client gets its own token, which belongs to one profile. Tokens are created on the command line for now (the binary is `musicbanana`, or `cargo run --release --` in `backend/`):
+
+```sh
+musicbanana token create --user <username> --label Navidrome                    # prints the token, only this once
+musicbanana token create --user <username> --profile <slug> --label "Work laptop"
+musicbanana token list [--user <username>]
+musicbanana token revoke <id>
+```
+
+### Navidrome, and apps that play from it (Supersonic, Ultrasonic, …)
+
+Subsonic apps report plays to Navidrome, and Navidrome passes them on to ListenBrainz, so pointing Navidrome at musicbanana covers all of them:
+
+1. Set Navidrome's ListenBrainz address to musicbanana and restart Navidrome, in `navidrome.toml`:
+   ```toml
+   ListenBrainz.BaseURL = "https://musicbanana.example.org/api/listenbrainz/1/"
+   ```
+   or as the environment variable `ND_LISTENBRAINZ_BASEURL`. This holds for every user of that Navidrome: they can scrobble to musicbanana (each with their own token), but no longer to listenbrainz.org. Last.fm scrobbling keeps working.
+2. In Navidrome's personal settings, turn on "Scrobble to ListenBrainz" and paste the token. Navidrome checks it right away.
+3. Leave scrobbling switched on in the apps. "Now playing" shows on the profile page while a track plays.
+
+Tested with Navidrome 0.64.2: linking the token, "now playing" and listens sent through its Subsonic `scrobble` endpoint.
+
+### Other ListenBrainz clients
+
+Clients that let you change the ListenBrainz server want either the API root `https://musicbanana.example.org/api/listenbrainz/1/` or the server `https://musicbanana.example.org/api/listenbrainz`, plus the token.
 
 ## Importing the old musicbanana-php database
 

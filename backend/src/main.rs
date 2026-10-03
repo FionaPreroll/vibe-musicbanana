@@ -1,9 +1,10 @@
 use std::{env, path::PathBuf};
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
-use musicbanana::{AppState, import_php, router};
+use musicbanana::{AppState, import_php, router, tokens};
 use sqlx::{PgPool, postgres::PgPoolOptions};
+use time::OffsetDateTime;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
@@ -24,6 +25,35 @@ enum Command {
         /// MySQL/MariaDB URL of the old database, e.g. mysql://root@127.0.0.1:3306/musicbanana
         #[arg(long)]
         from: String,
+    },
+    /// Manage the tokens scrobble clients use (ListenBrainz API).
+    #[command(subcommand)]
+    Token(TokenCommand),
+}
+
+#[derive(Subcommand)]
+enum TokenCommand {
+    /// Create a token; it is printed once and cannot be shown again.
+    Create {
+        /// Account the token is for.
+        #[arg(long)]
+        user: String,
+        /// Profile the listens go to.
+        #[arg(long, default_value = "default")]
+        profile: String,
+        /// What the token is used by, e.g. "Navidrome".
+        #[arg(long)]
+        label: String,
+    },
+    /// List tokens, of all accounts or of one.
+    List {
+        #[arg(long)]
+        user: Option<String>,
+    },
+    /// Revoke a token; clients using it are refused from then on.
+    Revoke {
+        /// Token id, as shown by `token list`.
+        id: i64,
     },
 }
 
@@ -57,7 +87,61 @@ async fn main() -> anyhow::Result<()> {
             println!("{report}");
             Ok(())
         }
+        Command::Token(command) => token(&db, command).await,
     }
+}
+
+async fn token(db: &PgPool, command: TokenCommand) -> anyhow::Result<()> {
+    match command {
+        TokenCommand::Create {
+            user,
+            profile,
+            label,
+        } => {
+            let new = tokens::create(db, &user, &profile, &label).await?;
+            // Only the token goes to stdout, so it can be piped somewhere.
+            eprintln!(
+                "Token {} for {user}/{profile} ({label}), shown only this once:",
+                new.id
+            );
+            println!("{}", new.token);
+        }
+        TokenCommand::List { user } => {
+            let list = tokens::list(db, user.as_deref()).await?;
+            if list.is_empty() {
+                eprintln!("No tokens.");
+            }
+            for t in list {
+                let used = t.last_used_at.map_or("never used".into(), |at| {
+                    format!("last used {}", minutes(at))
+                });
+                let revoked = t
+                    .revoked_at
+                    .map_or(String::new(), |at| format!(", revoked {}", minutes(at)));
+                println!(
+                    "{:>4}  {}/{}  {}  created {}, {used}{revoked}",
+                    t.id,
+                    t.username,
+                    t.slug,
+                    t.label,
+                    minutes(t.created_at)
+                );
+            }
+        }
+        TokenCommand::Revoke { id } => {
+            if !tokens::revoke(db, id).await? {
+                bail!("there is no active token {id}");
+            }
+            eprintln!("Token {id} revoked.");
+        }
+    }
+    Ok(())
+}
+
+/// "2026-10-03 14:30 UTC"
+fn minutes(at: OffsetDateTime) -> String {
+    let at = at.to_offset(time::UtcOffset::UTC);
+    format!("{} {:02}:{:02} UTC", at.date(), at.hour(), at.minute())
 }
 
 async fn serve(db: PgPool) -> anyhow::Result<()> {

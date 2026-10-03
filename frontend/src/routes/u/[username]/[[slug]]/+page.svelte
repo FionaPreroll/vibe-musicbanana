@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { getJson, type ListensPage } from '#lib/api.ts';
+	import { getJson, type ListensPage, type NowPlaying } from '#lib/api.ts';
 	import Chart from '#lib/components/Chart.svelte';
 	import { formatDate, formatDateTime, listenCount } from '#lib/format.ts';
 	import type { PageProps } from './$types';
@@ -10,10 +10,45 @@
 	const overview = $derived(data.overview);
 	const busiestYear = $derived(Math.max(1, ...overview.years.map((y) => y.listens)));
 
+	// Years without listens stay in the bar as gaps (e.g. between an import and new scrobbles).
+	const years = $derived.by(() => {
+		const first = overview.years.at(0)?.year;
+		const last = overview.years.at(-1)?.year;
+		if (first === undefined || last === undefined || last - first > 100) return overview.years;
+		const listens = new Map(overview.years.map((y) => [y.year, y.listens]));
+		return Array.from({ length: last - first + 1 }, (_, i) => ({
+			year: first + i,
+			listens: listens.get(first + i) ?? 0
+		}));
+	});
+
 	// Start from the loaded page again whenever the profile or year changes.
 	let listens = $derived(data.recent.listens);
 	let next = $derived(data.recent.next);
 	let loadingMore = $state(false);
+	let nowPlaying = $derived(data.nowPlaying);
+
+	// While the page is open, keep "now playing" current and put new listens on top.
+	$effect(() => {
+		const { api, year } = data;
+		const timer = setInterval(() => {
+			if (!document.hidden) refresh(api, year);
+		}, 30_000);
+		return () => clearInterval(timer);
+	});
+
+	async function refresh(api: string, year: number | null) {
+		try {
+			nowPlaying = await getJson<NowPlaying | null>(fetch, `${api}/now-playing`);
+			if (year !== null) return;
+			const latest = await getJson<ListensPage>(fetch, `${api}/listens`, { limit: 25 });
+			const newest = listens.length ? Date.parse(listens[0].listened_at) : -Infinity;
+			const fresh = latest.listens.filter((l) => Date.parse(l.listened_at) > newest);
+			if (fresh.length > 0) listens = [...fresh, ...listens];
+		} catch {
+			// Offline or a server restart; the next round tries again.
+		}
+	}
 
 	// On narrow screens the years scroll sideways; keep the selected one in view.
 	function reveal(node: HTMLElement) {
@@ -54,6 +89,23 @@
 				from {formatDate(overview.first_listened_at)} to {formatDate(overview.last_listened_at)}
 			{/if}
 		</p>
+		{#if nowPlaying}
+			<p class="mt-3 flex items-center gap-2">
+				<span class="relative flex size-2.5 shrink-0" aria-hidden="true">
+					<span
+						class="absolute inline-flex size-full animate-ping rounded-full bg-yellow-400 opacity-75"
+					></span>
+					<span class="relative inline-flex size-2.5 rounded-full bg-yellow-500"></span>
+				</span>
+				<span class="shrink-0 text-sm text-stone-500">Now playing</span>
+				<span class="min-w-0 truncate">
+					<span class="font-medium">{nowPlaying.track}</span>
+					<span class="text-stone-500">
+						· {[nowPlaying.artist, nowPlaying.album].filter(Boolean).join(' · ')}
+					</span>
+				</span>
+			</p>
+		{/if}
 	</header>
 
 	{#if overview.years.length > 0}
@@ -69,12 +121,12 @@
 				All time
 			</a>
 			<div class="flex min-w-0 items-end gap-1 overflow-x-auto">
-				{#each overview.years as y (y.year)}
+				{#each years as y (y.year)}
 					{@const selected = data.year === y.year}
 					<a
 						href="?year={y.year}"
 						data-sveltekit-noscroll
-						class="group flex w-12 shrink-0 flex-col items-center"
+						class="group flex w-10 shrink-0 flex-col items-center"
 						title={listenCount(y.listens)}
 						aria-current={selected ? 'page' : undefined}
 						{@attach selected && reveal}
@@ -84,7 +136,7 @@
 								class="w-full rounded-t {selected
 									? 'bg-yellow-500'
 									: 'bg-yellow-200 group-hover:bg-yellow-300'}"
-								style:height="{Math.max(4, (y.listens / busiestYear) * 100)}%"
+								style:height="{y.listens && Math.max(4, (y.listens / busiestYear) * 100)}%"
 							></span>
 						</span>
 						<span

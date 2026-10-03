@@ -7,6 +7,7 @@ import {
 	type ChartEntry,
 	type ChartKind,
 	type ListensPage,
+	type NowPlaying,
 	type Overview
 } from '#lib/api.ts';
 import type { PageLoad } from './$types';
@@ -23,7 +24,7 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		getJson<ChartEntry[]>(fetch, `${api}/top/${kind}`, { year, tz: timeZone, limit: 10 });
 
 	try {
-		const [overview, artists, releases, recordings, recent] = await Promise.all([
+		const [overview, artists, releases, recordings, recent, nowPlaying] = await Promise.all([
 			getJson<Overview>(fetch, api, { tz: timeZone }),
 			chart('artists'),
 			chart('releases'),
@@ -31,9 +32,10 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 			getJson<ListensPage>(fetch, `${api}/listens`, {
 				before: year === null ? null : startOfYear(year + 1).toISOString(),
 				limit: 25
-			})
+			}),
+			getJson<NowPlaying | null>(fetch, `${api}/now-playing`)
 		]);
-		return { api, year, overview, artists, releases, recordings, recent };
+		return { api, year, overview, artists, releases, recordings, recent, nowPlaying };
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) error(404, 'There is no such profile.');
 		if (e instanceof ApiError && e.status === 400) error(400, e.message);

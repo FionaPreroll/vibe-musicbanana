@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE api_token SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c2b6a40ae3af3a0eb6d2388ac573bc21da38486a5036a65a1fd297b23c19b175"
+}
