@@ -17,7 +17,7 @@ export default defineConfig({
 		})
 	],
 	server: {
-		// During `npm run dev`, API calls go to the backend on its default port.
+		// During `pnpm dev`, API calls go to the backend on its default port.
 		proxy: { '/api': 'http://127.0.0.1:3000' }
 	}
 });
