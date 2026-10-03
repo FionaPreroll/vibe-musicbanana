@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO now_playing (profile_id, started_at, expires_at,\n                                  artist_raw, track_raw, album_raw, duration_ms)\n         VALUES ($1, now(), now() + make_interval(secs => $6::int4 / 1000.0), $2, $3, $4, $5)\n         ON CONFLICT (profile_id) DO UPDATE\n            SET started_at = excluded.started_at,\n                expires_at = excluded.expires_at,\n                artist_raw = excluded.artist_raw,\n                track_raw = excluded.track_raw,\n                album_raw = excluded.album_raw,\n                duration_ms = excluded.duration_ms",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "11cb54bc86fdfe8746ee763f4df3d9f1d96bbe33cc664ce3800b91c717599f73"
+}

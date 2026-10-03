@@ -36,3 +36,27 @@ INSERT INTO listen (profile_id, listened_at, artist_raw, track_raw, album_raw, a
     (1, '2016-03-04 12:00:00+00', 'Die Ärzte', 'Unrockbar', NULL, 1, 1, NULL),
     (2, '2016-04-01 12:00:00+00', 'Tiësto', 'Adagio for Strings', NULL, 3, 5, NULL),
     (3, '2016-04-02 12:00:00+00', 'Die Ärzte', 'Deine Schuld', NULL, 1, 2, NULL);
+
+-- Every catalog entry is reachable through its alias, as after an import.
+INSERT INTO artist_alias (name_key, artist_id) VALUES
+    ('die ärzte', 1),
+    ('björk', 2),
+    ('tiësto', 3);
+
+INSERT INTO release_alias (artist_id, title_key, release_id) VALUES
+    (1, 'geräusch', 1),
+    (2, 'debut', 2);
+
+INSERT INTO recording_alias (artist_id, title_key, recording_id) VALUES
+    (1, 'unrockbar', 1),
+    (1, 'deine schuld', 2),
+    (2, 'human behaviour', 3),
+    (2, 'jóga', 4),
+    (3, 'adagio for strings', 5);
+
+-- The ids above were given explicitly; rows created later continue after them.
+SELECT setval(pg_get_serial_sequence('account', 'id'), 2);
+SELECT setval(pg_get_serial_sequence('profile', 'id'), 3);
+SELECT setval(pg_get_serial_sequence('artist', 'id'), 3);
+SELECT setval(pg_get_serial_sequence('release', 'id'), 2);
+SELECT setval(pg_get_serial_sequence('recording', 'id'), 5);

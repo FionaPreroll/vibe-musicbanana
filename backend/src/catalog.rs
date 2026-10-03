@@ -1,7 +1,8 @@
 //! Matching scrobbled strings to catalog entries.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::HashMap};
 
+use sqlx::PgPool;
 use unicode_normalization::UnicodeNormalization;
 
 /// Key under which a name is looked up in the `*_alias` tables: NFKC, lowercase,
@@ -71,6 +72,148 @@ fn cp1252_byte(c: char) -> Option<u8> {
         _ => return None,
     };
     Some(b)
+}
+
+/// Finds the catalog entries for scrobbled names through the alias tables and
+/// creates the missing ones (entry plus alias). Remembers what it resolved, so a
+/// batch of listens asks the database once per name.
+///
+/// Each lookup is one statement that either finds the alias or inserts the entry
+/// together with its alias. When two requests create the same name at the same
+/// time, the slower one fails on the alias key, which also undoes its entry, and
+/// the retry finds the alias of the faster one.
+pub struct Resolver<'a> {
+    db: &'a PgPool,
+    artists: HashMap<String, i64>,
+    releases: HashMap<(i64, String), i64>,
+    recordings: HashMap<(i64, String), i64>,
+}
+
+impl<'a> Resolver<'a> {
+    pub fn new(db: &'a PgPool) -> Self {
+        Self {
+            db,
+            artists: HashMap::new(),
+            releases: HashMap::new(),
+            recordings: HashMap::new(),
+        }
+    }
+
+    pub async fn artist(&mut self, name: &str) -> sqlx::Result<i64> {
+        let key = name_key(name);
+        if let Some(&id) = self.artists.get(&key) {
+            return Ok(id);
+        }
+        let name = name.trim();
+        let id = retry_on_conflict(|| {
+            sqlx::query_scalar!(
+                r#"WITH found AS (SELECT artist_id FROM artist_alias WHERE name_key = $1),
+                        created AS (INSERT INTO artist (name)
+                                    SELECT $2 WHERE NOT EXISTS (SELECT FROM found)
+                                    RETURNING id),
+                        aliased AS (INSERT INTO artist_alias (name_key, artist_id)
+                                    SELECT $1, id FROM created
+                                    RETURNING artist_id)
+                   SELECT artist_id AS "id!" FROM found
+                   UNION ALL
+                   SELECT artist_id FROM aliased"#,
+                &key,
+                name,
+            )
+            .fetch_one(self.db)
+        })
+        .await?;
+        self.artists.insert(key, id);
+        Ok(id)
+    }
+
+    /// The album `title` of the artist. Clients only send the track's artist, so
+    /// that is the album artist here as well.
+    pub async fn release(&mut self, artist_id: i64, title: &str) -> sqlx::Result<i64> {
+        let key = (artist_id, name_key(title));
+        if let Some(&id) = self.releases.get(&key) {
+            return Ok(id);
+        }
+        let title = title.trim();
+        let id = retry_on_conflict(|| {
+            sqlx::query_scalar!(
+                r#"WITH found AS (SELECT release_id FROM release_alias
+                                   WHERE artist_id = $1 AND title_key = $2),
+                        created AS (INSERT INTO release (title, artist_id)
+                                    SELECT $3, $1 WHERE NOT EXISTS (SELECT FROM found)
+                                    RETURNING id),
+                        aliased AS (INSERT INTO release_alias (artist_id, title_key, release_id)
+                                    SELECT $1, $2, id FROM created
+                                    RETURNING release_id)
+                   SELECT release_id AS "id!" FROM found
+                   UNION ALL
+                   SELECT release_id FROM aliased"#,
+                artist_id,
+                &key.1,
+                title,
+            )
+            .fetch_one(self.db)
+        })
+        .await?;
+        self.releases.insert(key, id);
+        Ok(id)
+    }
+
+    /// The track `title` of the artist, whatever album it was played from.
+    /// `length_ms` is only used when the recording is new.
+    pub async fn recording(
+        &mut self,
+        artist_id: i64,
+        title: &str,
+        length_ms: Option<i32>,
+    ) -> sqlx::Result<i64> {
+        let key = (artist_id, name_key(title));
+        if let Some(&id) = self.recordings.get(&key) {
+            return Ok(id);
+        }
+        let title = title.trim();
+        let id = retry_on_conflict(|| {
+            sqlx::query_scalar!(
+                r#"WITH found AS (SELECT recording_id FROM recording_alias
+                                   WHERE artist_id = $1 AND title_key = $2),
+                        created AS (INSERT INTO recording (title, artist_id, length_ms)
+                                    SELECT $3, $1, $4 WHERE NOT EXISTS (SELECT FROM found)
+                                    RETURNING id),
+                        aliased AS (INSERT INTO recording_alias (artist_id, title_key, recording_id)
+                                    SELECT $1, $2, id FROM created
+                                    RETURNING recording_id)
+                   SELECT recording_id AS "id!" FROM found
+                   UNION ALL
+                   SELECT recording_id FROM aliased"#,
+                artist_id,
+                &key.1,
+                title,
+                length_ms,
+            )
+            .fetch_one(self.db)
+        })
+        .await?;
+        self.recordings.insert(key, id);
+        Ok(id)
+    }
+}
+
+/// Runs a find-or-create statement again after a unique violation, i.e. when a
+/// concurrent request created the same alias first.
+async fn retry_on_conflict<F, Fut>(mut statement: F) -> sqlx::Result<i64>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = sqlx::Result<i64>>,
+{
+    let mut retries = 0;
+    loop {
+        match statement().await {
+            Err(sqlx::Error::Database(err)) if err.is_unique_violation() && retries < 3 => {
+                retries += 1;
+            }
+            result => return result,
+        }
+    }
 }
 
 #[cfg(test)]

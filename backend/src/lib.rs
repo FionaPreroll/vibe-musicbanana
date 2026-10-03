@@ -1,7 +1,10 @@
 pub mod auth;
 pub mod catalog;
 pub mod import_php;
+mod listenbrainz;
 mod profiles;
+pub mod scrobble;
+pub mod tokens;
 
 use std::path::Path;
 
@@ -40,6 +43,7 @@ fn api() -> Router<AppState> {
     Router::new()
         .route("/health", get(health))
         .merge(profiles::routes())
+        .nest("/listenbrainz/1", listenbrainz::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
 }
 

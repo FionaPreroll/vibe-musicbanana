@@ -22,6 +22,15 @@ export type Listen = { listened_at: string; artist: string; track: string; album
 /** Pass `next` as `before` to get the following, older page. */
 export type ListensPage = { listens: Listen[]; next: string | null };
 
+/** What a scrobble client reported as playing; the API sends `null` once it has run out. */
+export type NowPlaying = {
+	artist: string;
+	track: string;
+	album: string | null;
+	started_at: string;
+	duration_ms: number | null;
+};
+
 export class ApiError extends Error {
 	status: number;
 
