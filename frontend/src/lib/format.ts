@@ -7,7 +7,8 @@ const monthOfYear = new Intl.DateTimeFormat(undefined, { month: 'short', year: '
 const percent = new Intl.NumberFormat(undefined, { style: 'percent' });
 
 export const formatNumber = (n: number) => number.format(n);
-export const formatDate = (iso: string) => date.format(new Date(iso));
+export const formatDate = (when: string | Date) => date.format(new Date(when));
+export const formatDateRange = (from: Date, to: Date) => date.formatRange(from, to);
 export const formatDateTime = (iso: string) => dateTime.format(new Date(iso));
 export const formatPercent = (share: number) => percent.format(share);
 

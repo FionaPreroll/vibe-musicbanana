@@ -11,18 +11,19 @@ import {
 	type NowPlaying,
 	type Overview
 } from '#lib/api.ts';
+import { parsePeriod, periodEnd, periodQuery } from '#lib/period.ts';
 import type { PageLoad } from './$types';
 
 // /u/<username> is the default profile, /u/<username>/<slug> any other one.
-// ?year=2012 narrows the charts to that year and starts the listens at its end.
+// A period in the query (see period.ts) narrows the charts to it and starts the
+// listens at its end.
 export const load: PageLoad = async ({ params, url, fetch }) => {
 	const api = profileApi(params.username, params.slug ?? 'default');
-	const yearParam = url.searchParams.get('year');
-	const year = yearParam === null ? null : Number(yearParam);
-	if (year !== null && !Number.isInteger(year)) error(400, 'Invalid year');
+	const period = parsePeriod(url.searchParams);
+	if (!period) error(400, 'Invalid period');
 
-	const chart = (kind: ChartKind) =>
-		getJson<ChartEntry[]>(fetch, `${api}/top/${kind}`, { year, tz: timeZone, limit: 10 });
+	const query = { ...periodQuery(period), tz: timeZone, limit: 10 };
+	const chart = (kind: ChartKind) => getJson<ChartEntry[]>(fetch, `${api}/top/${kind}`, query);
 
 	try {
 		const [overview, artists, releases, recordings, recent, nowPlaying] = await Promise.all([
@@ -31,23 +32,16 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 			chart('releases'),
 			chart('recordings'),
 			getJson<ListensPage>(fetch, `${api}/listens`, {
-				before: year === null ? null : startOfYear(year + 1).toISOString(),
+				before: periodEnd(period)?.toISOString(),
 				limit: 25
 			}),
 			getJson<NowPlaying | null>(fetch, `${api}/now-playing`)
 		]);
 		const base = profilePath(params.username, params.slug);
-		return { api, base, year, overview, artists, releases, recordings, recent, nowPlaying };
+		return { api, base, period, overview, artists, releases, recordings, recent, nowPlaying };
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) error(404, 'There is no such profile.');
 		if (e instanceof ApiError && e.status === 400) error(400, e.message);
 		throw e;
 	}
 };
-
-/** Local midnight on January 1st; `new Date(y, 0, 1)` would map years below 100 to 19xx. */
-function startOfYear(year: number) {
-	const date = new Date(2000, 0, 1);
-	date.setFullYear(year);
-	return date;
-}

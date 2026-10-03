@@ -1,20 +1,23 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import {
 		getJson,
+		timeZone,
 		type ChartEntry,
 		type EntityKind,
 		type ListensPage,
-		type NowPlaying
+		type NowPlaying,
+		type YearTop
 	} from '#lib/api.ts';
+	import ArtistYears from '#lib/components/ArtistYears.svelte';
 	import Chart from '#lib/components/Chart.svelte';
+	import PeriodPicker from '#lib/components/PeriodPicker.svelte';
 	import { formatDate, formatDateTime, listenCount } from '#lib/format.ts';
+	import { parseDay, periodEnd, type Period } from '#lib/period.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
 	const overview = $derived(data.overview);
-	const busiestYear = $derived(Math.max(1, ...overview.years.map((y) => y.listens)));
 
 	// Years without listens stay in the bar as gaps (e.g. between an import and new scrobbles).
 	const years = $derived.by(() => {
@@ -30,25 +33,53 @@
 
 	const link = (kind: EntityKind) => (entry: ChartEntry) => `${data.base}/${kind}/${entry.id}`;
 
-	// Start from the loaded page again whenever the profile or year changes.
+	// The top artists of every year don't depend on the period, so they load once per
+	// profile and after the rest of the page. (`data` is new after every navigation,
+	// `api` only for another profile.)
+	const api = $derived(data.api);
+	let artistYears: YearTop[] = $state([]);
+	$effect(() => {
+		let current = true;
+		artistYears = [];
+		getJson<YearTop[]>(fetch, `${api}/top/artists/years`, { tz: timeZone, limit: 10 })
+			.then((years) => {
+				if (current) artistYears = years;
+			})
+			.catch(() => {
+				// The chart stays away; the rest of the page works without it.
+			});
+		return () => (current = false);
+	});
+
+	function listensTitle(period: Period) {
+		if (period.kind === 'year') return `Last listens of ${period.year}`;
+		if (period.kind === 'range' && period.to) {
+			return `Last listens up to ${formatDate(parseDay(period.to))}`;
+		}
+		return 'Recent listens';
+	}
+
+	// Start from the loaded page again whenever the profile or period changes.
 	let listens = $derived(data.recent.listens);
 	let next = $derived(data.recent.next);
 	let loadingMore = $state(false);
 	let nowPlaying = $derived(data.nowPlaying);
 
-	// While the page is open, keep "now playing" current and put new listens on top.
+	// While the page is open, keep "now playing" current and put new listens on top
+	// unless the period is over.
 	$effect(() => {
-		const { api, year } = data;
+		const api = data.api;
+		const live = periodEnd(data.period) === null;
 		const timer = setInterval(() => {
-			if (!document.hidden) refresh(api, year);
+			if (!document.hidden) refresh(api, live);
 		}, 30_000);
 		return () => clearInterval(timer);
 	});
 
-	async function refresh(api: string, year: number | null) {
+	async function refresh(api: string, live: boolean) {
 		try {
 			nowPlaying = await getJson<NowPlaying | null>(fetch, `${api}/now-playing`);
-			if (year !== null) return;
+			if (!live) return;
 			const latest = await getJson<ListensPage>(fetch, `${api}/listens`, { limit: 25 });
 			const newest = listens.length ? Date.parse(listens[0].listened_at) : -Infinity;
 			const fresh = latest.listens.filter((l) => Date.parse(l.listened_at) > newest);
@@ -56,11 +87,6 @@
 		} catch {
 			// Offline or a server restart; the next round tries again.
 		}
-	}
-
-	// On narrow screens the years scroll sideways; keep the selected one in view.
-	function reveal(node: HTMLElement) {
-		node.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 	}
 
 	async function loadMore() {
@@ -116,47 +142,12 @@
 		{/if}
 	</header>
 
-	{#if overview.years.length > 0}
-		<nav class="mt-8 flex items-end gap-2" aria-label="Year">
-			<a
-				href={page.url.pathname}
-				data-sveltekit-noscroll
-				class="mb-5 shrink-0 rounded px-2 py-1 text-sm whitespace-nowrap {data.year === null
-					? 'bg-stone-900 text-white'
-					: 'text-stone-600 hover:bg-stone-200'}"
-				aria-current={data.year === null ? 'page' : undefined}
-			>
-				All time
-			</a>
-			<div class="flex min-w-0 items-end gap-1 overflow-x-auto">
-				{#each years as y (y.year)}
-					{@const selected = data.year === y.year}
-					<a
-						href="?year={y.year}"
-						data-sveltekit-noscroll
-						class="group flex w-10 shrink-0 flex-col items-center"
-						title={listenCount(y.listens)}
-						aria-current={selected ? 'page' : undefined}
-						{@attach selected && reveal}
-					>
-						<span class="flex h-16 w-8 items-end">
-							<span
-								class="w-full rounded-t {selected
-									? 'bg-yellow-500'
-									: 'bg-yellow-200 group-hover:bg-yellow-300'}"
-								style:height="{y.listens && Math.max(4, (y.listens / busiestYear) * 100)}%"
-							></span>
-						</span>
-						<span
-							class="mt-1 text-xs tabular-nums {selected
-								? 'font-semibold text-stone-900'
-								: 'text-stone-500'}">{y.year}</span
-						>
-					</a>
-				{/each}
-			</div>
-		</nav>
-	{/if}
+	<PeriodPicker
+		period={data.period}
+		{years}
+		first={overview.first_listened_at}
+		last={overview.last_listened_at}
+	/>
 
 	<div class="mt-8 grid gap-8 md:grid-cols-3">
 		<Chart title="Top artists" entries={data.artists} href={link('artist')} />
@@ -164,9 +155,19 @@
 		<Chart title="Top tracks" entries={data.recordings} href={link('track')} />
 	</div>
 
+	{#if artistYears.length > 0}
+		<div class="mt-12">
+			<ArtistYears
+				years={artistYears}
+				base={data.base}
+				selected={data.period.kind === 'year' ? data.period.year : null}
+			/>
+		</div>
+	{/if}
+
 	<section class="mt-12">
 		<h2 class="mb-2 text-sm font-semibold tracking-wide text-stone-500 uppercase">
-			{data.year === null ? 'Recent listens' : `Last listens of ${data.year}`}
+			{listensTitle(data.period)}
 		</h2>
 		{#if listens.length === 0}
 			<p class="text-sm text-stone-500">No listens.</p>

@@ -18,6 +18,9 @@ export type ChartKind = 'artists' | 'releases' | 'recordings';
 /** `artist` is set for releases and recordings. */
 export type ChartEntry = { id: number; name: string; artist?: string; listens: number };
 
+/** The most heard artists of a year, best first; `listens` counts all of the year's listens. */
+export type YearTop = { year: number; listens: number; artists: ChartEntry[] };
+
 export type Listen = {
 	listened_at: string;
 	artist: string;

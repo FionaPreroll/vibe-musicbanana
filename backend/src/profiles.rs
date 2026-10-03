@@ -1,5 +1,5 @@
-//! Read-only API behind the public profile pages: overview, charts, recent listens
-//! and what is playing right now.
+//! Read-only API behind the public profile pages: overview, charts for any period,
+//! the top artists of each year, recent listens and what is playing right now.
 //!
 //! Only public profiles are served; a private one answers 404 like an unknown one
 //! until there is a login.
@@ -11,15 +11,22 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use time::OffsetDateTime;
+use time::{Date, Month, OffsetDateTime};
 
 use crate::{AppError, AppState};
+
+// Days in query parameters, e.g. ?from=2009-06-01.
+time::serde::format_description!(day, Date, "[year]-[month]-[day]");
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/profiles", get(list))
         .route("/profiles/{username}/{slug}", get(overview))
         .route("/profiles/{username}/{slug}/top/{kind}", get(top))
+        .route(
+            "/profiles/{username}/{slug}/top/artists/years",
+            get(top_artists_per_year),
+        )
         .route("/profiles/{username}/{slug}/listens", get(listens))
         .route("/profiles/{username}/{slug}/now-playing", get(now_playing))
 }
@@ -143,10 +150,47 @@ async fn overview(
 
 #[derive(Deserialize)]
 struct TopParams {
-    /// Calendar year in `tz`; all time when missing.
+    /// Calendar year in `tz`; short for from=<year>-01-01&to=<year>-12-31.
     year: Option<i32>,
+    /// First day of the period in `tz`; open when missing.
+    #[serde(default, with = "day::option")]
+    from: Option<Date>,
+    /// Last day of the period in `tz`, inclusive; open when missing.
+    #[serde(default, with = "day::option")]
+    to: Option<Date>,
     tz: Option<String>,
     limit: Option<i64>,
+}
+
+impl TopParams {
+    /// The first and last day of the period; `None` leaves that end open, so
+    /// neither of them means all time.
+    fn days(&self) -> Result<(Option<Date>, Option<Date>), AppError> {
+        let bad = |message: &str| AppError::BadRequest(message.into());
+        if let Some(year) = self.year {
+            if self.from.is_some() || self.to.is_some() {
+                return Err(bad("year cannot be combined with from or to"));
+            }
+            if !(1..=9999).contains(&year) {
+                return Err(bad("year must be between 1 and 9999"));
+            }
+            let day =
+                |month, day| Date::from_calendar_date(year, month, day).map_err(AppError::from);
+            return Ok((
+                Some(day(Month::January, 1)?),
+                Some(day(Month::December, 31)?),
+            ));
+        }
+        if [self.from, self.to].iter().flatten().any(|d| d.year() < 1) {
+            return Err(bad("dates must not be before the year 1"));
+        }
+        if let (Some(from), Some(to)) = (self.from, self.to)
+            && from > to
+        {
+            return Err(bad("from must not be after to"));
+        }
+        Ok((self.from, self.to))
+    }
 }
 
 #[derive(Serialize)]
@@ -159,18 +203,15 @@ pub(crate) struct ChartEntry {
     pub listens: i64,
 }
 
-// All three charts count listens in [lo, hi): the given year in the given time
-// zone, or everything when the year is NULL.
+// All three charts count listens in [lo, hi): from midnight at the start of the
+// first day to midnight after the last one in the given time zone, without a
+// bound where the period is open.
 async fn top(
     State(state): State<AppState>,
     Path((username, slug, kind)): Path<(String, String, String)>,
     Query(params): Query<TopParams>,
 ) -> Result<Json<Vec<ChartEntry>>, AppError> {
-    if params.year.is_some_and(|y| !(1..=9999).contains(&y)) {
-        return Err(AppError::BadRequest(
-            "year must be between 1 and 9999".into(),
-        ));
-    }
+    let (from, to) = params.days()?;
     let profile = find_profile(&state.db, &username, &slug).await?;
     let tz = time_zone(&state.db, params.tz).await?;
     let limit = params.limit.unwrap_or(10).clamp(1, 100);
@@ -180,8 +221,8 @@ async fn top(
             sqlx::query_as!(
                 ChartEntry,
                 r#"WITH span AS (
-                       SELECT coalesce(make_timestamptz($2, 1, 1, 0, 0, 0, $3), '-infinity') AS lo,
-                              coalesce(make_timestamptz($2 + 1, 1, 1, 0, 0, 0, $3), 'infinity') AS hi
+                       SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,
+                              coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi
                    )
                    SELECT a.id, a.name, NULL::text AS artist, count(*) AS "listens!"
                      FROM span, listen l
@@ -189,9 +230,10 @@ async fn top(
                     WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi
                     GROUP BY a.id
                     ORDER BY count(*) DESC, a.name
-                    LIMIT $4"#,
+                    LIMIT $5"#,
                 profile.id,
-                params.year,
+                from,
+                to,
                 tz,
                 limit,
             )
@@ -202,8 +244,8 @@ async fn top(
             sqlx::query_as!(
                 ChartEntry,
                 r#"WITH span AS (
-                       SELECT coalesce(make_timestamptz($2, 1, 1, 0, 0, 0, $3), '-infinity') AS lo,
-                              coalesce(make_timestamptz($2 + 1, 1, 1, 0, 0, 0, $3), 'infinity') AS hi
+                       SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,
+                              coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi
                    )
                    SELECT r.id, r.title AS name, a.name AS "artist?", count(*) AS "listens!"
                      FROM span, listen l
@@ -212,9 +254,10 @@ async fn top(
                     WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi
                     GROUP BY r.id, a.id
                     ORDER BY count(*) DESC, r.title
-                    LIMIT $4"#,
+                    LIMIT $5"#,
                 profile.id,
-                params.year,
+                from,
+                to,
                 tz,
                 limit,
             )
@@ -225,8 +268,8 @@ async fn top(
             sqlx::query_as!(
                 ChartEntry,
                 r#"WITH span AS (
-                       SELECT coalesce(make_timestamptz($2, 1, 1, 0, 0, 0, $3), '-infinity') AS lo,
-                              coalesce(make_timestamptz($2 + 1, 1, 1, 0, 0, 0, $3), 'infinity') AS hi
+                       SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,
+                              coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi
                    )
                    SELECT r.id, r.title AS name, a.name AS "artist?", count(*) AS "listens!"
                      FROM span, listen l
@@ -235,9 +278,10 @@ async fn top(
                     WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi
                     GROUP BY r.id, a.id
                     ORDER BY count(*) DESC, r.title
-                    LIMIT $4"#,
+                    LIMIT $5"#,
                 profile.id,
-                params.year,
+                from,
+                to,
                 tz,
                 limit,
             )
@@ -248,6 +292,77 @@ async fn top(
     }?;
 
     Ok(Json(entries))
+}
+
+#[derive(Deserialize)]
+struct YearsParams {
+    tz: Option<String>,
+    limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct YearTop {
+    year: i32,
+    /// All listens of the year, not only those of the artists below.
+    listens: i64,
+    artists: Vec<ChartEntry>,
+}
+
+/// The most heard artists of every year with listens, ranked like the yearly charts,
+/// to show how the favourites change over the years.
+async fn top_artists_per_year(
+    State(state): State<AppState>,
+    Path((username, slug)): Path<(String, String)>,
+    Query(params): Query<YearsParams>,
+) -> Result<Json<Vec<YearTop>>, AppError> {
+    let profile = find_profile(&state.db, &username, &slug).await?;
+    let tz = time_zone(&state.db, params.tz).await?;
+    let limit = params.limit.unwrap_or(10).clamp(1, 100);
+
+    let rows = sqlx::query!(
+        r#"WITH counts AS (
+               SELECT date_part('year', listened_at AT TIME ZONE $2)::int AS year,
+                      artist_id, count(*) AS listens
+                 FROM listen
+                WHERE profile_id = $1
+                GROUP BY 1, 2
+           ), ranked AS (
+               SELECT c.year, a.id, a.name, c.listens,
+                      sum(c.listens) OVER (PARTITION BY c.year)::bigint AS year_listens,
+                      row_number() OVER (PARTITION BY c.year ORDER BY c.listens DESC, a.name) AS rank
+                 FROM counts c
+                 JOIN artist a ON a.id = c.artist_id
+           )
+           SELECT year AS "year!", year_listens AS "year_listens!", id AS "id!", name AS "name!",
+                  listens AS "listens!"
+             FROM ranked
+            WHERE rank <= $3
+            ORDER BY year, rank"#,
+        profile.id,
+        tz,
+        limit,
+    )
+    .fetch_all(&state.db)
+    .await?;
+
+    let mut years: Vec<YearTop> = Vec::new();
+    for row in rows {
+        let artist = ChartEntry {
+            id: row.id,
+            name: row.name,
+            artist: None,
+            listens: row.listens,
+        };
+        match years.last_mut() {
+            Some(year) if year.year == row.year => year.artists.push(artist),
+            _ => years.push(YearTop {
+                year: row.year,
+                listens: row.year_listens,
+                artists: vec![artist],
+            }),
+        }
+    }
+    Ok(Json(years))
 }
 
 #[derive(Deserialize)]
