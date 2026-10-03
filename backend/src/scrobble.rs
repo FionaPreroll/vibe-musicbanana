@@ -22,8 +22,14 @@ pub struct Listen {
     pub extra: Option<Value>,
 }
 
-/// Stores listens and returns how many were new. A listen at a time the profile
-/// already has one for is a resubmission and gets skipped.
+/// Stores listens and returns how many were new.
+///
+/// A listen is skipped as a duplicate when the profile already has one at the
+/// same time (a resubmission), or one of the same recording closer than a player
+/// needs to count a play: half the track, at most four minutes, or 15 seconds
+/// when the length is unknown. Nobody plays a track twice in less time than that,
+/// so such a pair comes from two scrobblers or a client that sent a play twice.
+/// The same holds between listens of one batch.
 pub async fn record(db: &PgPool, profile_id: i64, listens: &[Listen]) -> sqlx::Result<u64> {
     let mut catalog = Resolver::new(db);
     let mut artist_ids = Vec::with_capacity(listens.len());
@@ -56,16 +62,30 @@ pub async fn record(db: &PgPool, profile_id: i64, listens: &[Listen]) -> sqlx::R
         .map(|l| l.extra.as_ref().map(Value::to_string))
         .collect();
     let inserted = sqlx::query!(
-        "INSERT INTO listen (profile_id, listened_at, artist_raw, track_raw, album_raw,
+        "WITH t AS (
+             SELECT t.*,
+                    make_interval(secs => LEAST(COALESCE(t.duration_ms, r.length_ms, 30000) / 2000.0,
+                                                240)::float8) AS gap,
+                    lag(t.listened_at) OVER (PARTITION BY t.recording_id
+                                             ORDER BY t.listened_at) AS previous
+               FROM UNNEST($2::timestamptz[], $3::text[], $4::text[], $5::text[], $6::int2[],
+                           $7::int4[], $8::text[], $9::text[], $10::int8[], $11::int8[], $12::int8[])
+                 AS t(listened_at, artist_raw, track_raw, album_raw, track_number,
+                      duration_ms, client, extra, artist_id, recording_id, release_id)
+               JOIN recording r ON r.id = t.recording_id)
+         INSERT INTO listen (profile_id, listened_at, artist_raw, track_raw, album_raw,
                              track_number, duration_ms, client, extra,
                              artist_id, recording_id, release_id)
          SELECT $1, t.listened_at, t.artist_raw, t.track_raw, t.album_raw,
                 t.track_number, t.duration_ms, t.client, t.extra::jsonb,
                 t.artist_id, t.recording_id, t.release_id
-           FROM UNNEST($2::timestamptz[], $3::text[], $4::text[], $5::text[], $6::int2[],
-                       $7::int4[], $8::text[], $9::text[], $10::int8[], $11::int8[], $12::int8[])
-             AS t(listened_at, artist_raw, track_raw, album_raw, track_number,
-                  duration_ms, client, extra, artist_id, recording_id, release_id)
+           FROM t
+          WHERE (t.previous IS NULL OR t.listened_at - t.previous >= t.gap)
+            AND NOT EXISTS (SELECT FROM listen o
+                             WHERE o.profile_id = $1
+                               AND o.recording_id = t.recording_id
+                               AND o.listened_at > t.listened_at - t.gap
+                               AND o.listened_at < t.listened_at + t.gap)
          ON CONFLICT (profile_id, listened_at) DO NOTHING",
         profile_id,
         &listened_at,

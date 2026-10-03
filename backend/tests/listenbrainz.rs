@@ -330,6 +330,57 @@ async fn resubmitted_listens_are_skipped(db: PgPool) {
 }
 
 #[sqlx::test(fixtures("profiles"))]
+async fn near_duplicates_of_a_track_are_skipped(db: PgPool) {
+    let token = fiona_token(&db).await;
+    let t = now() - 3000;
+    let joga = |at: i64, duration_ms: Option<i64>| {
+        let mut listen = listen(t + at, "Björk", "Jóga", None);
+        if let Some(ms) = duration_ms {
+            listen["track_metadata"]["additional_info"] = json!({ "duration_ms": ms });
+        }
+        listen
+    };
+    let five_minutes = Some(300_000);
+    let twenty_minutes = Some(1_200_000);
+
+    for listen in [
+        // A five minute track counts as played after 150 seconds.
+        joga(0, five_minutes),
+        joga(60, five_minutes),
+        joga(150, five_minutes),
+        // Another track is no duplicate.
+        listen(t + 10, "Björk", "Human Behaviour", Some("Debut")),
+        // Players count a long track after four minutes at most.
+        joga(500, twenty_minutes),
+        joga(700, twenty_minutes),
+        joga(740, twenty_minutes),
+        // Without any length (the fixture's Jóga has none) 15 seconds apply.
+        joga(2000, None),
+        joga(2010, None),
+        joga(2020, None),
+    ] {
+        submit_ok(&db, &token, &single(listen)).await;
+    }
+    // Within one batch, too.
+    submit_ok(
+        &db,
+        &token,
+        &import(vec![joga(2500, None), joga(2505, None)]),
+    )
+    .await;
+
+    let stored: Vec<i64> = sqlx::query_scalar(
+        "SELECT extract(epoch FROM listened_at)::int8 - $1 FROM listen
+          WHERE profile_id = 1 AND listened_at >= to_timestamp($1) ORDER BY listened_at",
+    )
+    .bind(t)
+    .fetch_all(&db)
+    .await
+    .unwrap();
+    assert_eq!(stored, [0, 10, 150, 500, 740, 2000, 2020, 2500]);
+}
+
+#[sqlx::test(fixtures("profiles"))]
 async fn playing_now_shows_on_the_profile_until_it_runs_out(db: PgPool) {
     let token = fiona_token(&db).await;
     let url = "/api/profiles/fiona/default/now-playing";
@@ -514,14 +565,15 @@ async fn bad_requests_get_listenbrainz_errors(db: PgPool) {
 async fn concurrent_listens_share_new_catalog_entries(db: PgPool) {
     let token = fiona_token(&db).await;
     let [artists, releases, recordings, listens] = counts(&db).await;
-    let t = now() - 1000;
+    let t = now() - 10_000;
 
     let mut tasks = tokio::task::JoinSet::new();
     for i in 0..10 {
         let (db, token) = (db.clone(), token.clone());
         tasks.spawn(async move {
+            // Ten minutes apart, so none of them counts as a duplicate of another.
             let body = single(listen(
-                t + i,
+                t + i * 600,
                 "Kettcar",
                 "Landungsbrücken raus",
                 Some("Du und wieviel von deinen Freunden"),
