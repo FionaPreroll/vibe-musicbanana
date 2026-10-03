@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE listen SET artist_id = $2 WHERE artist_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f0a880e0aa47a1fc93b00596b6b7253147e7a0a559cc59e2a4990e65b51b7a6a"
+}

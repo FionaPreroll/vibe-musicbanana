@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE listen SET recording_id = $2 WHERE recording_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7736b9860ea39153cc7e231bc86bcb8031366f91ece2e5c1445c7141d2aebef8"
+}

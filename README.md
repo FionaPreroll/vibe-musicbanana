@@ -83,6 +83,25 @@ Tested with Navidrome 0.64.2: linking the token, "now playing" and listens sent 
 
 Clients that let you change the ListenBrainz server want either the API root `https://musicbanana.example.org/api/listenbrainz/1/` or the server `https://musicbanana.example.org/api/listenbrainz`, plus the token.
 
+## Merging duplicates
+
+The same artist, album or track can end up in the catalog under several spellings: "Die Aerzte" next to "Die Ärzte", "Bjork" next to "Björk", typos, or "Unrockbar (Live)" next to "Unrockbar". `merge suggest` lists look-alikes, each line with the command that merges them:
+
+```sh
+musicbanana merge suggest                     # artists, releases and recordings, 30 each
+musicbanana merge suggest artists --limit 100
+musicbanana merge artist 977 30 --dry-run     # what merging artist 977 into 30 would change
+musicbanana merge artist 977 30
+```
+
+With Docker, prefix them with `docker compose exec musicbanana`. A suggestion says why:
+
+- **same letters:** only case, accents, punctuation, spaces, a leading "The" or "&" for "and" differ;
+- **one letter apart:** a letter more, missing, different or swapped with its neighbour, in names of six letters or more and never where digits differ ("Chapter 1", "Chapter 2");
+- **version:** the same title apart from a note in brackets, after a dash or "feat.", so possibly a live version or a remaster; these come last.
+
+The entry with fewer listens goes into the one with more, a version into the plain title. Releases and recordings are compared within one artist only, so merge artists first: merging an artist also merges its releases and recordings into the other artist's ones with the same title and moves the rest over. A merge points the listens and the spellings at the remaining entry, so later scrobbles with the old spelling land there too; the raw strings of the listens stay as they were. There is no undo yet, hence `--dry-run`.
+
 ## Importing the old musicbanana-php database
 
 The importer reads the `mb_*` tables straight from MySQL/MariaDB and writes into an empty musicbanana database (it refuses to run twice). It repairs double-encoded names, follows old merges and wraps the old MD5 password hashes in argon2id; details in [docs/design.md](docs/design.md).

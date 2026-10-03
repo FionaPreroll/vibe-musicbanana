@@ -1,8 +1,12 @@
 use std::{env, path::PathBuf};
 
 use anyhow::{Context, bail};
-use clap::{Parser, Subcommand};
-use musicbanana::{AppState, import_php, router, tokens};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use musicbanana::{
+    AppState, import_php,
+    merge::{self, Kind, Suggestion},
+    router, tokens,
+};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use time::OffsetDateTime;
 use tokio::net::TcpListener;
@@ -29,6 +33,9 @@ enum Command {
     /// Manage the tokens scrobble clients use (ListenBrainz API).
     #[command(subcommand)]
     Token(TokenCommand),
+    /// Merge duplicates in the catalog, e.g. two spellings of an artist.
+    #[command(subcommand)]
+    Merge(MergeCommand),
 }
 
 #[derive(Subcommand)]
@@ -55,6 +62,45 @@ enum TokenCommand {
         /// Token id, as shown by `token list`.
         id: i64,
     },
+}
+
+#[derive(Subcommand)]
+enum MergeCommand {
+    /// List artists, releases and recordings that look like another one, each
+    /// with the command that merges them.
+    Suggest {
+        /// Only these. Artists are best merged first: that also merges their
+        /// releases and recordings with the same title.
+        #[arg(value_enum)]
+        kind: Option<Kinds>,
+        /// Suggestions shown per kind.
+        #[arg(long, default_value_t = 30)]
+        limit: usize,
+    },
+    /// Merge an artist into another one, with its releases and recordings.
+    Artist(MergeArgs),
+    /// Merge a release (album) into another one.
+    Release(MergeArgs),
+    /// Merge a recording (track) into another one.
+    Recording(MergeArgs),
+}
+
+#[derive(Args)]
+struct MergeArgs {
+    /// Id of the entry that goes away, as shown by `merge suggest`.
+    from: i64,
+    /// Id of the entry that stays.
+    into: i64,
+    /// Only show what would change.
+    #[arg(long)]
+    dry_run: bool,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum Kinds {
+    Artists,
+    Releases,
+    Recordings,
 }
 
 #[tokio::main]
@@ -88,6 +134,7 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Command::Token(command) => token(&db, command).await,
+        Command::Merge(command) => merge_command(&db, command).await,
     }
 }
 
@@ -136,6 +183,82 @@ async fn token(db: &PgPool, command: TokenCommand) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+async fn merge_command(db: &PgPool, command: MergeCommand) -> anyhow::Result<()> {
+    let (kind, args) = match command {
+        MergeCommand::Suggest { kind, limit } => {
+            let kinds = match kind {
+                None => vec![Kind::Artist, Kind::Release, Kind::Recording],
+                Some(Kinds::Artists) => vec![Kind::Artist],
+                Some(Kinds::Releases) => vec![Kind::Release],
+                Some(Kinds::Recordings) => vec![Kind::Recording],
+            };
+            for kind in kinds {
+                let found = merge::suggest(db, kind).await?;
+                print_suggestions(kind, &found, limit);
+            }
+            return Ok(());
+        }
+        MergeCommand::Artist(args) => (Kind::Artist, args),
+        MergeCommand::Release(args) => (Kind::Release, args),
+        MergeCommand::Recording(args) => (Kind::Recording, args),
+    };
+    let merged = merge::merge(db, kind, args.from, args.into, args.dry_run).await?;
+    println!("{merged}");
+    Ok(())
+}
+
+/// One line per suggestion: the command, then why as a shell comment, so the
+/// whole line can be pasted.
+fn print_suggestions(kind: Kind, found: &[Suggestion], limit: usize) {
+    let heading = match kind {
+        Kind::Artist => "Artists",
+        Kind::Release => "Releases",
+        Kind::Recording => "Recordings",
+    };
+    if found.is_empty() {
+        println!("{heading} that look alike: none\n");
+        return;
+    }
+    println!("{heading} that look alike, most certain first:");
+    let shown = &found[..found.len().min(limit)];
+    let commands: Vec<String> = shown
+        .iter()
+        .map(|s| format!("musicbanana merge {kind} {} {}", s.from.id, s.into.id))
+        .collect();
+    let width = commands.iter().map(String::len).max().unwrap_or(0);
+    for (s, command) in shown.iter().zip(&commands) {
+        let by = s
+            .into
+            .artist
+            .as_ref()
+            .map_or(String::new(), |artist| format!(", by {artist}"));
+        println!(
+            "{command:width$}  # {}: \"{}\" ({}) into \"{}\" ({}){by}",
+            s.likeness,
+            s.from.name,
+            listens(s.from.listens),
+            s.into.name,
+            listens(s.into.listens),
+        );
+    }
+    if found.len() > shown.len() {
+        println!(
+            "… and {} more, see --limit {}",
+            found.len() - shown.len(),
+            found.len()
+        );
+    }
+    println!();
+}
+
+fn listens(n: i64) -> String {
+    if n == 1 {
+        "1 listen".to_owned()
+    } else {
+        format!("{n} listens")
+    }
 }
 
 /// "2026-10-03 14:30 UTC"

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE recording_alias SET recording_id = $2 WHERE recording_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "58988c6688a40ae16ec5766a38112116be8069ed6068e6e321940b4e9d0bef80"
+}

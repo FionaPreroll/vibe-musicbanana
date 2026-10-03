@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE recording r SET length_ms = COALESCE(r.length_ms, f.length_ms), mbid = COALESCE(r.mbid, $3)\n           FROM recording f\n          WHERE r.id = $2 AND f.id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bc430920fb6b04f6cac0b5a3cc51e1c6817bbe1221149517e3810a42f9d40f7f"
+}

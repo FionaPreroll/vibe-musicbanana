@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE release SET merged_into = $2 WHERE merged_into = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0a316c6b7aa0927e26822be1c41c0bc783cfa04935662828fd5a2ee4d8f9aaab"
+}
