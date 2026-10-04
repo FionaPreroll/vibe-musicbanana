@@ -90,10 +90,10 @@ pub struct Mbids {
 /// batch of listens asks the database once per name.
 ///
 /// A MusicBrainz ID that comes with a name tells entries of the same name apart:
-/// an artist or album with another ID is another one. An unknown ID goes to the
-/// entry the name leads to if that has none yet, so what was imported or scrobbled
-/// without IDs stays with the first ID that turns up. The entry of a second ID
-/// gets no alias, so listens without an ID keep going to the first one.
+/// an artist, album or track with another ID is another one. An unknown ID goes
+/// to the entry the name leads to if that has none yet, so what was imported or
+/// scrobbled without IDs stays with the first ID that turns up. The entry of a
+/// second ID gets no alias, so listens without an ID keep going to the first one.
 ///
 /// Each lookup is one statement that either finds the alias or inserts the entry
 /// together with its alias. When two requests create the same name at the same
@@ -434,10 +434,10 @@ async fn recording_by_title(
 }
 
 /// The artist's track of the recording `mbid`, under whatever title; a new title
-/// becomes one of its spellings. An unknown ID goes to the track of the title,
-/// even if that has another ID: unlike artists and albums, tracks of the same
-/// title stay one, as MusicBrainz has recordings of their own for a live version
-/// or an edit, and now and then for the same take on another album.
+/// becomes one of its spellings. An unknown ID goes to the track of the title if
+/// that has no ID yet, else to a new track of the same title. A recording in
+/// MusicBrainz is the same audio on whatever album: a remaster mostly keeps the
+/// ID of the original, while a live version or a new recording has its own.
 async fn recording_by_mbid(
     db: &PgPool,
     artist_id: i64,
@@ -462,16 +462,65 @@ async fn recording_by_mbid(
     if let Some(id) = known {
         return Ok(id);
     }
-    let id = recording_by_title(db, artist_id, key, title, length_ms).await?;
+
+    let mut tx = db.begin().await?;
+    let named = sqlx::query_scalar!(
+        "SELECT r.id FROM recording_alias x JOIN recording r ON r.id = x.recording_id
+          WHERE x.artist_id = $1 AND x.title_key = $2 AND r.merged_into IS NULL
+            FOR NO KEY UPDATE OF r",
+        artist_id,
+        key,
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    let id = match named {
+        Some(id) => {
+            let tagged = sqlx::query_scalar!(
+                r#"SELECT EXISTS (SELECT FROM recording_mbid WHERE recording_id = $1) AS "tagged!""#,
+                id,
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+            if tagged {
+                sqlx::query_scalar!(
+                    "INSERT INTO recording (title, artist_id, length_ms) VALUES ($1, $2, $3)
+                     RETURNING id",
+                    title,
+                    artist_id,
+                    length_ms,
+                )
+                .fetch_one(&mut *tx)
+                .await?
+            } else {
+                id
+            }
+        }
+        None => {
+            sqlx::query_scalar!(
+                r#"WITH created AS (INSERT INTO recording (title, artist_id, length_ms)
+                                    VALUES ($3, $1, $4)
+                                    RETURNING id)
+                   INSERT INTO recording_alias (artist_id, title_key, recording_id)
+                   SELECT $1, $2, id FROM created
+                   RETURNING recording_id"#,
+                artist_id,
+                key,
+                title,
+                length_ms,
+            )
+            .fetch_one(&mut *tx)
+            .await?
+        }
+    };
     sqlx::query!(
-        "INSERT INTO recording_mbid (artist_id, mbid, recording_id) VALUES ($1, $2, $3)
-         ON CONFLICT DO NOTHING",
+        "INSERT INTO recording_mbid (artist_id, mbid, recording_id) VALUES ($1, $2, $3)",
         artist_id,
         mbid,
         id,
     )
-    .execute(db)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok(id)
 }
 

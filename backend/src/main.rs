@@ -101,6 +101,10 @@ struct MergeArgs {
     /// Only show what would change.
     #[arg(long)]
     dry_run: bool,
+    /// Merge even though their MusicBrainz IDs tell the two apart, such as an
+    /// artist's other name into the main one, or a recording MusicBrainz lists twice.
+    #[arg(long)]
+    force: bool,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -213,7 +217,11 @@ async fn merge_command(db: &PgPool, command: MergeCommand) -> anyhow::Result<()>
         MergeCommand::Release(args) => (Kind::Release, args),
         MergeCommand::Recording(args) => (Kind::Recording, args),
     };
-    let merged = merge::merge(db, kind, args.from, args.into, args.dry_run).await?;
+    let options = merge::Options {
+        dry_run: args.dry_run,
+        force: args.force,
+    };
+    let merged = merge::merge(db, kind, args.from, args.into, options).await?;
     println!("{merged}");
     Ok(())
 }

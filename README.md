@@ -85,13 +85,13 @@ Tested with Navidrome 0.64.2: linking the token, "now playing" and listens sent 
 
 Clients that let you change the ListenBrainz server want either the API root `https://musicbanana.example.org/api/listenbrainz/1/` or the server `https://musicbanana.example.org/api/listenbrainz`, plus the token.
 
-### Artists and albums of the same name
+### Artists, albums and tracks of the same name
 
 Listens of files tagged with MusicBrainz Picard come with MusicBrainz IDs, which Navidrome passes on. musicbanana uses those of the artist (for a track by one artist), of the album's release group and of the recording:
 
-- Artists or albums of the same name with different IDs stay apart, such as two bands called Nirvana or two albums called "Weezer". The first ID that comes with a name goes to the entry listened to so far, imported listens included, and listens without an ID keep counting for that one.
+- Artists, albums or tracks of the same name with different IDs stay apart, such as two bands called Nirvana, two albums called "Weezer", or a song and its live version. The first ID that comes with a name goes to the entry listened to so far, imported listens included, and listens without an ID keep counting for that one.
+- A track ID is that of the MusicBrainz recording, the same audio on whatever album or single. A remaster mostly has the ID of the original and counts for the same track; a live version or a new recording has one of its own.
 - An album ID finds its album under any title, so "Geräusch (Deluxe)" counts for "Geräusch" when both belong to the same release group, and that title does from then on without an ID too. Likewise for a recording ID and its track.
-- Tracks of the same title by one artist stay one track whatever their IDs, since MusicBrainz has recordings of their own for a live version or an edit.
 - An artist ID that came with another name before is not used: a client may send the ID of A along with "A & B", and then the listens of A must not count for "A & B".
 
 The pages of an artist, album or track link to MusicBrainz.
@@ -115,7 +115,7 @@ With Docker, prefix them with `docker compose exec musicbanana`. A suggestion sa
 
 The entry with fewer listens goes into the one with more, a version into the plain title. Releases and recordings are compared within one artist only, so merge artists first: merging an artist also merges its releases and recordings into the other artist's ones with the same title and moves the rest over. A merge points the listens and the spellings at the remaining entry, so later scrobbles with the old spelling land there too; the raw strings of the listens stay as they were. There is no undo yet, hence `--dry-run`.
 
-Two artists or albums that both have a MusicBrainz ID are neither suggested nor merged, as their IDs say they are different ones of the same name; merging an artist moves its albums over instead of merging them with one of another ID. A merge takes the IDs along, so listens with the ID of the merged entry count for the remaining one.
+Two entries that both have a MusicBrainz ID are not suggested, as their IDs say they are different ones of the same name, and merging them takes `--force`: for an artist's other name that should count for the main one, or a recording MusicBrainz lists twice. Merging an artist moves its albums and tracks over instead of merging them with one of another ID. A merge takes the IDs along, so listens with the ID of the merged entry count for the remaining one.
 
 ## Importing the old musicbanana-php database
 

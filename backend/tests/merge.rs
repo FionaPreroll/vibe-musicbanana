@@ -1,7 +1,7 @@
 //! Merging duplicates in the catalog, and the suggestions for it.
 
 use musicbanana::{
-    merge::{self, Kind, Likeness},
+    merge::{self, Kind, Likeness, Options},
     scrobble::{self, Listen},
 };
 use sqlx::PgPool;
@@ -79,7 +79,9 @@ async fn merging_an_artist_takes_its_releases_recordings_and_spellings_along(db:
                         + (SELECT count(*) FROM recording)";
     let entries = count(&db, catalog).await;
 
-    let merged = merge::merge(&db, Kind::Artist, 4, 1, false).await.unwrap();
+    let merged = merge::merge(&db, Kind::Artist, 4, 1, Options::default())
+        .await
+        .unwrap();
     assert_eq!((merged.listens, merged.spellings), (2, 1));
     assert_eq!((merged.releases_moved, merged.releases_merged), (1, 1));
     assert_eq!((merged.recordings_moved, merged.recordings_merged), (1, 1));
@@ -169,7 +171,18 @@ async fn merging_an_artist_takes_its_releases_recordings_and_spellings_along(db:
 
 #[sqlx::test(fixtures("profiles", "merge"))]
 async fn a_dry_run_changes_nothing(db: PgPool) {
-    let merged = merge::merge(&db, Kind::Artist, 5, 2, true).await.unwrap();
+    let merged = merge::merge(
+        &db,
+        Kind::Artist,
+        5,
+        2,
+        Options {
+            dry_run: true,
+            ..Options::default()
+        },
+    )
+    .await
+    .unwrap();
     assert!(merged.dry_run);
     assert_eq!((merged.listens, merged.spellings), (1, 1));
     // "Joga" is not "Jóga", so it would move over.
@@ -188,13 +201,15 @@ async fn a_dry_run_changes_nothing(db: PgPool) {
 
 #[sqlx::test(fixtures("profiles", "merge"))]
 async fn merges_recordings_and_releases(db: PgPool) {
-    merge::merge(&db, Kind::Artist, 5, 2, false).await.unwrap();
+    merge::merge(&db, Kind::Artist, 5, 2, Options::default())
+        .await
+        .unwrap();
     // Björk now has "Jóga" and "Joga"; the older entry wins the tie.
     assert_eq!(
         suggested(&db, Kind::Recording).await,
         [(9, 4, Likeness::SameLetters), (8, 1, Likeness::Version)]
     );
-    let merged = merge::merge(&db, Kind::Recording, 9, 4, false)
+    let merged = merge::merge(&db, Kind::Recording, 9, 4, Options::default())
         .await
         .unwrap();
     assert_eq!((merged.listens, merged.spellings), (1, 1));
@@ -202,7 +217,9 @@ async fn merges_recordings_and_releases(db: PgPool) {
     assert_eq!(catalog_of(&db, "2016-06-01T12:00:00Z").await, (2, 4, None));
 
     // A release merges across artists too: "Die Aerzte" stays, its Geräusch goes.
-    let merged = merge::merge(&db, Kind::Release, 3, 1, false).await.unwrap();
+    let merged = merge::merge(&db, Kind::Release, 3, 1, Options::default())
+        .await
+        .unwrap();
     assert_eq!((merged.listens, merged.spellings), (1, 1));
     scrobble(
         &db,
@@ -223,7 +240,7 @@ async fn refuses_impossible_merges(db: PgPool) {
     let error = |kind, from, into| {
         let db = db.clone();
         async move {
-            merge::merge(&db, kind, from, into, false)
+            merge::merge(&db, kind, from, into, Options::default())
                 .await
                 .unwrap_err()
                 .to_string()
@@ -235,7 +252,9 @@ async fn refuses_impossible_merges(db: PgPool) {
     );
     assert_eq!(error(Kind::Release, 99, 1).await, "there is no release 99");
 
-    merge::merge(&db, Kind::Artist, 4, 1, false).await.unwrap();
+    merge::merge(&db, Kind::Artist, 4, 1, Options::default())
+        .await
+        .unwrap();
     assert_eq!(
         error(Kind::Artist, 4, 1).await,
         "artist 4 was merged into 1 already"
@@ -251,6 +270,7 @@ async fn refuses_impossible_merges(db: PgPool) {
         .unwrap();
     assert_eq!(
         error(Kind::Artist, 5, 2).await,
-        "artist 5 and 2 have different MusicBrainz IDs, so they are not the same"
+        "artist 5 and 2 have different MusicBrainz IDs, so they are not the same; \
+         --force merges them anyway"
     );
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT r.id, r.title, a.id AS artist_id, a.name AS artist, count(*) AS \"listens!\"\n                 FROM listen l\n                 JOIN recording r ON r.id = l.recording_id\n                 JOIN artist a ON a.id = r.artist_id\n                WHERE r.merged_into IS NULL\n                GROUP BY r.id, a.id\n                ORDER BY r.id",
+  "query": "SELECT r.id, r.title, a.id AS artist_id, a.name AS artist, count(*) AS \"listens!\",\n                      EXISTS (SELECT FROM recording_mbid m WHERE m.recording_id = r.id) AS \"tagged!\"\n                 FROM listen l\n                 JOIN recording r ON r.id = l.recording_id\n                 JOIN artist a ON a.id = r.artist_id\n                WHERE r.merged_into IS NULL\n                GROUP BY r.id, a.id\n                ORDER BY r.id",
   "describe": {
     "columns": [
       {
@@ -52,6 +52,12 @@
         "name": "listens!",
         "type_info": "Int8",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "tagged!",
+        "type_info": "Bool",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -62,8 +68,9 @@
       false,
       false,
       false,
+      null,
       null
     ]
   },
-  "hash": "d03fcf98ed325744261957d1aecb4e77631a2190f5762507e5efcccd5fe91472"
+  "hash": "c1c4b407ff18ace34f8028cad9406b407f76b2f25c17da5d45fd8390510824f3"
 }

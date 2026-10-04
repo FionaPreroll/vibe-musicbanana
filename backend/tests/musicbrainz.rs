@@ -1,5 +1,5 @@
-//! Artists and albums of the same name told apart by the MusicBrainz IDs that
-//! come with scrobbles, and tracks that stay one whatever their IDs.
+//! Artists, albums and tracks of the same name told apart by the MusicBrainz IDs
+//! that come with scrobbles, and merges that go by them.
 
 use std::{
     path::Path,
@@ -14,7 +14,7 @@ use http_body_util::BodyExt;
 use musicbanana::{
     AppState,
     catalog::Mbids,
-    merge::{self, Kind},
+    merge::{self, Kind, Options},
     router,
     scrobble::{self, Listen},
     tokens,
@@ -282,34 +282,71 @@ async fn an_id_tells_albums_of_the_same_title_apart(db: PgPool) {
     assert_ne!(of_björk, Some(1));
 }
 
+async fn recording_ids(db: &PgPool, recording: i64) -> Vec<Uuid> {
+    ids(
+        db,
+        "SELECT mbid FROM recording_mbid WHERE recording_id = $1 ORDER BY mbid",
+        recording,
+    )
+    .await
+}
+
 #[sqlx::test(fixtures("profiles"))]
-async fn tracks_of_the_same_title_stay_one_whatever_their_ids(db: PgPool) {
-    // Unrockbar, imported without an ID, and a live version of it.
+async fn an_id_tells_tracks_of_the_same_title_apart(db: PgPool) {
+    // Unrockbar, imported without an ID, takes the first one …
     assert_eq!(
-        scrobble(&db, "Die Ärzte", "Unrockbar", None, track(20)).await,
-        (1, None, 1)
+        scrobble(&db, "Die Ärzte", "Unrockbar", Some("Geräusch"), track(20)).await,
+        (1, Some(1), 1)
     );
+    // … a live version of it is another track of the same title …
+    let (_, _, live) = scrobble(&db, "Die Ärzte", "Unrockbar", Some("Live"), track(21)).await;
+    assert_ne!(live, 1);
+    // … and the same recording on another album, here remastered, is the first.
     assert_eq!(
-        scrobble(&db, "Die Ärzte", "Unrockbar", Some("Live"), track(21))
-            .await
-            .2,
-        1
-    );
-    // A known ID finds its track under another title too.
-    assert_eq!(
-        scrobble(&db, "Die Ärzte", "Unrockbar (Remastered)", None, track(20))
-            .await
-            .2,
-        1
-    );
-    assert_eq!(
-        ids(
+        scrobble(
             &db,
-            "SELECT mbid FROM recording_mbid WHERE recording_id = $1 ORDER BY mbid",
-            1
+            "Die Ärzte",
+            "Unrockbar (Remastered)",
+            Some("Best of"),
+            track(20)
         )
-        .await,
-        [id(20), id(21)]
+        .await
+        .2,
+        1
+    );
+    assert_eq!(recording_ids(&db, 1).await, [id(20)]);
+    assert_eq!(recording_ids(&db, live).await, [id(21)]);
+
+    // Without an ID, the titles lead to the first one.
+    for title in ["Unrockbar", "Unrockbar (Remastered)"] {
+        assert_eq!(
+            scrobble(&db, "Die Ärzte", title, Some("Live"), NONE)
+                .await
+                .2,
+            1,
+            "{title}"
+        );
+    }
+    assert_eq!(
+        scrobble(&db, "Die Ärzte", "Unrockbar", None, track(21))
+            .await
+            .2,
+        live
+    );
+
+    // They are not suggested for merging, and merging them takes --force.
+    assert!(
+        merge::suggest(&db, Kind::Recording)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let refused = merge::merge(&db, Kind::Recording, live, 1, Options::default())
+        .await
+        .unwrap_err();
+    assert!(
+        refused.to_string().contains("different MusicBrainz IDs"),
+        "{refused}"
     );
 }
 
@@ -327,20 +364,21 @@ async fn merging_respects_and_keeps_the_ids(db: PgPool) {
         .map(|s| (s.from.id, s.into.id))
         .collect();
     assert_eq!(suggested, [(typo, grunge)]);
-    let refused = merge::merge(&db, Kind::Artist, sixties, grunge, false)
+    let refused = merge::merge(&db, Kind::Artist, sixties, grunge, Options::default())
         .await
         .unwrap_err();
     assert_eq!(
         refused.to_string(),
         format!(
-            "artist {sixties} and {grunge} have different MusicBrainz IDs, so they are not the same"
+            "artist {sixties} and {grunge} have different MusicBrainz IDs, so they are not \
+             the same; --force merges them anyway"
         )
     );
 
     // An artist's ID goes along when it is merged into another spelling.
     let (aerzte, _, _) = scrobble(&db, "Die Aerzte", "Schrei nach Liebe", None, artist(3)).await;
     assert_ne!(aerzte, 1);
-    merge::merge(&db, Kind::Artist, aerzte, 1, false)
+    merge::merge(&db, Kind::Artist, aerzte, 1, Options::default())
         .await
         .unwrap();
     assert_eq!(artist_ids(&db, 1).await, [id(3)]);
@@ -373,7 +411,7 @@ async fn merging_artists_merges_the_albums_with_the_same_id(db: PgPool) {
     let (_, pinkerton, _) = scrobble(&db, "Weezr", "Five", Some("Pinkerton"), NONE).await;
     assert_ne!(red, typo_green);
 
-    let merged = merge::merge(&db, Kind::Artist, typo, band, false)
+    let merged = merge::merge(&db, Kind::Artist, typo, band, Options::default())
         .await
         .unwrap();
     assert_eq!((merged.releases_moved, merged.releases_merged), (2, 1));
@@ -400,6 +438,99 @@ async fn merging_artists_merges_the_albums_with_the_same_id(db: PgPool) {
             .await
             .1,
         pinkerton
+    );
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn merging_artists_merges_the_tracks_with_the_same_id(db: PgPool) {
+    let with = |recording| Mbids {
+        artist: Some(id(1)),
+        recording: Some(id(recording)),
+        ..Mbids::default()
+    };
+    // A band with a song and a live version of it …
+    let (band, _, studio) = scrobble(&db, "Weezer", "Buddy Holly", None, with(20)).await;
+    let (_, _, live) = scrobble(&db, "Weezer", "Buddy Holly", Some("Live"), with(21)).await;
+    assert_ne!(live, studio);
+    // … and a misspelling of the band without an artist ID, with that live
+    // version, another live version and a song without an ID.
+    let (typo, _, typo_live) = scrobble(&db, "Weezr", "Buddy Holly", None, track(21)).await;
+    let (_, _, other_live) = scrobble(&db, "Weezr", "Buddy Holly", None, track(22)).await;
+    let (_, _, plain) = scrobble(&db, "Weezr", "Say It Ain't So", None, NONE).await;
+    assert_ne!(other_live, typo_live);
+
+    let merged = merge::merge(&db, Kind::Artist, typo, band, Options::default())
+        .await
+        .unwrap();
+    assert_eq!((merged.recordings_moved, merged.recordings_merged), (2, 1));
+
+    // Each recording ID still finds its track, and the title alone the first one.
+    for (mbids, track) in [
+        (with(20), studio),
+        (with(21), live),
+        (with(22), other_live),
+        (NONE, studio),
+    ] {
+        let (artist, _, recording) = scrobble(&db, "Weezer", "Buddy Holly", None, mbids).await;
+        assert_eq!((artist, recording), (band, track), "{mbids:?}");
+    }
+    assert_eq!(
+        scrobble(&db, "Weezer", "Say It Ain't So", None, NONE)
+            .await
+            .2,
+        plain
+    );
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn a_forced_merge_joins_what_the_ids_tell_apart(db: PgPool) {
+    let force = Options {
+        force: true,
+        ..Options::default()
+    };
+    // An artist's band, which MusicBrainz lists as an artist of its own …
+    let (farin, _, _) = scrobble(&db, "Farin Urlaub", "Sumisu", None, artist(1)).await;
+    let (band, _, _) = scrobble(
+        &db,
+        "Farin Urlaub Racing Team",
+        "Porzellan",
+        None,
+        artist(2),
+    )
+    .await;
+    merge::merge(&db, Kind::Artist, band, farin, force)
+        .await
+        .unwrap();
+    // … counts for the artist from then on, with its ID or without.
+    assert_eq!(artist_ids(&db, farin).await, [id(1), id(2)]);
+    for mbids in [artist(2), NONE] {
+        assert_eq!(
+            scrobble(&db, "Farin Urlaub Racing Team", "Porzellan", None, mbids)
+                .await
+                .0,
+            farin,
+            "{mbids:?}"
+        );
+    }
+
+    // The same goes for a recording that MusicBrainz lists twice.
+    assert_eq!(
+        scrobble(&db, "Die Ärzte", "Unrockbar", Some("Geräusch"), track(20))
+            .await
+            .2,
+        1
+    );
+    let (_, _, again) = scrobble(&db, "Die Ärzte", "Unrockbar", Some("Best of"), track(21)).await;
+    assert_ne!(again, 1);
+    merge::merge(&db, Kind::Recording, again, 1, force)
+        .await
+        .unwrap();
+    assert_eq!(recording_ids(&db, 1).await, [id(20), id(21)]);
+    assert_eq!(
+        scrobble(&db, "Die Ärzte", "Unrockbar", Some("Best of"), track(21))
+            .await
+            .2,
+        1
     );
 }
 

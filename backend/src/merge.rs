@@ -82,8 +82,9 @@ pub struct Suggestion {
 ///
 /// Releases and recordings are only compared with those of the same artist, so
 /// look-alike artists are best merged first; that also merges their releases and
-/// recordings with the same title. Two artists or albums that both have a
-/// MusicBrainz ID are left out: they are different ones of the same name.
+/// recordings with the same title. Two entries that both have a MusicBrainz ID
+/// are left out: they are different ones of the same name, or a live version and
+/// the original.
 pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
     // Every entry with the group it is compared within, and whether it has an ID
     // that tells it apart.
@@ -134,7 +135,8 @@ pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
         })
         .collect(),
         Kind::Recording => sqlx::query!(
-            r#"SELECT r.id, r.title, a.id AS artist_id, a.name AS artist, count(*) AS "listens!"
+            r#"SELECT r.id, r.title, a.id AS artist_id, a.name AS artist, count(*) AS "listens!",
+                      EXISTS (SELECT FROM recording_mbid m WHERE m.recording_id = r.id) AS "tagged!"
                  FROM listen l
                  JOIN recording r ON r.id = l.recording_id
                  JOIN artist a ON a.id = r.artist_id
@@ -152,8 +154,7 @@ pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
                 artist: Some(r.artist),
                 listens: r.listens,
             };
-            // Tracks of the same title count as one whatever their IDs.
-            (entry, r.artist_id, false)
+            (entry, r.artist_id, r.tagged)
         })
         .collect(),
     };
@@ -512,27 +513,40 @@ impl fmt::Display for Merged {
     }
 }
 
-/// Merges the entry `from` of `kind` into `into`, all in one transaction. A dry
-/// run rolls it back and only reports.
+/// How [`merge`] goes about it.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Options {
+    /// Roll the merge back and only report what it would change.
+    pub dry_run: bool,
+    /// Merge two entries even though their MusicBrainz IDs tell them apart, such
+    /// as an artist's other name into the main one, or a recording that
+    /// MusicBrainz lists twice.
+    pub force: bool,
+}
+
+/// Merges the entry `from` of `kind` into `into`, all in one transaction.
 pub async fn merge(
     db: &PgPool,
     kind: Kind,
     from: i64,
     into: i64,
-    dry_run: bool,
+    options: Options,
 ) -> anyhow::Result<Merged> {
     let mut tx = db.begin().await?;
     let merged = match kind {
-        Kind::Artist => artist(&mut tx, from, into).await?,
-        Kind::Release => release(&mut tx, from, into).await?,
-        Kind::Recording => recording(&mut tx, from, into).await?,
+        Kind::Artist => artist(&mut tx, from, into, options.force).await?,
+        Kind::Release => release(&mut tx, from, into, options.force).await?,
+        Kind::Recording => recording(&mut tx, from, into, options.force).await?,
     };
-    if dry_run {
+    if options.dry_run {
         tx.rollback().await?;
     } else {
         tx.commit().await?;
     }
-    Ok(Merged { dry_run, ..merged })
+    Ok(Merged {
+        dry_run: options.dry_run,
+        ..merged
+    })
 }
 
 /// An entry about to be merged, locked until the end of the transaction against
@@ -551,6 +565,7 @@ fn check(
     from: i64,
     into: i64,
     mut rows: Vec<Locked>,
+    force: bool,
 ) -> anyhow::Result<(Locked, Locked)> {
     ensure!(from != into, "{kind} {from} cannot be merged into itself");
     let mut take = |id: i64| {
@@ -571,16 +586,16 @@ fn check(
         );
     }
     ensure!(
-        kind == Kind::Recording || !told_apart(&from.mbids, &into.mbids),
-        "{kind} {} and {} have different MusicBrainz IDs, so they are not the same",
+        force || !told_apart(&from.mbids, &into.mbids),
+        "{kind} {} and {} have different MusicBrainz IDs, so they are not the same; \
+         --force merges them anyway",
         from.id,
         into.id
     );
     Ok((from, into))
 }
 
-/// Whether MusicBrainz IDs show that two artists or albums are different ones of
-/// the same name. Tracks of the same title count as one whatever their IDs, see
+/// Whether MusicBrainz IDs show that two entries are different ones, see
 /// [`crate::catalog::Resolver`].
 fn told_apart(a: &[Uuid], b: &[Uuid]) -> bool {
     !a.is_empty() && !b.is_empty() && !a.iter().any(|id| b.contains(id))
@@ -588,7 +603,13 @@ fn told_apart(a: &[Uuid], b: &[Uuid]) -> bool {
 
 /// Merges an artist with its releases and recordings: those with the same title
 /// as one of `into` (in any spelling) are merged into it, the others move over.
-async fn artist(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Result<Merged> {
+/// That goes by their IDs even when `force` merges artists with different ones.
+async fn artist(
+    conn: &mut PgConnection,
+    from: i64,
+    into: i64,
+    force: bool,
+) -> anyhow::Result<Merged> {
     let rows = sqlx::query_as!(
         Locked,
         r#"SELECT a.id, a.name, a.merged_into,
@@ -602,13 +623,13 @@ async fn artist(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Result
     )
     .fetch_all(&mut *conn)
     .await?;
-    let (from, into) = check(Kind::Artist, from, into, rows)?;
+    let (from, into) = check(Kind::Artist, from, into, rows, force)?;
     let mut merged = Merged::new(Kind::Artist, &from, &into);
 
     let mut theirs = releases_of(conn, into.id).await?;
     for mine in releases_of(conn, from.id).await? {
-        if let Some(same) = counterpart(Kind::Release, &mut theirs, &mine) {
-            release(conn, mine.id, same).await?;
+        if let Some(same) = counterpart(&mut theirs, &mine) {
+            release(conn, mine.id, same, false).await?;
             merged.releases_merged += 1;
         } else {
             sqlx::query!(
@@ -625,8 +646,8 @@ async fn artist(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Result
 
     let mut theirs = recordings_of(conn, into.id).await?;
     for mine in recordings_of(conn, from.id).await? {
-        if let Some(same) = counterpart(Kind::Recording, &mut theirs, &mine) {
-            recording(conn, mine.id, same).await?;
+        if let Some(same) = counterpart(&mut theirs, &mine) {
+            recording(conn, mine.id, same, false).await?;
             merged.recordings_merged += 1;
         } else {
             sqlx::query!(
@@ -759,20 +780,19 @@ impl Titled {
     }
 }
 
-/// The entry among `theirs`, oldest first, that `mine` of `kind` is merged into
-/// when their artists are: the one with an ID in common, or else the oldest known
-/// under a title of `mine` (its own first) unless their IDs tell them apart. It
-/// takes on the titles and IDs of `mine`.
-fn counterpart(kind: Kind, theirs: &mut [Titled], mine: &Titled) -> Option<i64> {
+/// The entry among `theirs`, oldest first, that `mine` is merged into when their
+/// artists are: the one with an ID in common, or else the oldest known under a
+/// title of `mine` (its own first) unless their IDs tell them apart. It takes on
+/// the titles and IDs of `mine`.
+fn counterpart(theirs: &mut [Titled], mine: &Titled) -> Option<i64> {
     let at = theirs
         .iter()
         .position(|t| t.mbids.iter().any(|id| mine.mbids.contains(id)))
         .or_else(|| {
             mine.keys.iter().find_map(|key| {
-                theirs.iter().position(|t| {
-                    t.keys.contains(key)
-                        && (kind == Kind::Recording || !told_apart(&t.mbids, &mine.mbids))
-                })
+                theirs
+                    .iter()
+                    .position(|t| t.keys.contains(key) && !told_apart(&t.mbids, &mine.mbids))
             })
         })?;
     let same = &mut theirs[at];
@@ -817,7 +837,12 @@ async fn recordings_of(conn: &mut PgConnection, artist_id: i64) -> sqlx::Result<
         .collect())
 }
 
-async fn release(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Result<Merged> {
+async fn release(
+    conn: &mut PgConnection,
+    from: i64,
+    into: i64,
+    force: bool,
+) -> anyhow::Result<Merged> {
     let rows = sqlx::query_as!(
         Locked,
         r#"SELECT r.id, r.title AS name, r.merged_into,
@@ -831,7 +856,7 @@ async fn release(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Resul
     )
     .fetch_all(&mut *conn)
     .await?;
-    let (from, into) = check(Kind::Release, from, into, rows)?;
+    let (from, into) = check(Kind::Release, from, into, rows, force)?;
     let mut merged = Merged::new(Kind::Release, &from, &into);
     merged.listens = sqlx::query!(
         "UPDATE listen SET release_id = $2 WHERE release_id = $1",
@@ -882,7 +907,12 @@ async fn release(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Resul
     Ok(merged)
 }
 
-async fn recording(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Result<Merged> {
+async fn recording(
+    conn: &mut PgConnection,
+    from: i64,
+    into: i64,
+    force: bool,
+) -> anyhow::Result<Merged> {
     let rows = sqlx::query_as!(
         Locked,
         r#"SELECT r.id, r.title AS name, r.merged_into,
@@ -896,7 +926,7 @@ async fn recording(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Res
     )
     .fetch_all(&mut *conn)
     .await?;
-    let (from, into) = check(Kind::Recording, from, into, rows)?;
+    let (from, into) = check(Kind::Recording, from, into, rows, force)?;
     let mut merged = Merged::new(Kind::Recording, &from, &into);
     merged.listens = sqlx::query!(
         "UPDATE listen SET recording_id = $2 WHERE recording_id = $1",
