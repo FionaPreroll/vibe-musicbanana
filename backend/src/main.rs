@@ -2,14 +2,15 @@ use std::{
     env,
     io::{self, IsTerminal},
     path::PathBuf,
+    time::Duration,
 };
 
 use anyhow::{Context, bail};
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum, builder::NonEmptyStringValueParser};
 use musicbanana::{
     AppState, edit, import_php,
     merge::{self, Kind, Suggestion},
-    router, tokens,
+    router, tokens, yourspotify,
 };
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use time::OffsetDateTime;
@@ -37,6 +38,9 @@ enum Command {
         #[arg(long)]
         from: String,
     },
+    /// Import Spotify plays from YourSpotify: the whole history the first time,
+    /// then only the plays since.
+    ImportYourspotify(YourSpotifyArgs),
     /// Manage the tokens scrobble clients use (ListenBrainz API).
     #[command(subcommand)]
     Token(TokenCommand),
@@ -58,6 +62,54 @@ enum Command {
     /// take one away.
     #[command(subcommand)]
     Mbid(MbidCommand),
+}
+
+#[derive(Args)]
+struct YourSpotifyArgs {
+    /// Address of YourSpotify's API (its API_ENDPOINT, not the web interface),
+    /// e.g. http://yourspotify-server:8080
+    #[arg(long, env = "YOURSPOTIFY_URL", value_parser = NonEmptyStringValueParser::new())]
+    from: String,
+    /// The public token from YourSpotify's settings. Better set as
+    /// YOURSPOTIFY_TOKEN, so that it stays out of the shell history and the
+    /// process list.
+    #[arg(
+        long,
+        env = "YOURSPOTIFY_TOKEN",
+        hide_env_values = true,
+        value_parser = NonEmptyStringValueParser::new()
+    )]
+    token: String,
+    /// Account the plays go to.
+    #[arg(long, value_parser = NonEmptyStringValueParser::new())]
+    user: String,
+    /// Profile the plays go to.
+    #[arg(long, default_value = "default")]
+    profile: String,
+    /// Fetch the whole history again, e.g. after YourSpotify has imported an
+    /// older Spotify export. Plays already in the profile are skipped.
+    #[arg(long)]
+    all: bool,
+    /// Keep running and import the new plays every so often, e.g. 15m or 1h.
+    #[arg(long, value_parser = parse_interval)]
+    every: Option<Duration>,
+}
+
+/// "90s", "15m" or "2h".
+fn parse_interval(text: &str) -> Result<Duration, String> {
+    let (number, unit) = if let Some(number) = text.strip_suffix('s') {
+        (number, 1)
+    } else if let Some(number) = text.strip_suffix('m') {
+        (number, 60)
+    } else if let Some(number) = text.strip_suffix('h') {
+        (number, 3600)
+    } else {
+        (text, 0)
+    };
+    match number.parse::<u64>().ok().and_then(|n| n.checked_mul(unit)) {
+        Some(seconds) if seconds > 0 => Ok(Duration::from_secs(seconds)),
+        _ => Err(format!("\"{text}\" is not a time like 15m or 1h")),
+    }
 }
 
 #[derive(Subcommand)]
@@ -200,6 +252,7 @@ async fn main() -> anyhow::Result<()> {
             println!("{report}");
             Ok(())
         }
+        Command::ImportYourspotify(args) => import_yourspotify(&db, args).await,
         Command::Token(command) => token(&db, command).await,
         Command::Merge(command) => merge_command(&db, command).await,
         Command::Rename { kind, id, name } => {
@@ -208,6 +261,32 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Command::Mbid(command) => mbid_command(&db, command).await,
+    }
+}
+
+async fn import_yourspotify(db: &PgPool, args: YourSpotifyArgs) -> anyhow::Result<()> {
+    let source = yourspotify::Source::new(&args.from, &args.token)?;
+    let profile = yourspotify::profile_id(db, &args.user, &args.profile).await?;
+    let Some(every) = args.every else {
+        let report = yourspotify::import(db, &source, profile, args.all).await?;
+        println!("{report}");
+        return Ok(());
+    };
+    let mut all = args.all;
+    let shutdown = shutdown_signal();
+    tokio::pin!(shutdown);
+    loop {
+        match yourspotify::import(db, &source, profile, all).await {
+            Ok(report) if report.plays == 0 => tracing::debug!("{report}"),
+            Ok(report) => tracing::info!("{report}"),
+            // Perhaps YourSpotify is down for the moment; try again next time.
+            Err(error) => tracing::warn!("{error:#}"),
+        }
+        all = false;
+        tokio::select! {
+            () = tokio::time::sleep(every) => {}
+            () = &mut shutdown => return Ok(()),
+        }
     }
 }
 
@@ -397,4 +476,19 @@ async fn shutdown_signal() {
         () = terminate => {}
     }
     tracing::info!("shutting down");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn intervals() {
+        assert_eq!(parse_interval("90s"), Ok(Duration::from_secs(90)));
+        assert_eq!(parse_interval("15m"), Ok(Duration::from_secs(900)));
+        assert_eq!(parse_interval("2h"), Ok(Duration::from_secs(7200)));
+        for wrong in ["15", "0m", "m", "-1h", "1.5h", "1d", ""] {
+            assert!(parse_interval(wrong).is_err(), "{wrong}");
+        }
+    }
 }
