@@ -7,7 +7,7 @@ use std::{
 use anyhow::{Context, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use musicbanana::{
-    AppState, import_php,
+    AppState, edit, import_php,
     merge::{self, Kind, Suggestion},
     router, tokens,
 };
@@ -43,6 +43,21 @@ enum Command {
     /// Merge duplicates in the catalog, e.g. two spellings of an artist.
     #[command(subcommand)]
     Merge(MergeCommand),
+    /// Rename an artist, release (album) or recording (track). Its old spellings
+    /// keep leading to it, so later listens under the old name count for it too.
+    Rename {
+        #[arg(value_enum)]
+        kind: Entry,
+        /// Id of the entry, as in the address of its page (…/artist/12) or shown
+        /// by `merge suggest`.
+        id: i64,
+        /// The new name.
+        name: String,
+    },
+    /// Give an artist, release (album) or recording (track) a MusicBrainz ID, or
+    /// take one away.
+    #[command(subcommand)]
+    Mbid(MbidCommand),
 }
 
 #[derive(Subcommand)]
@@ -107,6 +122,45 @@ struct MergeArgs {
     force: bool,
 }
 
+#[derive(Subcommand)]
+enum MbidCommand {
+    /// Give an entry an ID, so that listens with it count for the entry from
+    /// then on. The listens so far stay where they are.
+    Add(MbidArgs),
+    /// Take an ID away from an entry, such as one that came to the wrong one.
+    /// The next listen with it is matched as one with a new ID.
+    Remove(MbidArgs),
+}
+
+#[derive(Args)]
+struct MbidArgs {
+    #[arg(value_enum)]
+    kind: Entry,
+    /// Id of the entry, as in the address of its page (…/artist/12) or shown by
+    /// `merge suggest`.
+    id: i64,
+    /// The MusicBrainz ID or the address of its page, for a release (album) that
+    /// of the release group: https://musicbrainz.org/release-group/…
+    mbid: String,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum Entry {
+    Artist,
+    Release,
+    Recording,
+}
+
+impl From<Entry> for Kind {
+    fn from(entry: Entry) -> Self {
+        match entry {
+            Entry::Artist => Kind::Artist,
+            Entry::Release => Kind::Release,
+            Entry::Recording => Kind::Recording,
+        }
+    }
+}
+
 #[derive(Clone, Copy, ValueEnum)]
 enum Kinds {
     Artists,
@@ -148,7 +202,35 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Token(command) => token(&db, command).await,
         Command::Merge(command) => merge_command(&db, command).await,
+        Command::Rename { kind, id, name } => {
+            let renamed = edit::rename(&db, kind.into(), id, &name).await?;
+            println!("{renamed}");
+            Ok(())
+        }
+        Command::Mbid(command) => mbid_command(&db, command).await,
     }
+}
+
+async fn mbid_command(db: &PgPool, command: MbidCommand) -> anyhow::Result<()> {
+    match command {
+        MbidCommand::Add(args) => {
+            let kind = args.kind.into();
+            let mbid = edit::parse_mbid(kind, &args.mbid)?;
+            let (entry, new) = edit::add_mbid(db, kind, args.id, mbid).await?;
+            if new {
+                println!("Gave {entry} the MusicBrainz ID {mbid}.");
+            } else {
+                println!("Nothing to do: {entry} has the MusicBrainz ID {mbid} already.");
+            }
+        }
+        MbidCommand::Remove(args) => {
+            let kind = args.kind.into();
+            let mbid = edit::parse_mbid(kind, &args.mbid)?;
+            let entry = edit::remove_mbid(db, kind, args.id, mbid).await?;
+            println!("Took the MusicBrainz ID {mbid} from {entry}.");
+        }
+    }
+    Ok(())
 }
 
 async fn token(db: &PgPool, command: TokenCommand) -> anyhow::Result<()> {

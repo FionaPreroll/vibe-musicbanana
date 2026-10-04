@@ -215,7 +215,8 @@ async fn artist_by_name(db: &PgPool, key: &str, name: &str) -> sqlx::Result<i64>
 }
 
 /// The artist with the MusicBrainz ID `mbid`, or `None` when the ID is known for
-/// other names of an artist only. Clients pair names and IDs of a track by several
+/// other names of an artist only: its spellings, its name, and the name it had
+/// when the ID came to it. Clients pair names and IDs of a track by several
 /// artists badly; one may send the ID of A along with "A & B", and then neither
 /// may the listens of A go to "A & B" nor the other way round.
 ///
@@ -229,7 +230,7 @@ async fn artist_by_mbid(
     mbid: Uuid,
 ) -> sqlx::Result<Option<i64>> {
     let known = sqlx::query!(
-        r#"SELECT a.id, a.name,
+        r#"SELECT a.id, a.name, m.name_key AS came_with,
                   EXISTS (SELECT FROM artist_alias x
                            WHERE x.name_key = $2 AND x.artist_id = a.id) AS "spelled!"
              FROM artist_mbid m
@@ -241,7 +242,8 @@ async fn artist_by_mbid(
     .fetch_optional(db)
     .await?;
     if let Some(known) = known {
-        return Ok((known.spelled || name_key(&known.name) == key).then_some(known.id));
+        let named = known.spelled || known.came_with == key || name_key(&known.name) == key;
+        return Ok(named.then_some(known.id));
     }
 
     let mut tx = db.begin().await?;
@@ -284,9 +286,10 @@ async fn artist_by_mbid(
         }
     };
     sqlx::query!(
-        "INSERT INTO artist_mbid (mbid, artist_id) VALUES ($1, $2)",
+        "INSERT INTO artist_mbid (mbid, artist_id, name_key) VALUES ($1, $2, $3)",
         mbid,
         id,
+        key,
     )
     .execute(&mut *tx)
     .await?;

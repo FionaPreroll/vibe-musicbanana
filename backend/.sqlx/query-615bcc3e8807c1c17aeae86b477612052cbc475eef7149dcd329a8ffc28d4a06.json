@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.id, a.name,\n                  EXISTS (SELECT FROM artist_alias x\n                           WHERE x.name_key = $2 AND x.artist_id = a.id) AS \"spelled!\"\n             FROM artist_mbid m\n             JOIN artist a ON a.id = m.artist_id\n            WHERE m.mbid = $1",
+  "query": "SELECT a.id, a.name, m.name_key AS came_with,\n                  EXISTS (SELECT FROM artist_alias x\n                           WHERE x.name_key = $2 AND x.artist_id = a.id) AS \"spelled!\"\n             FROM artist_mbid m\n             JOIN artist a ON a.id = m.artist_id\n            WHERE m.mbid = $1",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "came_with",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist_mbid",
+            "name": "name_key"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "spelled!",
         "type_info": "Bool",
         "origin": "Expression"
@@ -41,8 +52,9 @@
     "nullable": [
       false,
       false,
+      false,
       null
     ]
   },
-  "hash": "df7c74851772f5ff4468ece04ddbf661ecf38302ac5ae6019d7ca0d948c7a7bd"
+  "hash": "615bcc3e8807c1c17aeae86b477612052cbc475eef7149dcd329a8ffc28d4a06"
 }

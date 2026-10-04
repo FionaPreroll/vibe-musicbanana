@@ -264,10 +264,13 @@ async fn refuses_impossible_merges(db: PgPool) {
         "artist 4 was merged into 1; merge into that one instead"
     );
 
-    sqlx::query("INSERT INTO artist_mbid (mbid, artist_id) VALUES (gen_random_uuid(), 2), (gen_random_uuid(), 5)")
-        .execute(&db)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO artist_mbid (mbid, artist_id, name_key)
+         VALUES (gen_random_uuid(), 2, 'björk'), (gen_random_uuid(), 5, 'bjork')",
+    )
+    .execute(&db)
+    .await
+    .unwrap();
     assert_eq!(
         error(Kind::Artist, 5, 2).await,
         "artist 5 and 2 have different MusicBrainz IDs, so they are not the same; \

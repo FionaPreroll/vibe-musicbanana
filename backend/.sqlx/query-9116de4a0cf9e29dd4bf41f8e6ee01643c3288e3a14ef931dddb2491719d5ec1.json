@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO artist_mbid (mbid, artist_id) VALUES ($1, $2)",
+  "query": "DELETE FROM recording_mbid WHERE mbid = $1 AND recording_id = $2",
   "describe": {
     "columns": [],
     "parameters": {
@@ -11,5 +11,5 @@
     },
     "nullable": []
   },
-  "hash": "d3c9123751023cb74bf153dc57eae19d05869ea0cfe2c57dfa7f6fa1f47c640e"
+  "hash": "9116de4a0cf9e29dd4bf41f8e6ee01643c3288e3a14ef931dddb2491719d5ec1"
 }

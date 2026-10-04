@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod catalog;
+pub mod edit;
 mod entities;
 pub mod import_php;
 mod listenbrainz;

@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT title, artist_id, merged_into FROM recording WHERE id = $1 FOR NO KEY UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "artist_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "artist_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "merged_into",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "merged_into"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "35fd9678438c703d17ec5b5524d78c1c532af99cd890c12526d9d205916ceaf7"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT mbid FROM release_mbid WHERE release_id = $1 ORDER BY mbid",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mbid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "release_mbid",
+            "name": "mbid"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "50b5e48860b5a7d44444db19c06a13a452ce5aa4d50e56e54f4ed8fc4fda3762"
+}

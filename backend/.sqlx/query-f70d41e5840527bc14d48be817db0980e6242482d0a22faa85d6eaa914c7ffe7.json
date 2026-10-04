@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT release_id FROM release_mbid WHERE artist_id = $1 AND mbid = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "release_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "release_mbid",
+            "name": "release_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f70d41e5840527bc14d48be817db0980e6242482d0a22faa85d6eaa914c7ffe7"
+}

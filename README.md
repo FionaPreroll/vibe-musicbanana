@@ -117,6 +117,20 @@ The entry with fewer listens goes into the one with more, a version into the pla
 
 Two entries that both have a MusicBrainz ID are not suggested, as their IDs say they are different ones of the same name, and merging them takes `--force`: for an artist's other name that should count for the main one, or a recording MusicBrainz lists twice. Merging an artist moves its albums and tracks over instead of merging them with one of another ID. A merge takes the IDs along, so listens with the ID of the merged entry count for the remaining one.
 
+## Renaming and MusicBrainz IDs by hand
+
+```sh
+musicbanana rename artist 12 "Nirvana (UK)"
+musicbanana mbid add artist 12 https://musicbrainz.org/artist/<id>
+musicbanana mbid remove recording 345 <id>
+```
+
+The number is the entry's id, as in the address of its page (`/u/<name>/artist/12`) or shown by `merge suggest`; with Docker, prefix the commands with `docker compose exec musicbanana`.
+
+A rename keeps the old spellings leading to the entry, so later listens under the old name still count for it, and the new name becomes a spelling too unless it leads to another entry already. Renaming one of two artists of the same name, say to "Nirvana (UK)", tells them apart in the charts; its MusicBrainz ID keeps counting under the old name.
+
+`mbid add` gives an entry a MusicBrainz ID, given as such or as the address of its MusicBrainz page; an album (release) takes the ID of its release group. Listens with that ID count for the entry from then on, while the listens so far stay where they are. `mbid remove` takes an ID away again, such as the ID of a live version that came first and went to the track with all the old listens: the next listen with the ID is then matched like one with a new ID, and `merge` can join the studio version into the old track.
+
 ## Importing the old musicbanana-php database
 
 The importer reads the `mb_*` tables straight from MySQL/MariaDB and writes into an empty musicbanana database (it refuses to run twice). It repairs double-encoded names, follows old merges and wraps the old MD5 password hashes in argon2id; details in [docs/design.md](docs/design.md).
