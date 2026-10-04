@@ -14,6 +14,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use crate::{
     AppError, AppState,
@@ -44,6 +45,9 @@ struct Page {
     /// The artist of an album or track.
     #[serde(skip_serializing_if = "Option::is_none")]
     artist: Option<ArtistRef>,
+    /// Its MusicBrainz IDs: of the artist, of the album's release group, or of
+    /// the recordings of the track.
+    mbids: Vec<Uuid>,
     listens: i64,
     #[serde(with = "time::serde::rfc3339::option")]
     first_listened_at: Option<OffsetDateTime>,
@@ -106,8 +110,11 @@ async fn artist(
     let profile = find_profile(&state.db, &username, &slug).await?;
     let tz = time_zone(&state.db, params.tz).await?;
     let artist = sqlx::query!(
-        "SELECT a.id, a.name FROM artist a
-          WHERE a.id = (SELECT coalesce(merged_into, id) FROM artist WHERE id = $1)",
+        r#"SELECT a.id, a.name,
+                  array(SELECT m.mbid FROM artist_mbid m
+                         WHERE m.artist_id = a.id ORDER BY m.mbid) AS "mbids!"
+             FROM artist a
+            WHERE a.id = (SELECT coalesce(merged_into, id) FROM artist WHERE id = $1)"#,
         id
     )
     .fetch_optional(&state.db)
@@ -118,6 +125,7 @@ async fn artist(
         id: artist.id,
         name: artist.name,
         artist: None,
+        mbids: artist.mbids,
         of: Of {
             artist: Some(artist.id),
             ..Of::default()
@@ -134,10 +142,12 @@ async fn release(
     let profile = find_profile(&state.db, &username, &slug).await?;
     let tz = time_zone(&state.db, params.tz).await?;
     let release = sqlx::query!(
-        "SELECT r.id, r.title, a.id AS artist_id, a.name AS artist
-           FROM release r
-           JOIN artist a ON a.id = r.artist_id
-          WHERE r.id = (SELECT coalesce(merged_into, id) FROM release WHERE id = $1)",
+        r#"SELECT r.id, r.title, a.id AS artist_id, a.name AS artist,
+                  array(SELECT DISTINCT m.mbid FROM release_mbid m
+                         WHERE m.release_id = r.id ORDER BY m.mbid) AS "mbids!"
+             FROM release r
+             JOIN artist a ON a.id = r.artist_id
+            WHERE r.id = (SELECT coalesce(merged_into, id) FROM release WHERE id = $1)"#,
         id
     )
     .fetch_optional(&state.db)
@@ -151,6 +161,7 @@ async fn release(
             id: release.artist_id,
             name: release.artist,
         }),
+        mbids: release.mbids,
         of: Of {
             release: Some(release.id),
             ..Of::default()
@@ -167,10 +178,12 @@ async fn recording(
     let profile = find_profile(&state.db, &username, &slug).await?;
     let tz = time_zone(&state.db, params.tz).await?;
     let recording = sqlx::query!(
-        "SELECT r.id, r.title, a.id AS artist_id, a.name AS artist
-           FROM recording r
-           JOIN artist a ON a.id = r.artist_id
-          WHERE r.id = (SELECT coalesce(merged_into, id) FROM recording WHERE id = $1)",
+        r#"SELECT r.id, r.title, a.id AS artist_id, a.name AS artist,
+                  array(SELECT DISTINCT m.mbid FROM recording_mbid m
+                         WHERE m.recording_id = r.id ORDER BY m.mbid) AS "mbids!"
+             FROM recording r
+             JOIN artist a ON a.id = r.artist_id
+            WHERE r.id = (SELECT coalesce(merged_into, id) FROM recording WHERE id = $1)"#,
         id
     )
     .fetch_optional(&state.db)
@@ -184,6 +197,7 @@ async fn recording(
             id: recording.artist_id,
             name: recording.artist,
         }),
+        mbids: recording.mbids,
         of: Of {
             recording: Some(recording.id),
             ..Of::default()
@@ -197,6 +211,7 @@ struct Subject {
     id: i64,
     name: String,
     artist: Option<ArtistRef>,
+    mbids: Vec<Uuid>,
     of: Of,
 }
 
@@ -286,6 +301,7 @@ async fn page(db: &PgPool, profile: Profile, tz: &str, subject: Subject) -> Resu
         id: subject.id,
         name: subject.name,
         artist: subject.artist,
+        mbids: subject.mbids,
         listens: stats.listens,
         first_listened_at: stats.first,
         last_listened_at: stats.last,

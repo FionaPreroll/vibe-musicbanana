@@ -21,8 +21,13 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use time::OffsetDateTime;
+use uuid::Uuid;
 
-use crate::{AppState, catalog::name_key, scrobble, tokens};
+use crate::{
+    AppState,
+    catalog::{Mbids, name_key},
+    scrobble, tokens,
+};
 
 // Limits as in listenbrainz-server (listenbrainz/webserver/views/api_tools.py).
 const MAX_LISTEN_SIZE: usize = 10_240;
@@ -252,6 +257,7 @@ fn parse_submission(body: &[u8], now: OffsetDateTime) -> Result<Submission, LbEr
                 track_number: track.track_number,
                 duration_ms: track.duration_ms,
                 client: track.client,
+                mbids: track.mbids,
                 extra: track.extra,
             })
         })
@@ -295,6 +301,7 @@ struct Track {
     track_number: Option<i16>,
     duration_ms: Option<i32>,
     client: Option<String>,
+    mbids: Mbids,
     extra: Option<Value>,
 }
 
@@ -320,6 +327,7 @@ fn check_track(meta: TrackMetadata) -> Result<Track, LbError> {
         track_number: info.get("tracknumber").and_then(track_number),
         duration_ms: duration_ms(&info),
         client: client(&info),
+        mbids: mbids(&info),
         extra: (!info.is_empty()).then_some(Value::Object(info)),
     })
 }
@@ -390,6 +398,31 @@ fn number(value: &Value) -> Option<f64> {
         Value::Number(n) => n.as_f64(),
         Value::String(s) => s.trim().parse().ok(),
         _ => None,
+    }
+}
+
+/// The MusicBrainz IDs of the artist, release group and recording. An artist ID
+/// counts only for a track by one artist: "A feat. B" with the IDs of A and B is
+/// no artist of its own, and Navidrome sends `[""]` for an artist without an ID.
+fn mbids(info: &Map<String, Value>) -> Mbids {
+    let id = |value: &Value| {
+        value
+            .as_str()
+            .and_then(|s| Uuid::try_parse(s.trim()).ok())
+            .filter(|id| !id.is_nil())
+    };
+    let list = |key: &str| info.get(key).and_then(Value::as_array);
+    let artist = match (
+        list("artist_mbids").map(Vec::as_slice),
+        list("artist_names").map(Vec::len),
+    ) {
+        (Some([single]), None | Some(1)) => id(single),
+        _ => None,
+    };
+    Mbids {
+        artist,
+        release_group: info.get("release_group_mbid").and_then(id),
+        recording: info.get("recording_mbid").and_then(id),
     }
 }
 
@@ -465,7 +498,10 @@ mod tests {
                     "submission_client_version": "0.58.0 (1a2b3c4)",
                     "tracknumber": 3,
                     "artist_names": ["Die Ärzte"],
+                    "artist_mbids": ["4d0b4a68-4d8a-4c5e-9a8f-1f0e4f3b2a10"],
                     "recording_mbid": "6a0c5c43-7d0e-4f5c-a0a4-49d3e1d6b6b2",
+                    "release_mbid": "0c7f2e49-58a1-4bd5-8a7f-3f5b6c0d9e21",
+                    "release_group_mbid": "9b3e5d70-2c1f-4f6a-b8d4-7e2a1c0f5b32",
                     "duration_ms": 196_000,
                 },
             }),
@@ -478,6 +514,15 @@ mod tests {
         assert_eq!(listen.track_number, Some(3));
         assert_eq!(listen.duration_ms, Some(196_000));
         assert_eq!(listen.client.as_deref(), Some("Navidrome 0.58.0 (1a2b3c4)"));
+        let id = |s| Some(Uuid::parse_str(s).unwrap());
+        assert_eq!(
+            listen.mbids,
+            Mbids {
+                artist: id("4d0b4a68-4d8a-4c5e-9a8f-1f0e4f3b2a10"),
+                release_group: id("9b3e5d70-2c1f-4f6a-b8d4-7e2a1c0f5b32"),
+                recording: id("6a0c5c43-7d0e-4f5c-a0a4-49d3e1d6b6b2"),
+            }
+        );
         let extra = listen.extra.unwrap();
         assert_eq!(
             extra["recording_mbid"],
@@ -493,7 +538,44 @@ mod tests {
         assert_eq!(listen.track_number, None);
         assert_eq!(listen.duration_ms, None);
         assert_eq!(listen.client, None);
+        assert_eq!(listen.mbids, Mbids::default());
         assert!(listen.extra.is_none());
+    }
+
+    #[test]
+    fn an_artist_id_only_for_a_track_by_one_artist() {
+        const A: &str = "4d0b4a68-4d8a-4c5e-9a8f-1f0e4f3b2a10";
+        const B: &str = "5e1c5b79-5e9b-4d6f-8b90-2a1f5a4c3b21";
+        let artist = |info: Value| {
+            let meta = json!({ "artist_name": "Die Ärzte", "track_name": "Unrockbar", "additional_info": info });
+            listens(single(json!(1_789_999_000), meta))
+                .remove(0)
+                .mbids
+                .artist
+                .map(|id| id.to_string())
+        };
+        assert_eq!(artist(json!({ "artist_mbids": [A] })).as_deref(), Some(A));
+        assert_eq!(
+            artist(json!({ "artist_mbids": [A], "artist_names": ["Die Ärzte"] })).as_deref(),
+            Some(A)
+        );
+        assert_eq!(
+            artist(json!({ "artist_mbids": [format!(" {}", A.to_uppercase())] })).as_deref(),
+            Some(A)
+        );
+        for info in [
+            // "Farin Urlaub feat. Bela B." is no artist of its own.
+            json!({ "artist_mbids": [A, B] }),
+            json!({ "artist_mbids": [A], "artist_names": ["Farin Urlaub", "Bela B."] }),
+            // Navidrome for files without IDs.
+            json!({ "artist_mbids": [""], "artist_names": ["Die Ärzte"] }),
+            json!({ "artist_mbids": ["not an id"] }),
+            json!({ "artist_mbids": ["00000000-0000-0000-0000-000000000000"] }),
+            json!({ "artist_mbids": A }),
+            json!({ "artist_mbids": [] }),
+        ] {
+            assert_eq!(artist(info.clone()), None, "{info}");
+        }
     }
 
     #[test]

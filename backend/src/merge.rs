@@ -82,12 +82,15 @@ pub struct Suggestion {
 ///
 /// Releases and recordings are only compared with those of the same artist, so
 /// look-alike artists are best merged first; that also merges their releases and
-/// recordings with the same title.
+/// recordings with the same title. Two artists or albums that both have a
+/// MusicBrainz ID are left out: they are different ones of the same name.
 pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
-    // Every entry with the group it is compared within.
-    let rows: Vec<(Entry, i64)> = match kind {
+    // Every entry with the group it is compared within, and whether it has an ID
+    // that tells it apart.
+    let rows: Vec<(Entry, i64, bool)> = match kind {
         Kind::Artist => sqlx::query!(
-            r#"SELECT a.id, a.name, count(*) AS "listens!"
+            r#"SELECT a.id, a.name, count(*) AS "listens!",
+                      EXISTS (SELECT FROM artist_mbid m WHERE m.artist_id = a.id) AS "tagged!"
                  FROM listen l
                  JOIN artist a ON a.id = l.artist_id
                 WHERE a.merged_into IS NULL
@@ -104,11 +107,12 @@ pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
                 artist: None,
                 listens: r.listens,
             };
-            (entry, 0)
+            (entry, 0, r.tagged)
         })
         .collect(),
         Kind::Release => sqlx::query!(
-            r#"SELECT r.id, r.title, a.id AS artist_id, a.name AS artist, count(*) AS "listens!"
+            r#"SELECT r.id, r.title, a.id AS artist_id, a.name AS artist, count(*) AS "listens!",
+                      EXISTS (SELECT FROM release_mbid m WHERE m.release_id = r.id) AS "tagged!"
                  FROM listen l
                  JOIN release r ON r.id = l.release_id
                  JOIN artist a ON a.id = r.artist_id
@@ -126,7 +130,7 @@ pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
                 artist: Some(r.artist),
                 listens: r.listens,
             };
-            (entry, r.artist_id)
+            (entry, r.artist_id, r.tagged)
         })
         .collect(),
         Kind::Recording => sqlx::query!(
@@ -148,13 +152,14 @@ pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
                 artist: Some(r.artist),
                 listens: r.listens,
             };
-            (entry, r.artist_id)
+            // Tracks of the same title count as one whatever their IDs.
+            (entry, r.artist_id, false)
         })
         .collect(),
     };
 
     let mut groups: HashMap<i64, Vec<usize>> = HashMap::new();
-    for (i, (_, group)) in rows.iter().enumerate() {
+    for (i, (_, group, _)) in rows.iter().enumerate() {
         groups.entry(*group).or_default().push(i);
     }
     let mut found = Vec::new();
@@ -162,9 +167,13 @@ pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
         let names: Vec<&str> = members.iter().map(|&i| rows[i].0.name.as_str()).collect();
         let listens: Vec<i64> = members.iter().map(|&i| rows[i].0.listens).collect();
         for (from, into, likeness) in look_alikes(&names, &listens, kind != Kind::Artist) {
+            let (from, into) = (&rows[members[from]], &rows[members[into]]);
+            if from.2 && into.2 {
+                continue;
+            }
             found.push(Suggestion {
-                from: rows[members[from]].0.clone(),
-                into: rows[members[into]].0.clone(),
+                from: from.0.clone(),
+                into: into.0.clone(),
                 likeness,
             });
         }
@@ -532,8 +541,8 @@ pub async fn merge(
 struct Locked {
     id: i64,
     name: String,
-    mbid: Option<Uuid>,
     merged_into: Option<i64>,
+    mbids: Vec<Uuid>,
 }
 
 /// Checks that `from` can be merged into `into`. `rows` are the two locked entries.
@@ -562,7 +571,7 @@ fn check(
         );
     }
     ensure!(
-        from.mbid.is_none() || into.mbid.is_none(),
+        kind == Kind::Recording || !told_apart(&from.mbids, &into.mbids),
         "{kind} {} and {} have different MusicBrainz IDs, so they are not the same",
         from.id,
         into.id
@@ -570,12 +579,24 @@ fn check(
     Ok((from, into))
 }
 
+/// Whether MusicBrainz IDs show that two artists or albums are different ones of
+/// the same name. Tracks of the same title count as one whatever their IDs, see
+/// [`crate::catalog::Resolver`].
+fn told_apart(a: &[Uuid], b: &[Uuid]) -> bool {
+    !a.is_empty() && !b.is_empty() && !a.iter().any(|id| b.contains(id))
+}
+
 /// Merges an artist with its releases and recordings: those with the same title
 /// as one of `into` (in any spelling) are merged into it, the others move over.
 async fn artist(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Result<Merged> {
     let rows = sqlx::query_as!(
         Locked,
-        "SELECT id, name, mbid, merged_into FROM artist WHERE id IN ($1, $2) ORDER BY id FOR NO KEY UPDATE",
+        r#"SELECT a.id, a.name, a.merged_into,
+                  array(SELECT m.mbid FROM artist_mbid m WHERE m.artist_id = a.id) AS "mbids!"
+             FROM artist a
+            WHERE a.id IN ($1, $2)
+            ORDER BY a.id
+              FOR NO KEY UPDATE"#,
         from,
         into
     )
@@ -584,43 +605,39 @@ async fn artist(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Result
     let (from, into) = check(Kind::Artist, from, into, rows)?;
     let mut merged = Merged::new(Kind::Artist, &from, &into);
 
-    let mut theirs = by_title(releases_of(conn, into.id).await?);
-    for (id, keys) in releases_of(conn, from.id).await? {
-        if let Some(&same) = keys.iter().find_map(|key| theirs.get(key)) {
-            release(conn, id, same).await?;
+    let mut theirs = releases_of(conn, into.id).await?;
+    for mine in releases_of(conn, from.id).await? {
+        if let Some(same) = counterpart(Kind::Release, &mut theirs, &mine) {
+            release(conn, mine.id, same).await?;
             merged.releases_merged += 1;
         } else {
             sqlx::query!(
                 "UPDATE release SET artist_id = $2 WHERE id = $1",
-                id,
+                mine.id,
                 into.id
             )
             .execute(&mut *conn)
             .await?;
             merged.releases_moved += 1;
-            for key in keys {
-                theirs.entry(key).or_insert(id);
-            }
+            theirs.push(mine);
         }
     }
 
-    let mut theirs = by_title(recordings_of(conn, into.id).await?);
-    for (id, keys) in recordings_of(conn, from.id).await? {
-        if let Some(&same) = keys.iter().find_map(|key| theirs.get(key)) {
-            recording(conn, id, same).await?;
+    let mut theirs = recordings_of(conn, into.id).await?;
+    for mine in recordings_of(conn, from.id).await? {
+        if let Some(same) = counterpart(Kind::Recording, &mut theirs, &mine) {
+            recording(conn, mine.id, same).await?;
             merged.recordings_merged += 1;
         } else {
             sqlx::query!(
                 "UPDATE recording SET artist_id = $2 WHERE id = $1",
-                id,
+                mine.id,
                 into.id
             )
             .execute(&mut *conn)
             .await?;
             merged.recordings_moved += 1;
-            for key in keys {
-                theirs.entry(key).or_insert(id);
-            }
+            theirs.push(mine);
         }
     }
 
@@ -632,7 +649,14 @@ async fn artist(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Result
     .execute(&mut *conn)
     .await?
     .rows_affected();
-    // Titles are looked up per artist, so the title spellings that came with the
+    sqlx::query!(
+        "UPDATE artist_mbid SET artist_id = $2 WHERE artist_id = $1",
+        from.id,
+        into.id
+    )
+    .execute(&mut *conn)
+    .await?;
+    // Titles and their IDs are looked up per artist, so those that came with the
     // old artist spellings go over too. Where `into` has one already, it stays.
     sqlx::query!(
         "WITH moved AS (DELETE FROM release_alias WHERE artist_id = $1
@@ -656,6 +680,28 @@ async fn artist(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Result
     )
     .execute(&mut *conn)
     .await?;
+    sqlx::query!(
+        "WITH moved AS (DELETE FROM release_mbid WHERE artist_id = $1
+                        RETURNING mbid, release_id)
+         INSERT INTO release_mbid (artist_id, mbid, release_id)
+         SELECT $2, mbid, release_id FROM moved
+         ON CONFLICT (artist_id, mbid) DO NOTHING",
+        from.id,
+        into.id
+    )
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query!(
+        "WITH moved AS (DELETE FROM recording_mbid WHERE artist_id = $1
+                        RETURNING mbid, recording_id)
+         INSERT INTO recording_mbid (artist_id, mbid, recording_id)
+         SELECT $2, mbid, recording_id FROM moved
+         ON CONFLICT (artist_id, mbid) DO NOTHING",
+        from.id,
+        into.id
+    )
+    .execute(&mut *conn)
+    .await?;
 
     merged.listens = sqlx::query!(
         "UPDATE listen SET artist_id = $2 WHERE artist_id = $1",
@@ -674,7 +720,7 @@ async fn artist(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Result
     .execute(&mut *conn)
     .await?;
     sqlx::query!(
-        "UPDATE artist SET merged_into = $2, mbid = NULL WHERE id = $1",
+        "UPDATE artist SET merged_into = $2 WHERE id = $1",
         from.id,
         into.id
     )
@@ -682,39 +728,66 @@ async fn artist(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Result
     .await?;
     // Keep what only the merged entry knew.
     sqlx::query!(
-        "UPDATE artist a SET sort_name = COALESCE(a.sort_name, f.sort_name), mbid = COALESCE(a.mbid, $3)
+        "UPDATE artist a SET sort_name = COALESCE(a.sort_name, f.sort_name)
            FROM artist f
           WHERE a.id = $2 AND f.id = $1",
         from.id,
-        into.id,
-        from.mbid
+        into.id
     )
     .execute(&mut *conn)
     .await?;
     Ok(merged)
 }
 
-/// Entries with every key their title is known under, the title's own first.
-type Titles = Vec<(i64, Vec<String>)>;
-
-/// Key → entry, the older entry where two share a key.
-fn by_title(titles: Titles) -> HashMap<String, i64> {
-    let mut map = HashMap::new();
-    for (id, keys) in titles {
-        for key in keys {
-            map.entry(key).or_insert(id);
-        }
-    }
-    map
+/// A release or recording with every key its title is known under, the title's
+/// own first, and its MusicBrainz IDs.
+struct Titled {
+    id: i64,
+    keys: Vec<String>,
+    mbids: Vec<Uuid>,
 }
 
-async fn releases_of(conn: &mut PgConnection, artist_id: i64) -> sqlx::Result<Titles> {
+impl Titled {
+    fn new(id: i64, title: &str, keys: Vec<String>, mbids: Vec<Uuid>) -> Self {
+        let mut all = vec![name_key(title)];
+        all.extend(keys);
+        Titled {
+            id,
+            keys: all,
+            mbids,
+        }
+    }
+}
+
+/// The entry among `theirs`, oldest first, that `mine` of `kind` is merged into
+/// when their artists are: the one with an ID in common, or else the oldest known
+/// under a title of `mine` (its own first) unless their IDs tell them apart. It
+/// takes on the titles and IDs of `mine`.
+fn counterpart(kind: Kind, theirs: &mut [Titled], mine: &Titled) -> Option<i64> {
+    let at = theirs
+        .iter()
+        .position(|t| t.mbids.iter().any(|id| mine.mbids.contains(id)))
+        .or_else(|| {
+            mine.keys.iter().find_map(|key| {
+                theirs.iter().position(|t| {
+                    t.keys.contains(key)
+                        && (kind == Kind::Recording || !told_apart(&t.mbids, &mine.mbids))
+                })
+            })
+        })?;
+    let same = &mut theirs[at];
+    same.keys.extend(mine.keys.iter().cloned());
+    same.mbids.extend(&mine.mbids);
+    Some(same.id)
+}
+
+async fn releases_of(conn: &mut PgConnection, artist_id: i64) -> sqlx::Result<Vec<Titled>> {
     let rows = sqlx::query!(
-        r#"SELECT r.id, r.title, array_remove(array_agg(x.title_key), NULL) AS "keys!"
+        r#"SELECT r.id, r.title,
+                  array(SELECT x.title_key FROM release_alias x WHERE x.release_id = r.id) AS "keys!",
+                  array(SELECT DISTINCT m.mbid FROM release_mbid m WHERE m.release_id = r.id) AS "mbids!"
              FROM release r
-             LEFT JOIN release_alias x ON x.release_id = r.id
             WHERE r.artist_id = $1 AND r.merged_into IS NULL
-            GROUP BY r.id
             ORDER BY r.id"#,
         artist_id
     )
@@ -722,21 +795,17 @@ async fn releases_of(conn: &mut PgConnection, artist_id: i64) -> sqlx::Result<Ti
     .await?;
     Ok(rows
         .into_iter()
-        .map(|r| {
-            let mut keys = vec![name_key(&r.title)];
-            keys.extend(r.keys);
-            (r.id, keys)
-        })
+        .map(|r| Titled::new(r.id, &r.title, r.keys, r.mbids))
         .collect())
 }
 
-async fn recordings_of(conn: &mut PgConnection, artist_id: i64) -> sqlx::Result<Titles> {
+async fn recordings_of(conn: &mut PgConnection, artist_id: i64) -> sqlx::Result<Vec<Titled>> {
     let rows = sqlx::query!(
-        r#"SELECT r.id, r.title, array_remove(array_agg(x.title_key), NULL) AS "keys!"
+        r#"SELECT r.id, r.title,
+                  array(SELECT x.title_key FROM recording_alias x WHERE x.recording_id = r.id) AS "keys!",
+                  array(SELECT DISTINCT m.mbid FROM recording_mbid m WHERE m.recording_id = r.id) AS "mbids!"
              FROM recording r
-             LEFT JOIN recording_alias x ON x.recording_id = r.id
             WHERE r.artist_id = $1 AND r.merged_into IS NULL
-            GROUP BY r.id
             ORDER BY r.id"#,
         artist_id
     )
@@ -744,18 +813,19 @@ async fn recordings_of(conn: &mut PgConnection, artist_id: i64) -> sqlx::Result<
     .await?;
     Ok(rows
         .into_iter()
-        .map(|r| {
-            let mut keys = vec![name_key(&r.title)];
-            keys.extend(r.keys);
-            (r.id, keys)
-        })
+        .map(|r| Titled::new(r.id, &r.title, r.keys, r.mbids))
         .collect())
 }
 
 async fn release(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Result<Merged> {
     let rows = sqlx::query_as!(
         Locked,
-        "SELECT id, title AS name, mbid, merged_into FROM release WHERE id IN ($1, $2) ORDER BY id FOR NO KEY UPDATE",
+        r#"SELECT r.id, r.title AS name, r.merged_into,
+                  array(SELECT DISTINCT m.mbid FROM release_mbid m WHERE m.release_id = r.id) AS "mbids!"
+             FROM release r
+            WHERE r.id IN ($1, $2)
+            ORDER BY r.id
+              FOR NO KEY UPDATE"#,
         from,
         into
     )
@@ -780,6 +850,13 @@ async fn release(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Resul
     .await?
     .rows_affected();
     sqlx::query!(
+        "UPDATE release_mbid SET release_id = $2 WHERE release_id = $1",
+        from.id,
+        into.id
+    )
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query!(
         "UPDATE release SET merged_into = $2 WHERE merged_into = $1",
         from.id,
         into.id
@@ -787,19 +864,18 @@ async fn release(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Resul
     .execute(&mut *conn)
     .await?;
     sqlx::query!(
-        "UPDATE release SET merged_into = $2, mbid = NULL WHERE id = $1",
+        "UPDATE release SET merged_into = $2 WHERE id = $1",
         from.id,
         into.id
     )
     .execute(&mut *conn)
     .await?;
     sqlx::query!(
-        "UPDATE release r SET year = COALESCE(r.year, f.year), mbid = COALESCE(r.mbid, $3)
+        "UPDATE release r SET year = COALESCE(r.year, f.year)
            FROM release f
           WHERE r.id = $2 AND f.id = $1",
         from.id,
-        into.id,
-        from.mbid
+        into.id
     )
     .execute(&mut *conn)
     .await?;
@@ -809,7 +885,12 @@ async fn release(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Resul
 async fn recording(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Result<Merged> {
     let rows = sqlx::query_as!(
         Locked,
-        "SELECT id, title AS name, mbid, merged_into FROM recording WHERE id IN ($1, $2) ORDER BY id FOR NO KEY UPDATE",
+        r#"SELECT r.id, r.title AS name, r.merged_into,
+                  array(SELECT DISTINCT m.mbid FROM recording_mbid m WHERE m.recording_id = r.id) AS "mbids!"
+             FROM recording r
+            WHERE r.id IN ($1, $2)
+            ORDER BY r.id
+              FOR NO KEY UPDATE"#,
         from,
         into
     )
@@ -834,6 +915,13 @@ async fn recording(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Res
     .await?
     .rows_affected();
     sqlx::query!(
+        "UPDATE recording_mbid SET recording_id = $2 WHERE recording_id = $1",
+        from.id,
+        into.id
+    )
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query!(
         "UPDATE recording SET merged_into = $2 WHERE merged_into = $1",
         from.id,
         into.id
@@ -841,19 +929,18 @@ async fn recording(conn: &mut PgConnection, from: i64, into: i64) -> anyhow::Res
     .execute(&mut *conn)
     .await?;
     sqlx::query!(
-        "UPDATE recording SET merged_into = $2, mbid = NULL WHERE id = $1",
+        "UPDATE recording SET merged_into = $2 WHERE id = $1",
         from.id,
         into.id
     )
     .execute(&mut *conn)
     .await?;
     sqlx::query!(
-        "UPDATE recording r SET length_ms = COALESCE(r.length_ms, f.length_ms), mbid = COALESCE(r.mbid, $3)
+        "UPDATE recording r SET length_ms = COALESCE(r.length_ms, f.length_ms)
            FROM recording f
           WHERE r.id = $2 AND f.id = $1",
         from.id,
-        into.id,
-        from.mbid
+        into.id
     )
     .execute(&mut *conn)
     .await?;

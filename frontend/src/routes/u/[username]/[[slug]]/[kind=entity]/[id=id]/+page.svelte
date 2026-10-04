@@ -21,6 +21,15 @@
 		track: 'Track'
 	};
 
+	// Where MusicBrainz has the artist, the album's release group or the track's recording.
+	const musicBrainzKinds: Record<EntityKind, string> = {
+		artist: 'artist',
+		album: 'release-group',
+		track: 'recording'
+	};
+	const musicBrainz = (mbid: string) =>
+		`https://musicbrainz.org/${musicBrainzKinds[data.kind]}/${mbid}`;
+
 	const albumHref = (entry: ChartEntry) => `${data.base}/album/${entry.id}`;
 	const trackHref = (entry: ChartEntry) => `${data.base}/track/${entry.id}`;
 </script>
@@ -36,6 +45,20 @@
 				>{profile.username}{#if profile.slug !== 'default'}&nbsp;/ {profile.name}{/if}</a
 			>
 			· {kindNames[data.kind]}
+			{#if entity.mbids.length === 1}
+				· <a class="hover:text-stone-900 hover:underline" href={musicBrainz(entity.mbids[0])}
+					>MusicBrainz</a
+				>
+			{:else if entity.mbids.length > 1}
+				· MusicBrainz:
+				{#each entity.mbids as mbid, i (mbid)}
+					<a
+						class="hover:text-stone-900 hover:underline"
+						href={musicBrainz(mbid)}
+						aria-label="MusicBrainz {i + 1} of {entity.mbids.length}">{i + 1}</a
+					>{i < entity.mbids.length - 1 ? ', ' : ''}
+				{/each}
+			{/if}
 		</p>
 		<h1 class="mt-1 text-3xl font-bold">{entity.name}</h1>
 		{#if entity.artist}

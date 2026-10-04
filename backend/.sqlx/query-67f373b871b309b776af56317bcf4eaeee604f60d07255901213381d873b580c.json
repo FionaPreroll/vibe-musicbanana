@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.id, a.name FROM artist a\n          WHERE a.id = (SELECT coalesce(merged_into, id) FROM artist WHERE id = $1)",
+  "query": "SELECT a.id, a.name,\n                  array(SELECT m.mbid FROM artist_mbid m\n                         WHERE m.artist_id = a.id ORDER BY m.mbid) AS \"mbids!\"\n             FROM artist a\n            WHERE a.id = (SELECT coalesce(merged_into, id) FROM artist WHERE id = $1)",
   "describe": {
     "columns": [
       {
@@ -24,6 +24,12 @@
             "name": "name"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "mbids!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -33,8 +39,9 @@
     },
     "nullable": [
       false,
-      false
+      false,
+      null
     ]
   },
-  "hash": "db4ab55ab15fb4afa6c43a2fc89aa93a6bfa428ace2911fe43574e8570436c77"
+  "hash": "67f373b871b309b776af56317bcf4eaeee604f60d07255901213381d873b580c"
 }

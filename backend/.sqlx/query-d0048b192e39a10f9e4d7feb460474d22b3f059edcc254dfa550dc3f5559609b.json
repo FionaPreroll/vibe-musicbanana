@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE release r SET year = COALESCE(r.year, f.year)\n           FROM release f\n          WHERE r.id = $2 AND f.id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d0048b192e39a10f9e4d7feb460474d22b3f059edcc254dfa550dc3f5559609b"
+}

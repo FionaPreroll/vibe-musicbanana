@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT r.id, r.title, a.id AS artist_id, a.name AS artist\n           FROM release r\n           JOIN artist a ON a.id = r.artist_id\n          WHERE r.id = (SELECT coalesce(merged_into, id) FROM release WHERE id = $1)",
+  "query": "SELECT r.id, r.title, a.id AS artist_id, a.name AS artist, count(*) AS \"listens!\",\n                      EXISTS (SELECT FROM release_mbid m WHERE m.release_id = r.id) AS \"tagged!\"\n                 FROM listen l\n                 JOIN release r ON r.id = l.release_id\n                 JOIN artist a ON a.id = r.artist_id\n                WHERE r.merged_into IS NULL\n                GROUP BY r.id, a.id\n                ORDER BY r.id",
   "describe": {
     "columns": [
       {
@@ -46,19 +46,31 @@
             "name": "name"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "tagged!",
+        "type_info": "Bool",
+        "origin": "Expression"
       }
     ],
     "parameters": {
-      "Left": [
-        "Int8"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
       false,
       false,
-      false
+      false,
+      null,
+      null
     ]
   },
-  "hash": "a736319c37925c059aea87faedc73198177b59c95d3d6ba2c2765401bf3a7777"
+  "hash": "b25090953132450a753e2e745288166a02bc1964e47c56355ae38894182e0f3d"
 }

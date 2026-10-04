@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, title AS name, mbid, merged_into FROM release WHERE id IN ($1, $2) ORDER BY id FOR NO KEY UPDATE",
+  "query": "SELECT r.id, r.title AS name, r.merged_into,\n                  array(SELECT DISTINCT m.mbid FROM release_mbid m WHERE m.release_id = r.id) AS \"mbids!\"\n             FROM release r\n            WHERE r.id IN ($1, $2)\n            ORDER BY r.id\n              FOR NO KEY UPDATE",
   "describe": {
     "columns": [
       {
@@ -27,17 +27,6 @@
       },
       {
         "ordinal": 2,
-        "name": "mbid",
-        "type_info": "Uuid",
-        "origin": {
-          "Table": {
-            "table": "release",
-            "name": "mbid"
-          }
-        }
-      },
-      {
-        "ordinal": 3,
         "name": "merged_into",
         "type_info": "Int8",
         "origin": {
@@ -46,6 +35,12 @@
             "name": "merged_into"
           }
         }
+      },
+      {
+        "ordinal": 3,
+        "name": "mbids!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -58,8 +53,8 @@
       false,
       false,
       true,
-      true
+      null
     ]
   },
-  "hash": "487df9af6b9d2ecc46f278d4ca573b21becc7b9671e83a891e8dd02ac948ea0e"
+  "hash": "893399d871da40ba93be0b0c37d1b9c410fe5790a4b91ff72dc0c45d4fffd661"
 }

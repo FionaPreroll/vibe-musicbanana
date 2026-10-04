@@ -48,6 +48,7 @@ async fn scrobble(db: &PgPool, at: &str, artist: &str, track: &str, album: Optio
         track_number: None,
         duration_ms: None,
         client: None,
+        mbids: Default::default(),
         extra: None,
     };
     assert_eq!(scrobble::record(db, 1, &[listen]).await.unwrap(), 1);
@@ -244,7 +245,7 @@ async fn refuses_impossible_merges(db: PgPool) {
         "artist 4 was merged into 1; merge into that one instead"
     );
 
-    sqlx::query("UPDATE artist SET mbid = gen_random_uuid() WHERE id IN (2, 5)")
+    sqlx::query("INSERT INTO artist_mbid (mbid, artist_id) VALUES (gen_random_uuid(), 2), (gen_random_uuid(), 5)")
         .execute(&db)
         .await
         .unwrap();

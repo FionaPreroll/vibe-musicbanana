@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE artist a SET sort_name = COALESCE(a.sort_name, f.sort_name)\n           FROM artist f\n          WHERE a.id = $2 AND f.id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "59a0f5384773581aa73ed222b473f20c3765cdf1e9c7dba709b96e7a96b4ceb8"
+}

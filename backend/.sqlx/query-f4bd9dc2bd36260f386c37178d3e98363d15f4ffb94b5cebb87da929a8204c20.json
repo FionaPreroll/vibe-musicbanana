@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE artist SET merged_into = $2, mbid = NULL WHERE id = $1",
+  "query": "UPDATE recording_mbid SET recording_id = $2 WHERE recording_id = $1",
   "describe": {
     "columns": [],
     "parameters": {
@@ -11,5 +11,5 @@
     },
     "nullable": []
   },
-  "hash": "ce96265ff8a1d8683fa64e221721bfa0e84cd6962e8cbb1a66332ac5c4406455"
+  "hash": "f4bd9dc2bd36260f386c37178d3e98363d15f4ffb94b5cebb87da929a8204c20"
 }

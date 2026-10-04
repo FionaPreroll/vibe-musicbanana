@@ -4,7 +4,7 @@ use serde_json::Value;
 use sqlx::PgPool;
 use time::OffsetDateTime;
 
-use crate::catalog::Resolver;
+use crate::catalog::{Mbids, Resolver};
 
 /// One listen as a client sent it. The strings are stored unchanged as the raw
 /// data of the listen; the catalog gets the trimmed names.
@@ -18,6 +18,8 @@ pub struct Listen {
     pub duration_ms: Option<i32>,
     /// Name and version of the sending program, e.g. "Navidrome 0.58.0".
     pub client: Option<String>,
+    /// The MusicBrainz IDs among `extra` that tell the catalog entries apart.
+    pub mbids: Mbids,
     /// Anything else the client sent along (MusicBrainz IDs, tags, …).
     pub extra: Option<Value>,
 }
@@ -36,14 +38,24 @@ pub async fn record(db: &PgPool, profile_id: i64, listens: &[Listen]) -> sqlx::R
     let mut recording_ids = Vec::with_capacity(listens.len());
     let mut release_ids = Vec::with_capacity(listens.len());
     for listen in listens {
-        let artist_id = catalog.artist(&listen.artist).await?;
+        let mbids = listen.mbids;
+        let artist_id = catalog.artist(&listen.artist, mbids.artist).await?;
         recording_ids.push(
             catalog
-                .recording(artist_id, &listen.track, listen.duration_ms)
+                .recording(
+                    artist_id,
+                    &listen.track,
+                    listen.duration_ms,
+                    mbids.recording,
+                )
                 .await?,
         );
         release_ids.push(match &listen.album {
-            Some(album) => Some(catalog.release(artist_id, album).await?),
+            Some(album) => Some(
+                catalog
+                    .release(artist_id, album, mbids.release_group)
+                    .await?,
+            ),
             None => None,
         });
         artist_ids.push(artist_id);

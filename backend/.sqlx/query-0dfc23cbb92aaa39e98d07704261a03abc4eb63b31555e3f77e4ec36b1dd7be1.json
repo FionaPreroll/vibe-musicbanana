@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH created AS (INSERT INTO artist (name) VALUES ($2) RETURNING id)\n                   INSERT INTO artist_alias (name_key, artist_id)\n                   SELECT $1, id FROM created\n                   RETURNING artist_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "artist_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artist_alias",
+            "name": "artist_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0dfc23cbb92aaa39e98d07704261a03abc4eb63b31555e3f77e4ec36b1dd7be1"
+}

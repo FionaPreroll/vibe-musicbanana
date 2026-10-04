@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT r.id, r.title, a.id AS artist_id, a.name AS artist, count(*) AS \"listens!\"\n                 FROM listen l\n                 JOIN release r ON r.id = l.release_id\n                 JOIN artist a ON a.id = r.artist_id\n                WHERE r.merged_into IS NULL\n                GROUP BY r.id, a.id\n                ORDER BY r.id",
+  "query": "SELECT r.id, r.title, a.id AS artist_id, a.name AS artist,\n                  array(SELECT DISTINCT m.mbid FROM release_mbid m\n                         WHERE m.release_id = r.id ORDER BY m.mbid) AS \"mbids!\"\n             FROM release r\n             JOIN artist a ON a.id = r.artist_id\n            WHERE r.id = (SELECT coalesce(merged_into, id) FROM release WHERE id = $1)",
   "describe": {
     "columns": [
       {
@@ -49,13 +49,15 @@
       },
       {
         "ordinal": 4,
-        "name": "listens!",
-        "type_info": "Int8",
+        "name": "mbids!",
+        "type_info": "UuidArray",
         "origin": "Expression"
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Int8"
+      ]
     },
     "nullable": [
       false,
@@ -65,5 +67,5 @@
       null
     ]
   },
-  "hash": "a48f9a72542ec344074d459456d4b754efed47a41e7cfef434b9bede630a65d8"
+  "hash": "298dc63b775c1d4025dfd416227888ec1a844d2919f15fdd9ca08d69e73e19c9"
 }

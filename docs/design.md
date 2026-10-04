@@ -15,8 +15,8 @@ Stand 2026-10-03. Das Schema ist die erste Migration: [backend/migrations/0001_i
 | Bereich | Tabellen | Idee |
 |---|---|---|
 | Konten | `account`, `profile`, `api_token`, `follow` | Mehrere Profile pro Konto bleiben. Sichtbarkeit public/followers/private. Pro Scrobble-Client ein eigenes Token. Gerichtetes Folgen statt "friends". |
-| Katalog | `artist`, `release` (Album), `recording` (Stück) | Nach MusicBrainz-Vorbild. Ein Stück hängt am Artist, nicht am Album. `mbid` optional und eindeutig. Merge über `merged_into` statt `obsolete`. |
-| Zuordnung | `artist_alias`, `release_alias`, `recording_alias` | Normalisierter Rohstring → Katalog-Eintrag. Ein Merge biegt den Alias um, damit auch künftige Scrobbles mit alter Schreibweise richtig landen. |
+| Katalog | `artist`, `release` (Album), `recording` (Stück) | Nach MusicBrainz-Vorbild. Ein Stück hängt am Artist, nicht am Album. Merge über `merged_into` statt `obsolete`. |
+| Zuordnung | `artist_alias`, `release_alias`, `recording_alias`; `artist_mbid`, `release_mbid`, `recording_mbid` | Normalisierter Rohstring → Katalog-Eintrag, ebenso MusicBrainz-ID → Eintrag. Ein Merge biegt beides um, damit auch künftige Scrobbles mit alter Schreibweise oder ID richtig landen. |
 | Scrobbles | `listen`, `now_playing` | Rohdaten unveränderlich, Katalog-FKs änderbar. Index `(profile_id, listened_at DESC)` deckt Charts und "zuletzt gehört" ab. |
 
 Charts (Woche, Monat, Jahr, gesamt; Artist/Album/Track) werden direkt per `GROUP BY` auf `listen` berechnet. Bei einigen hunderttausend Listens pro Profil reicht das mit dem Index. Eine vorberechnete Tagestabelle kommt erst dazu, wenn es messbar langsam wird.
@@ -30,7 +30,17 @@ Charts (Woche, Monat, Jahr, gesamt; Artist/Album/Track) werden direkt per `GROUP
 ## Noch offen
 
 - **Mehrere Profile pro Konto:** Vorschlag beibehalten.
-- **MusicBrainz:** Vorschlag zunächst nur `mbid`-Spalten, Abgleich später (Vorarbeit in musicbanana3: `brainz/`, `musicbrainz_notes`).
+- **MusicBrainz:** Abgleich mit der MusicBrainz-Datenbank (Namen, Erläuterungen wie „US grunge band“) später (Vorarbeit in musicbanana3: `brainz/`, `musicbrainz_notes`).
+
+## Gleiche Namen, verschiedene Einträge
+
+Scrobbles von Dateien, die mit MusicBrainz Picard getaggt sind, bringen MusicBrainz-IDs mit (bei Navidrome `artist_mbids`, `release_group_mbid`, `recording_mbid`). Sie trennen, was gleich heißt:
+
+- **Artists:** Gleichnamige Artists mit verschiedener ID bleiben getrennt (zwei Bands namens Nirvana). Die erste ID zu einem Namen bekommt der Eintrag, der bisher so hieß, samt importierter Listens; Listens ohne ID zählen weiter für ihn. Der Eintrag einer zweiten ID bekommt keinen Alias. Eine ID zählt nur bei einem Stück mit einem einzigen Artist, und nur unter einem Namen, unter dem sie schon vorkam: Clients schicken bei „A & B“ manchmal die ID von A mit.
+- **Alben:** wie Artists, mit der ID der Release Group (alle Ausgaben eines Albums), pro Artist, weil ein Sampler hier ein Album jedes Artists darauf ist. Zwei Alben namens „Weezer“ bleiben getrennt, ebenso eine Single, die wie ihr Album heißt. Eine bekannte ID findet ihr Album unter jedem Titel („Geräusch (Deluxe)“), der Titel wird dabei zur weiteren Schreibweise.
+- **Stücke:** Gleichnamige Stücke eines Artists bleiben eins, auch mit verschiedenen Recording-IDs, denn MusicBrainz führt Live-Versionen und Edits und manchmal dieselbe Aufnahme auf einem Best-of als eigene Recordings. Eine bekannte ID findet ihr Stück aber unter jedem Titel.
+- **Merge:** Artists oder Alben, die beide eine ID haben, werden weder vorgeschlagen noch zusammengeführt. Ein Merge nimmt die IDs mit.
+- **Nebenläufigkeit:** Kommen zwei neue IDs für denselben Namen gleichzeitig, sperrt die Zuordnung den bisherigen Eintrag, damit ihn nur eine übernimmt.
 
 ## Seiten pro Artist, Album und Stück
 
