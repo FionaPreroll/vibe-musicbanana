@@ -1,0 +1,327 @@
+//! Spotify listens from YourSpotify (github.com/Yooooomi/your_spotify), which
+//! keeps the history of a Spotify account: the plays from the account's data
+//! export and those it has fetched from Spotify since.
+//!
+//! YourSpotify has no documented API. This uses the route its web interface shows
+//! the history with, `GET /spotify/gethistory`, which returns the plays newest
+//! first, at most 20 at a time, each with its track, album and artists. The
+//! public token from YourSpotify's settings stands in for a login; it gives read
+//! access to all statistics of the account, so it is never logged or shown.
+
+use std::{collections::HashMap, fmt, time::Duration};
+
+use anyhow::{Context, bail};
+use reqwest::{StatusCode, Url};
+use serde::Deserialize;
+use serde_json::json;
+use sqlx::PgPool;
+use time::OffsetDateTime;
+
+use crate::{
+    catalog::Mbids,
+    scrobble::{self, Listen},
+};
+
+/// What the imported listens give as their client.
+pub const CLIENT: &str = "Spotify via YourSpotify";
+
+/// The most plays YourSpotify returns per request.
+const PAGE: usize = 20;
+
+/// Listens stored per transaction.
+const BATCH: usize = 1000;
+
+/// A YourSpotify server and the token to read an account's history with.
+pub struct Source {
+    http: reqwest::Client,
+    history: Url,
+    /// The address as given, for messages.
+    shown: String,
+    token: String,
+}
+
+impl Source {
+    /// `api` is the address of YourSpotify's API (its API_ENDPOINT), such as
+    /// `http://yourspotify:8080` or `https://spotify.example.org/api`.
+    pub fn new(api: &str, token: &str) -> anyhow::Result<Self> {
+        let api = api.trim();
+        let shown = api.trim_end_matches('/').to_owned();
+        let base =
+            Url::parse(&format!("{shown}/")).with_context(|| format!("{api} is not an address"))?;
+        if !matches!(base.scheme(), "http" | "https") {
+            bail!("{api} is not an http(s) address");
+        }
+        let token = token.trim();
+        if token.is_empty() {
+            bail!("the YourSpotify token is empty");
+        }
+        // musicbanana uses rustls with ring (as sqlx does) and the system's
+        // certificates; reqwest wants the crypto provider set up front.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let http = reqwest::Client::builder()
+            .timeout(Duration::from_secs(60))
+            .user_agent(concat!("musicbanana/", env!("CARGO_PKG_VERSION")))
+            .build()?;
+        Ok(Self {
+            http,
+            history: base.join("spotify/gethistory")?,
+            shown,
+            token: token.to_owned(),
+        })
+    }
+
+    /// The plays from `offset` on, newest first.
+    async fn page(&self, offset: usize) -> anyhow::Result<Vec<Play>> {
+        let response = self
+            .http
+            .get(self.history.clone())
+            .query(&[("token", self.token.as_str())])
+            .query(&[("number", PAGE), ("offset", offset)])
+            .send()
+            .await
+            // The error would show the address, token included.
+            .map_err(reqwest::Error::without_url)
+            .with_context(|| format!("asking YourSpotify at {} for its history", self.shown))?;
+        match response.status() {
+            StatusCode::OK => {}
+            StatusCode::UNAUTHORIZED => bail!(
+                "YourSpotify at {} does not take the token; the public token is in \
+                 YourSpotify's settings",
+                self.shown
+            ),
+            status => bail!(
+                "YourSpotify at {} answered {status} when asked for its history",
+                self.shown
+            ),
+        }
+        let body = response
+            .bytes()
+            .await
+            .map_err(reqwest::Error::without_url)
+            .with_context(|| format!("reading the history from YourSpotify at {}", self.shown))?;
+        serde_json::from_slice(&body).with_context(|| {
+            format!(
+                "{} did not answer with YourSpotify's history; it has to be the address \
+                 of YourSpotify's API (API_ENDPOINT), not of its web interface",
+                self.shown
+            )
+        })
+    }
+}
+
+/// One play as YourSpotify returns it, with the parts used here.
+#[derive(Deserialize)]
+struct Play {
+    #[serde(with = "time::serde::rfc3339")]
+    played_at: OffsetDateTime,
+    track: Track,
+}
+
+#[derive(Deserialize)]
+struct Track {
+    id: String,
+    name: String,
+    /// Spotify IDs of the artists, the main one first.
+    #[serde(default)]
+    artists: Vec<String>,
+    #[serde(default)]
+    duration_ms: Option<i64>,
+    #[serde(default)]
+    track_number: Option<i64>,
+    #[serde(default)]
+    full_album: Option<Album>,
+    /// The artists, in no particular order.
+    #[serde(default)]
+    full_artists: Vec<Artist>,
+}
+
+#[derive(Deserialize)]
+struct Album {
+    id: String,
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct Artist {
+    id: String,
+    name: String,
+}
+
+impl Play {
+    /// The listen, or `None` when YourSpotify knows none of its artists.
+    fn listen(self) -> Option<Listen> {
+        let Track {
+            id,
+            name,
+            artists,
+            duration_ms,
+            track_number,
+            full_album,
+            full_artists,
+        } = self.track;
+        let mut names: HashMap<_, _> = full_artists.into_iter().map(|a| (a.id, a.name)).collect();
+        let artists: Vec<(String, String)> = artists
+            .into_iter()
+            .filter_map(|id| names.remove(&id).map(|name| (id, name)))
+            .collect();
+        let artist = artists.first()?.1.clone();
+        let spotify = |kind: &str, id: &str| format!("https://open.spotify.com/{kind}/{id}");
+        // Named as in ListenBrainz's additional_info.
+        let mut extra = json!({
+            "music_service": "spotify.com",
+            "spotify_id": spotify("track", &id),
+            "spotify_artist_ids": artists.iter().map(|(id, _)| spotify("artist", id)).collect::<Vec<_>>(),
+            "artist_names": artists.iter().map(|(_, name)| name).collect::<Vec<_>>(),
+        });
+        if let Some(album) = &full_album {
+            extra["spotify_album_id"] = spotify("album", &album.id).into();
+        }
+        Some(Listen {
+            listened_at: self.played_at,
+            artist,
+            track: name,
+            album: full_album.map(|album| album.name),
+            track_number: track_number.and_then(|n| n.try_into().ok()),
+            duration_ms: duration_ms.and_then(|n| n.try_into().ok()),
+            client: Some(CLIENT.to_owned()),
+            mbids: Mbids::default(),
+            extra: Some(extra),
+        })
+    }
+}
+
+/// The profile `slug` of the account `username`.
+pub async fn profile_id(db: &PgPool, username: &str, slug: &str) -> anyhow::Result<i64> {
+    sqlx::query_scalar!(
+        "SELECT p.id
+           FROM profile p
+           JOIN account a ON a.id = p.account_id
+          WHERE a.username = $1::text::citext AND p.slug = $2::text::citext",
+        username,
+        slug,
+    )
+    .fetch_optional(db)
+    .await?
+    .with_context(|| format!("user {username} has no profile {slug}"))
+}
+
+/// What an import brought.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Report {
+    /// The latest listen imported before, where this import started.
+    pub since: Option<OffsetDateTime>,
+    /// Plays newer than that.
+    pub plays: usize,
+    /// Those stored as listens; the others were in the profile already.
+    pub recorded: u64,
+    /// Plays left out because YourSpotify knows none of their artists.
+    pub without_artist: usize,
+    pub first: Option<OffsetDateTime>,
+    pub last: Option<OffsetDateTime>,
+}
+
+/// Imports the plays from YourSpotify into a profile: the whole history the first
+/// time, then those newer than the latest one imported, or the whole history
+/// again with `all`. Plays the profile has already are skipped either way, as
+/// are those that look like a second scrobble of a listen (see [`scrobble::record`]).
+pub async fn import(
+    db: &PgPool,
+    source: &Source,
+    profile_id: i64,
+    all: bool,
+) -> anyhow::Result<Report> {
+    let since = if all {
+        None
+    } else {
+        sqlx::query_scalar!(
+            "SELECT max(listened_at) FROM listen WHERE profile_id = $1 AND client = $2",
+            profile_id,
+            CLIENT,
+        )
+        .fetch_one(db)
+        .await?
+    };
+
+    // Everything is fetched before anything is stored, oldest first, so that an
+    // import that stops halfway leaves no gap behind the latest listen.
+    let mut plays = Vec::new();
+    let mut offset = 0;
+    loop {
+        let page = source.page(offset).await?;
+        let full = page.len() == PAGE;
+        let mut reached_since = false;
+        for play in page {
+            if since.is_some_and(|since| play.played_at <= since) {
+                reached_since = true;
+            } else {
+                plays.push(play);
+            }
+        }
+        if !full || reached_since {
+            break;
+        }
+        offset += PAGE;
+        if offset % 2000 == 0 {
+            tracing::info!("fetched {offset} plays from YourSpotify so far");
+        }
+    }
+    // Plays YourSpotify fetched from Spotify meanwhile move the others down a
+    // page, so some come twice.
+    plays.sort_by_key(|play| play.played_at);
+    plays.dedup_by_key(|play| play.played_at);
+
+    let mut report = Report {
+        since,
+        plays: plays.len(),
+        first: plays.first().map(|play| play.played_at),
+        last: plays.last().map(|play| play.played_at),
+        ..Report::default()
+    };
+    let listens: Vec<Listen> = plays.into_iter().filter_map(Play::listen).collect();
+    report.without_artist = report.plays - listens.len();
+    for batch in listens.chunks(BATCH) {
+        report.recorded += scrobble::record(db, profile_id, batch).await?;
+    }
+    Ok(report)
+}
+
+impl fmt::Display for Report {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (Some(first), Some(last)) = (self.first, self.last) else {
+            return match self.since {
+                Some(since) => write!(
+                    f,
+                    "No Spotify plays in YourSpotify after {}.",
+                    minutes(since)
+                ),
+                None => write!(f, "YourSpotify has no Spotify plays."),
+            };
+        };
+        write!(
+            f,
+            "Found {} Spotify plays in YourSpotify from {} to {}: imported {}",
+            self.plays,
+            minutes(first),
+            minutes(last),
+            self.recorded,
+        )?;
+        let known = self.plays as u64 - self.without_artist as u64 - self.recorded;
+        if known > 0 {
+            write!(f, ", {known} were in the profile already")?;
+        }
+        if self.without_artist > 0 {
+            write!(
+                f,
+                ", {} left out as YourSpotify knows none of their artists",
+                self.without_artist
+            )?;
+        }
+        write!(f, ".")
+    }
+}
+
+/// "2026-10-03 14:30 UTC"
+fn minutes(at: OffsetDateTime) -> String {
+    let at = at.to_offset(time::UtcOffset::UTC);
+    format!("{} {:02}:{:02} UTC", at.date(), at.hour(), at.minute())
+}

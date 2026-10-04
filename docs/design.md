@@ -72,6 +72,14 @@ Jedes Profil hat eine Seite pro Artist, Album und Stück (`/u/<name>/artist/<id>
 
 **Kodierung:** Ein Teil der Namen ist doppelt kodiert (UTF-8 als Windows-1252 gelesen und erneut als UTF-8 gespeichert, z.B. `Die Ã„rzte` neben `Die Ärzte`), ein Teil korrekt. Der Import repariert jeden String einzeln (nach cp1252 kodieren, als UTF-8 dekodieren, nur bei gültigem Ergebnis übernehmen). Über die Alias-Tabellen verschmelzen die so entstandenen Dubletten automatisch. Achtung bei Abfragen im Dump: die Collation `_ai_ci` ignoriert Akzente, für Textvergleiche `COLLATE utf8mb3_bin` verwenden.
 
+## Spotify über YourSpotify
+
+- **Quelle:** YourSpotify statt der Spotify-API direkt: Es hat schon den Export-Dump und holt laufend neue Plays, musicbanana braucht also keine eigene Spotify-App und keinen Spotify-Login. YourSpotify hat keine dokumentierte API; der Import nimmt die Route, mit der seine Weboberfläche die Historie zeigt (`GET /spotify/gethistory`, höchstens 20 Plays pro Anfrage, neueste zuerst, mit Track, Album und Artists), und den öffentlichen Token aus den Einstellungen als `?token=`. Der Token gibt Lesezugriff auf alle Statistiken des Kontos und erscheint deshalb weder im Log noch in Fehlermeldungen.
+- **Abruf:** Beim ersten Mal die ganze Historie, danach nur Plays nach dem neuesten bisher importierten (`client = 'Spotify via YourSpotify'`), mit `--all` wieder alles. Erst wird alles geholt, dann ältestes zuerst gespeichert, damit ein abgebrochener Lauf keine Lücke hinter dem neuesten Listen lässt. Holt YourSpotify während des Imports neue Plays, rutschen die übrigen eine Seite weiter; doppelt Geholtes fällt über den Zeitpunkt heraus.
+- **Zuordnung:** Ein Play zählt für seinen ersten Artist (bei Spotify der Haupt-Artist), Track und Album heißen wie bei Spotify, `listened_at` ist `played_at` auf die Millisekunde. MusicBrainz-IDs gibt es keine. Spotify-IDs und alle Artists landen in `extra`, benannt wie in ListenBrainz' `additional_info` (`spotify_id`, `spotify_album_id`, `spotify_artist_ids`, `music_service`). Plays ohne bekannten Artist bleiben draußen und werden gezählt.
+- **Dubletten:** wie beim Scrobbeln; ein Play, das das Profil schon hat (gleicher Zeitpunkt), wird übersprungen, deshalb kann `--all` gefahrlos wiederholt werden.
+- **Regelmäßig:** `--every 15m` lässt das Kommando laufen und alle 15 Minuten nachholen; mit Docker als eigener Dienst `yourspotify` im Compose-Profil gleichen Namens. Später kann das in den Server wandern.
+
 ## Dubletten zusammenführen
 
 `musicbanana merge suggest` schlägt Einträge vor, die wie ein anderer aussehen, jeweils mit dem Befehl zum Zusammenführen (vorerst auf der Kommandozeile, im Browser später mit dem Login):

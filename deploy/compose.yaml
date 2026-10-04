@@ -23,6 +23,21 @@ services:
       db:
         condition: service_healthy
 
+  # Imports Spotify plays from YourSpotify every so often. Starts only with
+  # COMPOSE_PROFILES=yourspotify in .env, see .env.example.
+  yourspotify:
+    image: ghcr.io/fionapreroll/vibe-musicbanana:latest
+    profiles: [yourspotify]
+    restart: unless-stopped
+    command: [import-yourspotify, --user, "${YOURSPOTIFY_USER:-}", --every, "${YOURSPOTIFY_EVERY:-15m}"]
+    environment:
+      DATABASE_URL: postgres://musicbanana:${MUSICBANANA_DB_PASSWORD:?set MUSICBANANA_DB_PASSWORD in .env}@db:5432/musicbanana
+      YOURSPOTIFY_URL: ${YOURSPOTIFY_URL:-}
+      YOURSPOTIFY_TOKEN: ${YOURSPOTIFY_TOKEN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+
   db:
     image: postgres:16
     restart: unless-stopped

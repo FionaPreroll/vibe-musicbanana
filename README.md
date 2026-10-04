@@ -143,6 +143,23 @@ DATABASE_URL=postgres://postgres@127.0.0.1:5432/musicbanana \
 
 It prints a summary (accounts, artists, listens, skipped rows, repaired names). Afterwards the history is at `/u/<old username>`. The import test (`tests/import_php.rs`) runs against a MySQL server named by `LEGACY_MYSQL_URL` and is skipped without it.
 
+## Spotify plays from YourSpotify
+
+[YourSpotify](https://github.com/Yooooomi/your_spotify) keeps the history of a Spotify account: the plays from Spotify's data export and those it has fetched from Spotify since. musicbanana takes them from there into a profile:
+
+```sh
+export YOURSPOTIFY_TOKEN=…    # the public token from YourSpotify's settings
+musicbanana import-yourspotify --from http://192.168.1.10:8080 --user <username>
+```
+
+`--from` is the address of YourSpotify's API (what YourSpotify has as `API_ENDPOINT`), not of its web interface. The public token gives read access to all statistics of the account, so keep it like a password; set as `YOURSPOTIFY_TOKEN` it stays out of the shell history, `--token` works too.
+
+The first run fetches the whole history, 20 plays per request, which takes a while for years of Spotify. Later runs fetch only the plays after the latest one imported. `--all` fetches everything again, for example after YourSpotify has imported an older Spotify export; plays the profile has already are skipped, as with scrobbles. The plays go to the default profile, `--profile <slug>` picks another one, and `--every 15m` keeps the command running and fetches the new plays every 15 minutes (or `90s`, `1h`).
+
+A play counts for its first artist, with track and album titled as on Spotify; the Spotify IDs and all artists stay in the listen's extra data. Spotify gives no MusicBrainz IDs, and its titles often carry an addition like "(Deluxe Edition)" or "- Remastered 2011", so `merge suggest` finds them next to the albums and tracks from other players.
+
+YourSpotify has no documented API; the importer uses the route its web interface reads the history from (`GET /spotify/gethistory`), which a new YourSpotify version could change.
+
 ## Running with Docker
 
 `Dockerfile` builds one image with the server and the frontend. CI publishes it for every change on main that passed all checks, as `ghcr.io/fionapreroll/vibe-musicbanana:latest` and `:sha-<commit>`, for x86-64 (linux/amd64). `deploy/compose.yaml` runs it together with its own PostgreSQL. On the machine that runs Navidrome:
@@ -170,6 +187,15 @@ Navidrome needs the address under which its container reaches musicbanana, as `N
 - or, when both containers share a Docker network (for example with the Navidrome service in the same compose file), by service name: `http://musicbanana:3000/api/listenbrainz/1/`.
 
 Then restart Navidrome and link the token as described [above](#navidrome-and-apps-that-play-from-it-supersonic-ultrasonic-).
+
+**Spotify plays from YourSpotify** (see [above](#spotify-plays-from-yourspotify)): with these lines in `.env`, `docker compose up -d` also starts the service `yourspotify`, which imports the history once and then the new plays every 15 minutes (`YOURSPOTIFY_EVERY` changes that). The address is the one under which the container reaches YourSpotify's API, as for Navidrome not `localhost`. `docker compose logs yourspotify` shows what it imported.
+
+```sh
+COMPOSE_PROFILES=yourspotify
+YOURSPOTIFY_URL=http://192.168.1.10:8080
+YOURSPOTIFY_TOKEN=<public token>
+YOURSPOTIFY_USER=<username>
+```
 
 **Moving existing data in**, for example the database the PHP import went into:
 

@@ -28,6 +28,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
  && cp target/release/musicbanana /usr/local/bin/musicbanana
 
 FROM debian:trixie-slim
+# Root certificates for HTTPS requests, such as to YourSpotify.
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --no-create-home --uid 10001 musicbanana
 COPY --from=backend /usr/local/bin/musicbanana /usr/local/bin/musicbanana
 COPY --from=frontend /src/frontend/build /usr/share/musicbanana

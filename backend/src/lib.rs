@@ -8,6 +8,7 @@ pub mod merge;
 mod profiles;
 pub mod scrobble;
 pub mod tokens;
+pub mod yourspotify;
 
 use std::path::Path;
 
