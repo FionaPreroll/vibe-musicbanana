@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT FROM release_mbid WHERE release_id = $1) AS \"tagged!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tagged!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f72fdbd9452faf7b1dcd8ba3c50f26ac119766f7ccb1cc1a9f9135b4ae1aa080"
+}

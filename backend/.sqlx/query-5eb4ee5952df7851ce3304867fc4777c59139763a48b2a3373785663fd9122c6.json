@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE recording r SET length_ms = COALESCE(r.length_ms, f.length_ms)\n           FROM recording f\n          WHERE r.id = $2 AND f.id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5eb4ee5952df7851ce3304867fc4777c59139763a48b2a3373785663fd9122c6"
+}

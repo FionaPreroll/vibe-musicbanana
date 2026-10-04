@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH spelled AS (INSERT INTO release_alias (artist_id, title_key, release_id)\n                                    VALUES ($1, $2, $3)\n                                    ON CONFLICT DO NOTHING)\n                   SELECT r.id, r.title FROM release_alias x JOIN release r ON r.id = x.release_id\n                    WHERE x.artist_id = $1 AND x.title_key = $2 AND r.id <> $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "release",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "release",
+            "name": "title"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "f17bc383817af956a15bae91d4e1b7e48fc4d47c9d22cc07504576c82f56471f"
+}

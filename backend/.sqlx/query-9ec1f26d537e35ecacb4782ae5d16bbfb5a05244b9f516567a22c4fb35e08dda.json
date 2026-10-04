@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT FROM recording_mbid WHERE recording_id = $1) AS \"tagged!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tagged!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9ec1f26d537e35ecacb4782ae5d16bbfb5a05244b9f516567a22c4fb35e08dda"
+}

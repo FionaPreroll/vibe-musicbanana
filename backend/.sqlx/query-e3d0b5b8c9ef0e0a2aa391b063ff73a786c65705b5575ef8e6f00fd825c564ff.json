@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH known AS (SELECT recording_id FROM recording_mbid\n                           WHERE artist_id = $1 AND mbid = $2),\n                spelled AS (INSERT INTO recording_alias (artist_id, title_key, recording_id)\n                            SELECT $1, $3, recording_id FROM known\n                            ON CONFLICT DO NOTHING)\n           SELECT recording_id AS \"id!\" FROM known",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "recording_mbid",
+            "name": "recording_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e3d0b5b8c9ef0e0a2aa391b063ff73a786c65705b5575ef8e6f00fd825c564ff"
+}

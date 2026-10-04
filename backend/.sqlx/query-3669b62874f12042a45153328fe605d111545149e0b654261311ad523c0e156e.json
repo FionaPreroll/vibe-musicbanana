@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT FROM artist_mbid WHERE artist_id = $1) AS \"tagged!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tagged!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3669b62874f12042a45153328fe605d111545149e0b654261311ad523c0e156e"
+}

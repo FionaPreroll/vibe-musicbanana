@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT mbid FROM artist_mbid WHERE artist_id = $1 ORDER BY mbid",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mbid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artist_mbid",
+            "name": "mbid"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "dc71452bf064290597b2a3bd9359c6ba283c905f7052bc7325e6cb43d412a335"
+}

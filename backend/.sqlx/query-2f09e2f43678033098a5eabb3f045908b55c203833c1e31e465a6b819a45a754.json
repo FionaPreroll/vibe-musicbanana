@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE artist_mbid SET artist_id = $2 WHERE artist_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2f09e2f43678033098a5eabb3f045908b55c203833c1e31e465a6b819a45a754"
+}

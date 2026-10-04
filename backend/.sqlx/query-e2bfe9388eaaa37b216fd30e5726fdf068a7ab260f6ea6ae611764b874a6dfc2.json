@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id FROM artist_alias x JOIN artist a ON a.id = x.artist_id\n          WHERE x.name_key = $1 AND a.merged_into IS NULL\n            FOR NO KEY UPDATE OF a",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e2bfe9388eaaa37b216fd30e5726fdf068a7ab260f6ea6ae611764b874a6dfc2"
+}

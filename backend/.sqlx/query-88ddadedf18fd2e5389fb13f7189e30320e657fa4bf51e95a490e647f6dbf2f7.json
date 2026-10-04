@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.id, r.title,\n                  array(SELECT x.title_key FROM recording_alias x WHERE x.recording_id = r.id) AS \"keys!\",\n                  array(SELECT DISTINCT m.mbid FROM recording_mbid m WHERE m.recording_id = r.id) AS \"mbids!\"\n             FROM recording r\n            WHERE r.artist_id = $1 AND r.merged_into IS NULL\n            ORDER BY r.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "keys!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "mbids!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "88ddadedf18fd2e5389fb13f7189e30320e657fa4bf51e95a490e647f6dbf2f7"
+}

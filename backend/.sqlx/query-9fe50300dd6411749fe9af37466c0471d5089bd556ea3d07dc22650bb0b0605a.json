@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH spelled AS (INSERT INTO recording_alias (artist_id, title_key, recording_id)\n                                    VALUES ($1, $2, $3)\n                                    ON CONFLICT DO NOTHING)\n                   SELECT r.id, r.title FROM recording_alias x\n                     JOIN recording r ON r.id = x.recording_id\n                    WHERE x.artist_id = $1 AND x.title_key = $2 AND r.id <> $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "title"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "9fe50300dd6411749fe9af37466c0471d5089bd556ea3d07dc22650bb0b0605a"
+}

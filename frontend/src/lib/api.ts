@@ -55,6 +55,8 @@ export type EntityPage = {
 	name: string;
 	/** The artist of an album or track. */
 	artist?: { id: number; name: string };
+	/** MusicBrainz IDs: of the artist, of the album's release group, or of the track's recordings. */
+	mbids: string[];
 	listens: number;
 	first_listened_at: string | null;
 	last_listened_at: string | null;

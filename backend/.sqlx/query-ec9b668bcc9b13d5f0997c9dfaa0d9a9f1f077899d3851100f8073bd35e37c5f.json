@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.id, r.title AS name, r.merged_into,\n                  array(SELECT DISTINCT m.mbid FROM recording_mbid m WHERE m.recording_id = r.id) AS \"mbids!\"\n             FROM recording r\n            WHERE r.id IN ($1, $2)\n            ORDER BY r.id\n              FOR NO KEY UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "merged_into",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "merged_into"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "mbids!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "ec9b668bcc9b13d5f0997c9dfaa0d9a9f1f077899d3851100f8073bd35e37c5f"
+}

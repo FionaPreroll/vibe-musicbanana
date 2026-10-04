@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH moved AS (DELETE FROM recording_mbid WHERE artist_id = $1\n                        RETURNING mbid, recording_id)\n         INSERT INTO recording_mbid (artist_id, mbid, recording_id)\n         SELECT $2, mbid, recording_id FROM moved\n         ON CONFLICT (artist_id, mbid) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "040d4c2849019d56853962abd6ff26ba82296f77aef6ba9116c0cbc727f1c41c"
+}

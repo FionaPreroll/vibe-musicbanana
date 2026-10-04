@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT recording_id FROM recording_mbid WHERE artist_id = $1 AND mbid = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "recording_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "recording_mbid",
+            "name": "recording_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7d8b9242576bf0454a1532cfafe747475303083fa728e3d2554a840e63347f6d"
+}

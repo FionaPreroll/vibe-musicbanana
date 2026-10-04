@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH found AS (SELECT recording_id FROM recording_alias\n                           WHERE artist_id = $1 AND title_key = $2),\n                created AS (INSERT INTO recording (title, artist_id, length_ms)\n                            SELECT $3, $1, $4 WHERE NOT EXISTS (SELECT FROM found)\n                            RETURNING id),\n                aliased AS (INSERT INTO recording_alias (artist_id, title_key, recording_id)\n                            SELECT $1, $2, id FROM created\n                            RETURNING recording_id)\n           SELECT recording_id AS \"id!\" FROM found\n           UNION ALL\n           SELECT recording_id FROM aliased",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4218343ceb60f69f04bc281050156e664fc74fd43a45e1464b40a7f8c8eb24d6"
+}
