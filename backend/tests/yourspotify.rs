@@ -2,7 +2,10 @@
 
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use axum::{
@@ -29,10 +32,18 @@ const TOKEN: &str = "0b7e4c55-2f0a-4d6e-9c3b-5a1d8e6f7a90";
 struct YourSpotify {
     /// Newest first.
     plays: Mutex<Vec<Value>>,
-    /// Plays fetched from Spotify once the first page has been asked for.
+    /// Plays fetched from Spotify once a page with plays has been asked for.
     meanwhile: Mutex<Vec<Value>>,
-    /// The offsets asked for.
-    asked: Mutex<Vec<usize>>,
+    /// The offsets asked for, with the start of the time range.
+    asked: Mutex<Vec<(usize, Option<OffsetDateTime>)>>,
+    /// An older YourSpotify, which takes no time range.
+    no_range: AtomicBool,
+    /// Fails for time ranges that start at this time or later.
+    down_from: Mutex<Option<OffsetDateTime>>,
+}
+
+fn played_at(play: &Value) -> OffsetDateTime {
+    OffsetDateTime::parse(play["played_at"].as_str().unwrap(), &Rfc3339).unwrap()
 }
 
 async fn history(
@@ -51,11 +62,37 @@ async fn history(
     if number > 20 {
         return StatusCode::BAD_REQUEST.into_response();
     }
-    server.asked.lock().unwrap().push(offset);
+    let time = |name: &str| {
+        query
+            .get(name)
+            .map(|text| OffsetDateTime::parse(text, &Rfc3339).unwrap())
+    };
+    let (start, end) = (time("start"), time("end"));
+    server.asked.lock().unwrap().push((offset, start));
+    if let (Some(start), Some(down)) = (start, *server.down_from.lock().unwrap())
+        && start >= down
+    {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    // As YourSpotify: only with both ends, and without them.
+    let range = match (start, end) {
+        (Some(start), Some(end)) if !server.no_range.load(Ordering::Relaxed) => Some((start, end)),
+        _ => None,
+    };
     let mut plays = server.plays.lock().unwrap();
-    let page: Vec<Value> = plays.iter().skip(offset).take(number).cloned().collect();
-    for play in server.meanwhile.lock().unwrap().drain(..).rev() {
-        plays.insert(0, play);
+    let page: Vec<Value> = plays
+        .iter()
+        .filter(|play| {
+            range.is_none_or(|(start, end)| played_at(play) > start && played_at(play) < end)
+        })
+        .skip(offset)
+        .take(number)
+        .cloned()
+        .collect();
+    if !page.is_empty() {
+        for play in server.meanwhile.lock().unwrap().drain(..).rev() {
+            plays.insert(0, play);
+        }
     }
     Json(page).into_response()
 }
@@ -133,8 +170,17 @@ async fn imported(db: &PgPool) -> i64 {
         .unwrap()
 }
 
-fn asked(server: &YourSpotify) -> Vec<usize> {
+fn asked(server: &YourSpotify) -> Vec<(usize, Option<OffsetDateTime>)> {
     std::mem::take(&mut server.asked.lock().unwrap())
+}
+
+/// The pages asked for beyond the first of a time range.
+fn further_pages(asked: &[(usize, Option<OffsetDateTime>)]) -> Vec<usize> {
+    asked
+        .iter()
+        .map(|&(offset, _)| offset)
+        .filter(|&offset| offset > 0)
+        .collect()
 }
 
 #[sqlx::test(fixtures("profiles"))]
@@ -160,7 +206,9 @@ async fn imports_the_history_and_then_only_new_plays(db: PgPool) {
         "Found 45 Spotify plays in YourSpotify from 2026-01-01 10:00 UTC to \
          2026-01-03 06:00 UTC: imported 45."
     );
-    assert_eq!(asked(&server), [0, 20, 40]);
+    let first = asked(&server);
+    assert!(first.iter().all(|(_, start)| start.is_some()), "{first:?}");
+    assert_eq!(further_pages(&first), [20, 40]);
     assert_eq!(imported(&db).await, 45);
 
     // Then only what is new.
@@ -174,7 +222,9 @@ async fn imports_the_history_and_then_only_new_plays(db: PgPool) {
         (report.since, report.plays, report.recorded),
         (Some(at(44)), 2, 2)
     );
-    assert_eq!(asked(&server), [0]);
+    let again = asked(&server);
+    assert_eq!(again[0], (0, Some(at(44))));
+    assert!(further_pages(&again).is_empty(), "{again:?}");
     let (artist, release, recording): (i64, Option<i64>, i64) = sqlx::query_as(
         "SELECT artist_id, release_id, recording_id FROM listen
           WHERE profile_id = 1 AND listened_at = $1",
@@ -283,10 +333,102 @@ async fn plays_that_come_in_meanwhile_are_imported_once(db: PgPool) {
 
     let report = yourspotify::import(&db, &source, 1, false).await.unwrap();
     assert_eq!((report.plays, report.recorded), (25, 25));
-    assert_eq!(asked(&server), [0, 20]);
+    assert_eq!(further_pages(&asked(&server)), [20]);
     let report = yourspotify::import(&db, &source, 1, false).await.unwrap();
     assert_eq!((report.plays, report.recorded), (2, 2));
     assert_eq!(imported(&db).await, 27);
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn an_import_that_stops_goes_on_where_it_stopped(db: PgPool) {
+    let server = Arc::new(YourSpotify::default());
+    // Twelve plays 40 days apart, more than one window.
+    let day = |n: i64| datetime!(2025-01-01 20:00 UTC) + Duration::days(40 * n);
+    *server.plays.lock().unwrap() = (0..12)
+        .rev()
+        .map(|n| play(day(n), &format!("Song {n}"), &["Björk"], None))
+        .collect();
+    *server.down_from.lock().unwrap() = Some(day(6));
+    let source = Source::new(&serve(&server).await, TOKEN).unwrap();
+
+    let error = yourspotify::import(&db, &source, 1, false)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("answered 500"), "{error:#}");
+    // The plays before are in the profile already, without a gap.
+    let stored: Vec<OffsetDateTime> = sqlx::query_scalar(
+        "SELECT listened_at FROM listen WHERE profile_id = 1 AND client = $1
+          ORDER BY listened_at",
+    )
+    .bind(CLIENT)
+    .fetch_all(&db)
+    .await
+    .unwrap();
+    assert!(!stored.is_empty() && stored.len() < 12, "{stored:?}");
+    assert_eq!(
+        stored,
+        (0..stored.len() as i64).map(day).collect::<Vec<_>>()
+    );
+
+    *server.down_from.lock().unwrap() = None;
+    let report = yourspotify::import(&db, &source, 1, false).await.unwrap();
+    assert_eq!(
+        (report.since, report.plays, report.recorded),
+        (
+            stored.last().copied(),
+            12 - stored.len(),
+            12 - stored.len() as u64
+        )
+    );
+    assert_eq!(imported(&db).await, 12);
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn plays_at_the_edge_of_a_window_come_once(db: PgPool) {
+    let server = Arc::new(YourSpotify::default());
+    // The first window ends with 2007, the next one is 30 days long.
+    let edges = [
+        datetime!(2008-01-31 0:00 UTC),
+        datetime!(2008-01-01 0:00 UTC),
+        datetime!(2007-12-31 23:59:59.999 UTC),
+    ];
+    *server.plays.lock().unwrap() = edges
+        .iter()
+        .enumerate()
+        .map(|(n, &at)| play(at, &format!("Song {n}"), &["Björk"], None))
+        .collect();
+    let source = Source::new(&serve(&server).await, TOKEN).unwrap();
+
+    let report = yourspotify::import(&db, &source, 1, false).await.unwrap();
+    assert_eq!((report.plays, report.recorded), (3, 3));
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn an_older_yourspotify_gives_everything_at_once(db: PgPool) {
+    let server = Arc::new(YourSpotify::default());
+    server.no_range.store(true, Ordering::Relaxed);
+    *server.plays.lock().unwrap() = plays(45);
+    let source = Source::new(&serve(&server).await, TOKEN).unwrap();
+
+    let report = yourspotify::import(&db, &source, 1, false).await.unwrap();
+    assert_eq!((report.plays, report.recorded), (45, 45));
+    let epoch = OffsetDateTime::UNIX_EPOCH - Duration::milliseconds(1);
+    assert_eq!(
+        asked(&server),
+        [(0, Some(epoch)), (0, None), (20, None), (40, None)]
+    );
+
+    server
+        .plays
+        .lock()
+        .unwrap()
+        .insert(0, play(at(45), "Song 45", &["Björk"], None));
+    let report = yourspotify::import(&db, &source, 1, false).await.unwrap();
+    assert_eq!(
+        (report.since, report.plays, report.recorded),
+        (Some(at(44)), 1, 1)
+    );
+    assert_eq!(asked(&server), [(0, Some(at(44))), (0, None)]);
 }
 
 #[sqlx::test(fixtures("profiles"))]

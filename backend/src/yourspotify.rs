@@ -3,19 +3,20 @@
 //! export and those it has fetched from Spotify since.
 //!
 //! YourSpotify has no documented API. This uses the route its web interface shows
-//! the history with, `GET /spotify/gethistory`, which returns the plays newest
-//! first, at most 20 at a time, each with its track, album and artists. The
-//! public token from YourSpotify's settings stands in for a login; it gives read
-//! access to all statistics of the account, so it is never logged or shown.
+//! the history with, `GET /spotify/gethistory`, which returns the plays of a time
+//! range newest first, at most 20 at a time, each with its track, album and
+//! artists. The public token from YourSpotify's settings stands in for a login;
+//! it gives read access to all statistics of the account, so it is never logged
+//! or shown.
 
-use std::{collections::HashMap, fmt, time::Duration};
+use std::{collections::HashMap, fmt};
 
 use anyhow::{Context, bail};
 use reqwest::{StatusCode, Url};
 use serde::Deserialize;
 use serde_json::json;
 use sqlx::PgPool;
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime, UtcOffset, macros::datetime};
 
 use crate::{
     catalog::Mbids,
@@ -30,6 +31,16 @@ const PAGE: usize = 20;
 
 /// Listens stored per transaction.
 const BATCH: usize = 1000;
+
+/// The history is fetched in time windows, oldest first, and each window is
+/// stored before the next one is fetched. A window is a month, or twice as long
+/// as the one before when that had no plays, up to a year, so that the years
+/// before the first play take few requests.
+const WINDOW: Duration = Duration::days(30);
+const LONGEST_WINDOW: Duration = Duration::days(365);
+
+/// Spotify started in 2008; anything older comes in one window.
+const SPOTIFY_STARTED: OffsetDateTime = datetime!(2008-01-01 0:00 UTC);
 
 /// A YourSpotify server and the token to read an account's history with.
 pub struct Source {
@@ -59,7 +70,7 @@ impl Source {
         // certificates; reqwest wants the crypto provider set up front.
         let _ = rustls::crypto::ring::default_provider().install_default();
         let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(60))
+            .timeout(std::time::Duration::from_secs(60))
             .user_agent(concat!("musicbanana/", env!("CARGO_PKG_VERSION")))
             .build()?;
         Ok(Self {
@@ -70,13 +81,27 @@ impl Source {
         })
     }
 
-    /// The plays from `offset` on, newest first.
-    async fn page(&self, offset: usize) -> anyhow::Result<Vec<Play>> {
-        let response = self
+    /// The plays from `offset` on, newest first, of those from `from` up to
+    /// (without) `to`, or of all.
+    async fn page(
+        &self,
+        offset: usize,
+        range: Option<(OffsetDateTime, OffsetDateTime)>,
+    ) -> anyhow::Result<Vec<Play>> {
+        let mut request = self
             .http
             .get(self.history.clone())
             .query(&[("token", self.token.as_str())])
-            .query(&[("number", PAGE), ("offset", offset)])
+            .query(&[("number", PAGE), ("offset", offset)]);
+        if let Some((from, to)) = range {
+            // YourSpotify takes the plays after `start` and before `end`, to the
+            // millisecond as JavaScript dates have it.
+            request = request.query(&[
+                ("start", js_date(from - Duration::milliseconds(1))),
+                ("end", js_date(to)),
+            ]);
+        }
+        let response = request
             .send()
             .await
             // The error would show the address, token included.
@@ -107,6 +132,77 @@ impl Source {
             )
         })
     }
+
+    /// The plays from `from` up to (without) `to`, oldest first, or `None` when
+    /// YourSpotify does not take a time range.
+    async fn window(
+        &self,
+        from: OffsetDateTime,
+        to: OffsetDateTime,
+    ) -> anyhow::Result<Option<Vec<Play>>> {
+        let mut plays = Vec::new();
+        for offset in (0..).step_by(PAGE) {
+            let page = self.page(offset, Some((from, to))).await?;
+            let full = page.len() == PAGE;
+            if page
+                .iter()
+                .any(|play| play.played_at < from || play.played_at >= to)
+            {
+                return Ok(None);
+            }
+            plays.extend(page);
+            if !full {
+                break;
+            }
+        }
+        Ok(Some(oldest_first(plays)))
+    }
+
+    /// The plays after `since`, or all, oldest first, fetched newest first
+    /// without a time range.
+    async fn newest_first(&self, since: Option<OffsetDateTime>) -> anyhow::Result<Vec<Play>> {
+        let mut plays = Vec::new();
+        for offset in (0..).step_by(PAGE) {
+            let page = self.page(offset, None).await?;
+            let full = page.len() == PAGE;
+            let mut reached_since = false;
+            for play in page {
+                if since.is_some_and(|since| play.played_at <= since) {
+                    reached_since = true;
+                } else {
+                    plays.push(play);
+                }
+            }
+            if !full || reached_since {
+                break;
+            }
+            if (offset + PAGE).is_multiple_of(2000) {
+                tracing::info!("fetched {} plays from YourSpotify so far", offset + PAGE);
+            }
+        }
+        Ok(oldest_first(plays))
+    }
+}
+
+/// Plays YourSpotify fetched from Spotify meanwhile move the others down a page,
+/// so some come twice.
+fn oldest_first(mut plays: Vec<Play>) -> Vec<Play> {
+    plays.sort_by_key(|play| play.played_at);
+    plays.dedup_by_key(|play| play.played_at);
+    plays
+}
+
+/// "2026-10-03T14:30:00.250Z", as JavaScript's Date writes and reads it.
+fn js_date(at: OffsetDateTime) -> String {
+    let at = at.to_offset(UtcOffset::UTC);
+    format!(
+        "{}T{:02}:{:02}:{:02}.{:03}Z",
+        at.date(),
+        at.hour(),
+        at.minute(),
+        at.second(),
+        at.millisecond()
+    )
 }
 
 /// One play as YourSpotify returns it, with the parts used here.
@@ -224,6 +320,10 @@ pub struct Report {
 /// time, then those newer than the latest one imported, or the whole history
 /// again with `all`. Plays the profile has already are skipped either way, as
 /// are those that look like a second scrobble of a listen (see [`scrobble::record`]).
+///
+/// The plays are stored oldest first, a window of time at once, so they show up
+/// in the profile while the import runs, and one that stops halfway leaves no gap
+/// behind the latest listen: the next one goes on from there.
 pub async fn import(
     db: &PgPool,
     source: &Source,
@@ -241,48 +341,71 @@ pub async fn import(
         .fetch_one(db)
         .await?
     };
-
-    // Everything is fetched before anything is stored, oldest first, so that an
-    // import that stops halfway leaves no gap behind the latest listen.
-    let mut plays = Vec::new();
-    let mut offset = 0;
-    loop {
-        let page = source.page(offset).await?;
-        let full = page.len() == PAGE;
-        let mut reached_since = false;
-        for play in page {
-            if since.is_some_and(|since| play.played_at <= since) {
-                reached_since = true;
-            } else {
-                plays.push(play);
-            }
-        }
-        if !full || reached_since {
-            break;
-        }
-        offset += PAGE;
-        if offset % 2000 == 0 {
-            tracing::info!("fetched {offset} plays from YourSpotify so far");
-        }
-    }
-    // Plays YourSpotify fetched from Spotify meanwhile move the others down a
-    // page, so some come twice.
-    plays.sort_by_key(|play| play.played_at);
-    plays.dedup_by_key(|play| play.played_at);
-
     let mut report = Report {
         since,
-        plays: plays.len(),
-        first: plays.first().map(|play| play.played_at),
-        last: plays.last().map(|play| play.played_at),
         ..Report::default()
     };
+    // Whatever YourSpotify has, even with a clock ahead of ours.
+    let until = OffsetDateTime::now_utc() + Duration::days(1);
+    let mut from = since.map_or(OffsetDateTime::UNIX_EPOCH, |since| {
+        since + Duration::milliseconds(1)
+    });
+    let mut length = WINDOW;
+    let mut logged = 0;
+    while from < until {
+        let to = if from < SPOTIFY_STARTED {
+            SPOTIFY_STARTED
+        } else {
+            (from + length).min(until)
+        };
+        let Some(plays) = source.window(from, to).await? else {
+            tracing::info!(
+                "this YourSpotify takes no time range, so its history comes all at once, \
+                 newest first"
+            );
+            let plays = source.newest_first(since).await?;
+            store(db, profile_id, plays, &mut report).await?;
+            return Ok(report);
+        };
+        length = if plays.is_empty() {
+            (length * 2_i32).min(LONGEST_WINDOW)
+        } else {
+            WINDOW
+        };
+        store(db, profile_id, plays, &mut report).await?;
+        if let Some(last) = report.last.filter(|_| report.plays / 2000 > logged) {
+            logged = report.plays / 2000;
+            tracing::info!(
+                "imported {} Spotify plays from YourSpotify so far, up to {}",
+                report.recorded,
+                last.date()
+            );
+        }
+        from = to;
+    }
+    Ok(report)
+}
+
+/// Stores plays given oldest first.
+async fn store(
+    db: &PgPool,
+    profile_id: i64,
+    plays: Vec<Play>,
+    report: &mut Report,
+) -> anyhow::Result<()> {
+    let (Some(first), Some(last)) = (plays.first(), plays.last()) else {
+        return Ok(());
+    };
+    report.first = report.first.or(Some(first.played_at));
+    report.last = Some(last.played_at);
+    let count = plays.len();
+    report.plays += count;
     let listens: Vec<Listen> = plays.into_iter().filter_map(Play::listen).collect();
-    report.without_artist = report.plays - listens.len();
+    report.without_artist += count - listens.len();
     for batch in listens.chunks(BATCH) {
         report.recorded += scrobble::record(db, profile_id, batch).await?;
     }
-    Ok(report)
+    Ok(())
 }
 
 impl fmt::Display for Report {

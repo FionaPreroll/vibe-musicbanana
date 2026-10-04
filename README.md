@@ -154,11 +154,11 @@ musicbanana import-yourspotify --from http://192.168.1.10:8080 --user <username>
 
 `--from` is the address of YourSpotify's API (what YourSpotify has as `API_ENDPOINT`), not of its web interface. The public token gives read access to all statistics of the account, so keep it like a password; set as `YOURSPOTIFY_TOKEN` it stays out of the shell history, `--token` works too.
 
-The first run fetches the whole history, 20 plays per request, which takes a while for years of Spotify. Later runs fetch only the plays after the latest one imported. `--all` fetches everything again, for example after YourSpotify has imported an older Spotify export; plays the profile has already are skipped, as with scrobbles. The plays go to the default profile, `--profile <slug>` picks another one, and `--every 15m` keeps the command running and fetches the new plays every 15 minutes (or `90s`, `1h`).
+The first run fetches the whole history, oldest first, a month at a time, and stores each month before fetching the next, so the plays show up in the profile while it runs; a run that stops halfway goes on from there the next time. Later runs fetch only the plays after the latest one imported. `--all` fetches everything again, for example after YourSpotify has imported an older Spotify export; plays the profile has already are skipped, as with scrobbles. The plays go to the default profile, `--profile <slug>` picks another one, and `--every 15m` keeps the command running and fetches the new plays every 15 minutes (or `90s`, `1h`).
 
 A play counts for its first artist, with track and album titled as on Spotify; the Spotify IDs and all artists stay in the listen's extra data. Spotify gives no MusicBrainz IDs, and its titles often carry an addition like "(Deluxe Edition)" or "- Remastered 2011", so `merge suggest` finds them next to the albums and tracks from other players.
 
-YourSpotify has no documented API; the importer uses the route its web interface reads the history from (`GET /spotify/gethistory`), which a new YourSpotify version could change.
+YourSpotify has no documented API; the importer uses the route its web interface reads the history from (`GET /spotify/gethistory`), which a new YourSpotify version could change. A YourSpotify that takes no time range there gets the old way: everything fetched newest first, then stored at once.
 
 ## Running with Docker
 
