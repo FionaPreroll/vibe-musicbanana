@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE account SET email = $2::text::citext\n          WHERE id = $1\n            AND NOT EXISTS (SELECT FROM account WHERE email = $2::text::citext AND id <> $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bc39f7fff379e8fcd751717a95e6dfad0090385701a1ec5bd27b72e9538ca124"
+}

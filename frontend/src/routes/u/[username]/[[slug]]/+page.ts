@@ -1,7 +1,8 @@
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import {
 	ApiError,
 	followRename,
+	type FollowInfo,
 	getJson,
 	profileApi,
 	profilePath,
@@ -20,7 +21,7 @@ import type { PageLoad } from './$types';
 // /u/<username> is the default profile, /u/<username>/<slug> any other one.
 // A period in the query (see period.ts) narrows the charts to it and starts the
 // listens at its end; a source (see source.ts) narrows everything to its listens.
-export const load: PageLoad = async ({ params, url, fetch }) => {
+export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const api = profileApi(params.username, params.slug ?? 'default');
 	const period = parsePeriod(url.searchParams);
 	if (!period) error(400, 'Invalid period');
@@ -45,7 +46,11 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 				getJson<Source[]>(fetch, `${api}/sources`)
 			]);
 		const base = profilePath(params.username, params.slug);
+		// Whether the viewer follows it, for the button next to the name.
+		const { me } = await parent();
+		const follow = me && !overview.own ? await getJson<FollowInfo>(fetch, `${api}/follow`) : null;
 		return {
+			follow,
 			api,
 			base,
 			period,
@@ -61,6 +66,12 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) {
 			await followRename(fetch, params.username, params.slug ?? 'default', url);
+			// A profile for followers that the viewer may ask to follow.
+			const { me } = await parent();
+			const follow = me
+				? await getJson<FollowInfo>(fetch, `${api}/follow`).catch(() => null)
+				: null;
+			if (follow) redirect(307, `${profilePath(follow.username, follow.slug)}/follow`);
 			error(404, 'There is no such profile.');
 		}
 		if (e instanceof ApiError && e.status === 400) error(400, e.message);

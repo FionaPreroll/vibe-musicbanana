@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.username::text AS \"username!\", p.slug::text AS \"slug!\", p.name,\n                  p.visibility::text AS \"visibility!\",\n                  p.account_id = $3 AS \"own!\",\n                  CASE WHEN f.accepted_at IS NOT NULL THEN 'following'\n                       WHEN f.follower_id IS NOT NULL THEN 'requested'\n                       ELSE 'none' END AS \"state!\"\n             FROM profile p\n             JOIN account a ON a.id = p.account_id\n             LEFT JOIN follow f ON f.profile_id = p.id AND f.follower_id = $3\n            WHERE a.username = $1::text::citext\n              AND p.slug = $2::text::citext\n              AND (p.visibility <> 'private' OR p.account_id = $3)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "username!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "slug!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "profile",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "visibility!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "own!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "state!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "feeea50c8638cf53cb4de508fd53b927c8ec65353cf7fc16d543504e9edcda9f"
+}

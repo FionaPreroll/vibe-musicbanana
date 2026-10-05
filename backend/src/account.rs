@@ -52,6 +52,7 @@ pub fn routes() -> Router<AppState> {
         .route("/me", get(me))
         .route("/me/password", put(change_password))
         .route("/me/username", put(change_username))
+        .route("/me/email", put(change_email_address))
         .route("/me/profiles", post(create_profile))
         .route("/me/profiles/{slug}", patch(update_profile))
         .route("/me/tokens", get(list_tokens).post(create_token))
@@ -436,6 +437,105 @@ async fn change_username(
     }
 }
 
+#[derive(Deserialize)]
+struct EmailChange {
+    email: String,
+    /// The current password, as the address logs in too.
+    password: String,
+}
+
+#[derive(Serialize)]
+struct EmailChanged {
+    email: String,
+}
+
+async fn change_email_address(
+    State(state): State<AppState>,
+    Account(id): Account,
+    Json(change): Json<EmailChange>,
+) -> Result<Json<EmailChanged>, AppError> {
+    let account = sqlx::query!(
+        "SELECT password_hash, password_legacy_md5 FROM account WHERE id = $1",
+        id
+    )
+    .fetch_one(&state.db)
+    .await?;
+    if !verify(
+        account.password_hash,
+        account.password_legacy_md5,
+        change.password,
+    )
+    .await?
+    {
+        return Err(AppError::Status(
+            StatusCode::FORBIDDEN,
+            "the password is wrong".into(),
+        ));
+    }
+    match change_email(&state.db, id, &change.email).await? {
+        Ok((old, email)) => {
+            tracing::info!(
+                "{} changed the email address from {old} to {email}",
+                name_of(&state.db, id).await?
+            );
+            Ok(Json(EmailChanged { email }))
+        }
+        Err(refusal) => Err(AppError::BadRequest(refusal)),
+    }
+}
+
+/// Something with an @ between a name and a domain, without spaces. Whether
+/// mail arrives there is not checked: musicbanana sends none.
+pub fn check_email(address: &str) -> Result<(), String> {
+    let fine = address.len() <= 254
+        && !address.chars().any(char::is_whitespace)
+        && address
+            .rsplit_once('@')
+            .is_some_and(|(name, domain)| !name.is_empty() && !domain.is_empty());
+    if fine {
+        Ok(())
+    } else {
+        Err(format!("\"{address}\" does not look like an email address"))
+    }
+}
+
+/// Gives account `id` another email address, returning the old and the new
+/// one, or why not.
+pub async fn change_email(
+    db: &PgPool,
+    id: i64,
+    new: &str,
+) -> anyhow::Result<Result<(String, String), String>> {
+    let new = new.trim();
+    if let Err(refusal) = check_email(new) {
+        return Ok(Err(refusal));
+    }
+    let old = sqlx::query_scalar!(
+        r#"SELECT email::text AS "email!" FROM account WHERE id = $1"#,
+        id
+    )
+    .fetch_one(db)
+    .await?;
+    let changed = sqlx::query!(
+        "UPDATE account SET email = $2::text::citext
+          WHERE id = $1
+            AND NOT EXISTS (SELECT FROM account WHERE email = $2::text::citext AND id <> $1)",
+        id,
+        new,
+    )
+    .execute(db)
+    .await;
+    match changed {
+        Ok(done) if done.rows_affected() == 1 => Ok(Ok((old, new.to_owned()))),
+        // Another account has it, or took it in the meantime.
+        Ok(_) => Ok(Err(format!("another account has the address {new}"))),
+        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
+            Ok(Err(format!("another account has the address {new}")))
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
 /// Letters, digits, dashes, dots and underscores, as it goes into the address
 /// /u/<name>, starting with a letter or digit.
 pub fn check_username(name: &str) -> Result<(), String> {
@@ -531,7 +631,7 @@ pub fn check_slug(slug: &str) -> Result<(), String> {
              letters, digits and dashes"
         ));
     }
-    if matches!(slug, "artist" | "album" | "track" | "search") {
+    if matches!(slug, "artist" | "album" | "track" | "search" | "follow") {
         return Err(format!("\"{slug}\" is taken by the pages of a profile"));
     }
     Ok(())
@@ -615,6 +715,19 @@ async fn update_profile(
     }
     if let Some(visibility) = change.visibility {
         tracing::info!("{owner} made the profile {slug} {}", visibility.as_str());
+    }
+    // Everyone may see a public profile, so the open requests are answered.
+    if let Some(Visibility::Public) = change.visibility {
+        sqlx::query!(
+            "UPDATE follow f SET accepted_at = now()
+               FROM profile p
+              WHERE f.profile_id = p.id AND f.accepted_at IS NULL
+                AND p.account_id = $1 AND p.slug = $2::text::citext",
+            id,
+            slug,
+        )
+        .execute(&state.db)
+        .await?;
     }
     Ok(Json(own_profiles(&state.db, id).await?))
 }

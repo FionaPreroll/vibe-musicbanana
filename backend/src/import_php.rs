@@ -317,7 +317,9 @@ pub async fn write(db: &PgPool, data: &LegacyData) -> anyhow::Result<Report> {
                 continue;
             };
             let added = sqlx::query!(
-                "INSERT INTO follow (follower_id, profile_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                // The old friends were mutual consent already.
+                "INSERT INTO follow (follower_id, profile_id, accepted_at) VALUES ($1, $2, now())
+                 ON CONFLICT DO NOTHING",
                 account_of_user[&user.id],
                 profile_id,
             )

@@ -5,6 +5,7 @@
 		profilePath,
 		sendJson,
 		type Connection,
+		type Follower,
 		type Visibility
 	} from '#lib/api.ts';
 	import { connectionState } from '#lib/connections.ts';
@@ -125,6 +126,22 @@
 		return () => clearInterval(timer);
 	});
 
+	// Followers
+
+	const answer = (f: Follower, method: 'PUT' | 'DELETE') =>
+		change('followers', () =>
+			sendJson(
+				fetch,
+				method,
+				`/api/me/followers/${encodeURIComponent(f.profile)}/${encodeURIComponent(f.username)}`
+			)
+		);
+
+	function removeFollower(f: Follower) {
+		const what = f.state === 'requested' ? `Say no to ${f.username}?` : `Remove ${f.username}?`;
+		if (confirm(what)) answer(f, 'DELETE');
+	}
+
 	// User name
 
 	let username: string | null = $state(null);
@@ -136,6 +153,21 @@
 		if (await change('username', () => sendJson(fetch, 'PUT', '/api/me/username', { username }))) {
 			renamedFrom = old;
 			username = null;
+		}
+	}
+
+	// Email address
+
+	let email = $state({ address: null as string | null, password: '' });
+	let emailChanged = $state(false);
+
+	async function changeEmail(event: SubmitEvent) {
+		event.preventDefault();
+		emailChanged = false;
+		const body = { email: email.address, password: email.password };
+		if (await change('email', () => sendJson(fetch, 'PUT', '/api/me/email', body))) {
+			email = { address: null, password: '' };
+			emailChanged = true;
 		}
 	}
 
@@ -414,6 +446,44 @@
 	</section>
 
 	<section class="mt-12">
+		<h2 class={heading}>Followers</h2>
+		<p class="mb-3 text-sm text-stone-600">
+			Anybody logged in can follow a public profile. A profile for followers shows itself to those
+			you said yes to; removing someone hides it from them again.
+		</p>
+		{#if data.followers.length === 0}
+			<p class="text-sm text-stone-500">Nobody follows your profiles yet.</p>
+		{:else}
+			<ul class="divide-y divide-stone-200 text-sm">
+				{#each data.followers as f (`${f.profile}/${f.username}`)}
+					<li class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2">
+						<span>
+							<a class="font-medium hover:underline" href={profilePath(f.username)}>{f.username}</a>
+							<span class="text-stone-500">
+								{f.state === 'requested' ? 'asks to follow' : 'follows'}
+								<a class="hover:underline" href={profilePath(me.username, f.profile)}
+									>{profilePath(me.username, f.profile)}</a
+								>
+								{f.state === 'requested' ? 'since' : 'as of'}
+								{formatDateTime(f.since)}
+							</span>
+						</span>
+						<span class="flex gap-2">
+							{#if f.state === 'requested'}
+								<button class={button} onclick={() => answer(f, 'PUT')}>Say yes</button>
+								<button class={button} onclick={() => removeFollower(f)}>Say no</button>
+							{:else}
+								<button class={button} onclick={() => removeFollower(f)}>Remove</button>
+							{/if}
+						</span>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		{@render error('followers')}
+	</section>
+
+	<section class="mt-12">
 		<h2 class={heading}>User name</h2>
 		<p class="mb-3 text-sm text-stone-600">
 			It is in the address of your profiles and logs you in, as does your email address. Links with
@@ -440,6 +510,45 @@
 				<a class="underline" href={profilePath(me.username)}>{profilePath(me.username)}</a>.
 			</p>
 		{/if}
+	</section>
+
+	<section class="mt-12">
+		<h2 class={heading}>Email address</h2>
+		<p class="mb-3 text-sm text-stone-600">
+			It logs you in, as does your user name. musicbanana sends no mail, so it is not checked.
+		</p>
+		<form class="flex max-w-sm flex-col gap-3" onsubmit={changeEmail}>
+			<label class="flex flex-col gap-1 text-sm">
+				<span>New address</span>
+				<input
+					class={input}
+					type="email"
+					autocomplete="email"
+					required
+					maxlength="254"
+					value={email.address ?? me.email}
+					oninput={(e) => (email.address = e.currentTarget.value)}
+				/>
+			</label>
+			<label class="flex flex-col gap-1 text-sm">
+				<span>Your password</span>
+				<input
+					class={input}
+					type="password"
+					autocomplete="current-password"
+					required
+					bind:value={email.password}
+				/>
+			</label>
+			{@render error('email')}
+			{#if emailChanged}
+				<p class="text-sm text-green-800" role="status">Changed to {me.email}.</p>
+			{/if}
+			<button
+				class="{button} self-start"
+				disabled={email.address === null || email.address === me.email}>Change address</button
+			>
+		</form>
 	</section>
 
 	<section class="mt-12">

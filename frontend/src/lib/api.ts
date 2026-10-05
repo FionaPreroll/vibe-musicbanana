@@ -211,6 +211,36 @@ export function errorMessage(e: unknown) {
 	return message.charAt(0).toUpperCase() + message.slice(1);
 }
 
+/** Where the viewer stands with a profile they could follow. */
+export type FollowState = 'none' | 'requested' | 'following';
+
+export interface FollowInfo {
+	username: string;
+	slug: string;
+	name: string;
+	visibility: Visibility;
+	own: boolean;
+	state: FollowState;
+}
+
+/** A profile the viewer follows or asked to follow. */
+export interface Followed {
+	username: string;
+	slug: string;
+	name: string;
+	visibility: Visibility;
+	state: Exclude<FollowState, 'none'>;
+	since: string;
+}
+
+/** Somebody who follows one of the viewer's profiles, or asks to. */
+export interface Follower {
+	profile: string;
+	username: string;
+	state: Exclude<FollowState, 'none'>;
+	since: string;
+}
+
 export function profileApi(username: string, slug: string) {
 	return `/api/profiles/${encodeURIComponent(username)}/${encodeURIComponent(slug)}`;
 }

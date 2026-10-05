@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE follow f SET accepted_at = coalesce(f.accepted_at, now())\n           FROM profile p, account a\n          WHERE f.profile_id = p.id AND a.id = f.follower_id AND p.account_id = $1\n            AND p.slug = $2::text::citext AND a.username = $3::text::citext",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e690df244f3623fd0708040a43aa869d0bb2d56d07cd6b7039ddff0d0d36a961"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM follow f\n          USING profile p, account a\n          WHERE f.profile_id = p.id AND a.id = f.follower_id AND p.account_id = $1\n            AND p.slug = $2::text::citext AND a.username = $3::text::citext",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "441f9f8c426f8eca8778684ca97e2c72f7d31da28e175accc6d7a81dc532713a"
+}

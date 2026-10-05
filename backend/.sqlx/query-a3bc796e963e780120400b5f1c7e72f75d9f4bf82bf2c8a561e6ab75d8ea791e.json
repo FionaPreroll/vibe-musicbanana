@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO follow (follower_id, profile_id, accepted_at)\n             SELECT $1, p.id, CASE WHEN p.visibility = 'public' THEN now() END\n               FROM profile p\n               JOIN account a ON a.id = p.account_id\n              WHERE a.username = $2::text::citext AND p.slug = $3::text::citext\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a3bc796e963e780120400b5f1c7e72f75d9f4bf82bf2c8a561e6ab75d8ea791e"
+}

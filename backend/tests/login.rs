@@ -207,12 +207,21 @@ async fn a_private_profile_is_there_for_its_owner_only(db: PgPool) {
         ["alex/default", "Fiona/arbeit", "Fiona/default"]
     );
 
-    // For followers: alex follows the profile, nobody else sees it.
+    // For followers: alex follows the profile, nobody else sees it; a request
+    // without Fiona's yes shows nothing.
     sqlx::query("UPDATE profile SET visibility = 'followers' WHERE id = 2")
         .execute(&db)
         .await
         .unwrap();
     sqlx::query("INSERT INTO follow (follower_id, profile_id) VALUES (2, 2)")
+        .execute(&db)
+        .await
+        .unwrap();
+    assert_eq!(
+        get(&app, arbeit, Some(&alex)).await.status,
+        StatusCode::NOT_FOUND
+    );
+    sqlx::query("UPDATE follow SET accepted_at = now()")
         .execute(&db)
         .await
         .unwrap();
@@ -476,4 +485,66 @@ async fn renaming_keeps_the_old_links(db: PgPool) {
         get(&app, "/api/renamed/Fiona/default", None).await.status,
         StatusCode::NOT_FOUND
     );
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn changing_the_email_address(db: PgPool) {
+    set_password(&db, 1, "banana-split").await;
+    let app = app(db.clone());
+    let fiona = log_in(&app, "fiona", "banana-split").await;
+    let alex_email: String = sqlx::query_scalar("SELECT email::text FROM account WHERE id = 2")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    let change = |email: &str, password: &str| {
+        let app = app.clone();
+        let cookie = fiona.clone();
+        let body = json!({ "email": email, "password": password });
+        async move {
+            call(
+                &app,
+                Method::PUT,
+                "/api/me/email",
+                Some(&cookie),
+                Some(body),
+            )
+            .await
+        }
+    };
+
+    // Without the right password, without an address, with another account's.
+    let reply = change("fiona@example.org", "not-it").await;
+    assert_eq!(reply.status, StatusCode::FORBIDDEN);
+    for (email, refusal) in [
+        ("fiona", "does not look like"),
+        ("fi ona@example.org", "does not look like"),
+        (&alex_email.to_uppercase(), "another account"),
+    ] {
+        let reply = change(email, "banana-split").await;
+        assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{email}");
+        assert!(
+            reply.body.as_str().unwrap().contains(refusal),
+            "{}",
+            reply.body
+        );
+    }
+
+    let reply = change(" fiona@example.org ", "banana-split").await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+    assert_eq!(reply.body["email"], "fiona@example.org");
+    assert_eq!(
+        get(&app, "/api/me", Some(&fiona)).await.body["email"],
+        "fiona@example.org"
+    );
+    // The new address logs in; anonymous requests change nothing.
+    log_in(&app, "Fiona@Example.org", "banana-split").await;
+    let reply = call(
+        &app,
+        Method::PUT,
+        "/api/me/email",
+        None,
+        Some(json!({"email": "x@example.org", "password": "banana-split"})),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
 }
