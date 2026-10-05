@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH renamed AS (UPDATE recording SET title = $3 WHERE id = $2)\n                                 INSERT INTO recording_alias (artist_id, title_key, recording_id)\n                                 VALUES ($1, $4, $2) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cdab8b29da47fb0b3d8a0462798692aaaaac2c97cbfa79bcf4a85557ed78d564"
+}
