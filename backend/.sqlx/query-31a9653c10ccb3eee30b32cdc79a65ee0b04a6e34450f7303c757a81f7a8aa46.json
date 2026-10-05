@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH bounds AS (\n               SELECT $2::date::timestamp AT TIME ZONE $3 AS lo,\n                      least(now(), ($4::date + 1)::timestamp AT TIME ZONE $3) AS cut,\n                      ($2::date - 7)::timestamp AT TIME ZONE $3 AS last_lo\n           ), heard AS (\n               SELECT l.artist_id, count(*) AS listens\n                 FROM bounds b, listen l\n                WHERE l.profile_id = $1 AND l.listened_at >= b.lo AND l.listened_at < b.cut\n                  AND ($5::text IS NULL OR listen_source(l.client) = $5)\n                GROUP BY 1\n                ORDER BY 2 DESC\n           )\n           SELECT a.id, a.name, h.listens AS \"listens!\",\n                  (SELECT count(*) FROM listen l\n                    WHERE l.profile_id = $1 AND l.artist_id = a.id\n                      AND l.listened_at >= b.last_lo AND l.listened_at < b.lo\n                      AND ($5::text IS NULL OR listen_source(l.client) = $5)) AS \"last_week!\",\n                  NOT EXISTS (SELECT FROM listen l\n                               WHERE l.profile_id = $1 AND l.artist_id = a.id\n                                 AND l.listened_at < b.lo\n                                 AND ($5::text IS NULL OR listen_source(l.client) = $5)) AS \"new!\"\n             FROM bounds b, heard h\n             JOIN artist a ON a.id = h.artist_id\n            ORDER BY h.listens DESC, a.name\n            LIMIT 5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_week!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "new!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Date",
+        "Text",
+        "Date",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "31a9653c10ccb3eee30b32cdc79a65ee0b04a6e34450f7303c757a81f7a8aa46"
+}

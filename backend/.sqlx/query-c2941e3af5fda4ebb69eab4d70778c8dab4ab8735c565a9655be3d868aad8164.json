@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH bounds AS (\n               SELECT lo, cut, last_lo,\n                      ((cut AT TIME ZONE $3) - interval '7 days') AT TIME ZONE $3 AS last_cut\n                 FROM (SELECT $2::date::timestamp AT TIME ZONE $3 AS lo,\n                              least(now(), ($4::date + 1)::timestamp AT TIME ZONE $3) AS cut,\n                              ($2::date - 7)::timestamp AT TIME ZONE $3 AS last_lo) b\n           )\n           SELECT (l.listened_at AT TIME ZONE $3)::date AS \"date!\", count(*) AS \"listens!\",\n                  count(*) FILTER (WHERE l.listened_at < b.last_cut) AS \"so_far!\"\n             FROM bounds b, listen l\n            WHERE l.profile_id = $1 AND l.listened_at >= b.last_lo\n              AND l.listened_at < b.cut\n              AND ($5::text IS NULL OR listen_source(l.client) = $5)\n            GROUP BY 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "date!",
+        "type_info": "Date",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "so_far!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Date",
+        "Text",
+        "Date",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "c2941e3af5fda4ebb69eab4d70778c8dab4ab8735c565a9655be3d868aad8164"
+}

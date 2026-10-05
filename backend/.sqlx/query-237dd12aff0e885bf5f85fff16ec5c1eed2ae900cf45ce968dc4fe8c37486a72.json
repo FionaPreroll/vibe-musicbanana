@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH days AS (\n               SELECT DISTINCT (listened_at AT TIME ZONE $2)::date AS d\n                 FROM listen\n                WHERE profile_id = $1\n                  AND listened_at < least(now(), ($3::date + 1)::timestamp AT TIME ZONE $2)\n                  AND ($4::text IS NULL OR listen_source(client) = $4)\n           ), runs AS (\n               SELECT min(d) AS first, max(d) AS last, count(*) AS days\n                 FROM (SELECT d, d - row_number() OVER (ORDER BY d)::int AS run FROM days) r\n                GROUP BY run\n           )\n           (SELECT 'longest' AS \"kind!\", first AS \"first!\", last AS \"last!\", days AS \"days!\"\n              FROM runs ORDER BY days DESC, last DESC LIMIT 1)\n           UNION ALL\n           (SELECT 'latest', first, last, days FROM runs ORDER BY last DESC LIMIT 1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "first!",
+        "type_info": "Date",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "last!",
+        "type_info": "Date",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "days!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Date",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "237dd12aff0e885bf5f85fff16ec5c1eed2ae900cf45ce968dc4fe8c37486a72"
+}

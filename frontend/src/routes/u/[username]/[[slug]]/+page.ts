@@ -12,7 +12,8 @@ import {
 	type ListensPage,
 	type NowPlaying,
 	type Overview,
-	type Source
+	type Source,
+	type Week
 } from '#lib/api.ts';
 import { parsePeriod, periodEnd, periodQuery } from '#lib/period.ts';
 import { sourceOf } from '#lib/source.ts';
@@ -21,6 +22,7 @@ import type { PageLoad } from './$types';
 // /u/<username> is the default profile, /u/<username>/<slug> any other one.
 // A period in the query (see period.ts) narrows the charts to it and starts the
 // listens at its end; a source (see source.ts) narrows everything to its listens.
+// Without a period the page starts with the current week at a glance.
 export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const api = profileApi(params.username, params.slug ?? 'default');
 	const period = parsePeriod(url.searchParams);
@@ -31,7 +33,7 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const chart = (kind: ChartKind) => getJson<ChartEntry[]>(fetch, `${api}/top/${kind}`, query);
 
 	try {
-		const [overview, artists, releases, recordings, recent, nowPlaying, sources] =
+		const [overview, artists, releases, recordings, recent, nowPlaying, sources, week] =
 			await Promise.all([
 				getJson<Overview>(fetch, api, { tz: timeZone, source }),
 				chart('artists'),
@@ -43,7 +45,11 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 					source
 				}),
 				getJson<NowPlaying | null>(fetch, `${api}/now-playing`),
-				getJson<Source[]>(fetch, `${api}/sources`)
+				getJson<Source[]>(fetch, `${api}/sources`),
+				// The page works without it.
+				period.kind === 'all'
+					? getJson<Week>(fetch, `${api}/week`, { tz: timeZone, source }).catch(() => null)
+					: null
 			]);
 		const base = profilePath(params.username, params.slug);
 		// Whether the viewer follows it, for the button next to the name.
@@ -61,7 +67,8 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 			releases,
 			recordings,
 			recent,
-			nowPlaying
+			nowPlaying,
+			week
 		};
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) {
