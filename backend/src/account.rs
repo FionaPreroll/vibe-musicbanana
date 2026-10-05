@@ -424,7 +424,10 @@ async fn change_username(
     Json(change): Json<UsernameChange>,
 ) -> Result<Json<Renamed>, AppError> {
     match rename(&state.db, id, &change.username).await? {
-        Ok((_, username)) => Ok(Json(Renamed { username })),
+        Ok((old, username)) => {
+            tracing::info!("{old} renamed the account to {username}");
+            Ok(Json(Renamed { username }))
+        }
         Err(refusal) => Err(AppError::BadRequest(refusal)),
     }
 }

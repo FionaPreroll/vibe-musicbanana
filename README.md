@@ -291,7 +291,7 @@ Environment: `DATABASE_URL` (required), `LISTEN_ADDR` (default `127.0.0.1:3000`)
 The server logs to standard output (`docker compose logs -f musicbanana`). Besides start-up and errors:
 
 - `musicbanana::access`: one line per request, with the client (the first `X-Forwarded-For` address behind a reverse proxy), method, path with query, status and milliseconds, e.g. `192.168.1.20 POST /api/me/profiles 201 12 ms`. Health checks and the frontend's files are left out. `ACCESS_LOG=off` switches it off.
-- `musicbanana::account`: logins (failed ones as warnings, with the name tried), logouts and every change in the settings: profiles, scrobble tokens, YourSpotify connections (never their token) and passwords.
+- `musicbanana::account`: logins (failed ones as warnings, with the name tried), logouts and every change in the settings: profiles, scrobble tokens, YourSpotify connections (never their token), user name and password.
 - `musicbanana::connections`: each round of a YourSpotify connection, when it starts and what it brought, or why it failed; the import's progress comes from `musicbanana::yourspotify`.
 
 `RUST_LOG` picks what is logged, by target and level (default `musicbanana=info,tower_http=info`): `RUST_LOG=musicbanana=info,musicbanana::account=warn` keeps only failed logins of the settings, `RUST_LOG=musicbanana=debug` logs more, and `musicbanana::access=off` is the same as `ACCESS_LOG=off`.
