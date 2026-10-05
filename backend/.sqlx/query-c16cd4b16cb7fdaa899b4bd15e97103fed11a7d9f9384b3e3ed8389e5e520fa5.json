@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM listen_trash WHERE profile_id = $1 AND ($2::int8[] IS NULL OR id = ANY($2))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c16cd4b16cb7fdaa899b4bd15e97103fed11a7d9f9384b3e3ed8389e5e520fa5"
+}

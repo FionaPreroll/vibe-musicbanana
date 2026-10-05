@@ -18,7 +18,7 @@ Stand 2026-10-03. Das Schema ist die erste Migration: [backend/migrations/0001_i
 | Katalog | `artist`, `release` (Album), `recording` (Stück) | Nach MusicBrainz-Vorbild. Ein Stück hängt am Artist, nicht am Album. Merge über `merged_into` statt `obsolete`. |
 | Zuordnung | `artist_alias`, `release_alias`, `recording_alias`; `artist_mbid`, `release_mbid`, `recording_mbid` | Normalisierter Rohstring → Katalog-Eintrag, ebenso MusicBrainz-ID → Eintrag. Ein Merge biegt beides um, damit auch künftige Scrobbles mit alter Schreibweise oder ID richtig landen. |
 | Merge-Protokoll | `merge_op`, `merge_change` | Jeder Merge schreibt per Trigger jede geänderte Zeile (Schlüssel, alte und neue Werte) mit; `undo_merge()` spielt sie rückwärts zurück, nur wo die Zeile seitdem unverändert ist. |
-| Scrobbles | `listen`, `now_playing` | Rohdaten unveränderlich, Katalog-FKs änderbar. Index `(profile_id, listened_at DESC)` deckt Charts und "zuletzt gehört" ab. |
+| Scrobbles | `listen`, `now_playing`, `listen_trash` | Rohdaten unveränderlich, Katalog-FKs änderbar. Index `(profile_id, listened_at DESC)` deckt Charts und "zuletzt gehört" ab. Vom Besitzer gelöschte Listens liegen mit ihrer id in `listen_trash`, bis er sie zurückholt oder endgültig löscht; alle anderen Abfragen lesen nur `listen`. |
 
 Charts (Woche, Monat, Jahr, gesamt; Artist/Album/Track) werden direkt per `GROUP BY` auf `listen` berechnet. Bei einigen hunderttausend Listens pro Profil reicht das mit dem Index. Eine vorberechnete Tagestabelle kommt erst dazu, wenn es messbar langsam wird.
 ## Entschieden

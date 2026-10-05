@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH back AS (\n             INSERT INTO listen (id, profile_id, listened_at, artist_raw, track_raw, album_raw,\n                                 album_artist_raw, track_number, duration_ms, client, extra,\n                                 artist_id, recording_id, release_id, submitted_at)\n             OVERRIDING SYSTEM VALUE\n             SELECT t.id, t.profile_id, t.listened_at, t.artist_raw, t.track_raw, t.album_raw,\n                    t.album_artist_raw, t.track_number, t.duration_ms, t.client, t.extra,\n                    coalesce(a.merged_into, a.id), coalesce(r.merged_into, r.id),\n                    coalesce(rel.merged_into, rel.id), t.submitted_at\n               FROM listen_trash t\n               JOIN artist a ON a.id = t.artist_id\n               JOIN recording r ON r.id = t.recording_id\n               LEFT JOIN release rel ON rel.id = t.release_id\n              WHERE t.profile_id = $1 AND ($2::int8[] IS NULL OR t.id = ANY($2))\n             ON CONFLICT DO NOTHING\n             RETURNING id)\n           DELETE FROM listen_trash WHERE id IN (SELECT id FROM back) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "listen_trash",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8Array"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f47879dc3995c76c3b08d3f167bc203dee4cf11c65a2206fb58e17f188fd0ef8"
+}

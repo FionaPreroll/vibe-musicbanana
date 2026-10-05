@@ -5,6 +5,7 @@ pub mod connections;
 pub mod edit;
 mod entities;
 mod follows;
+mod history;
 pub mod import_php;
 mod listenbrainz;
 pub mod merge;
@@ -108,6 +109,7 @@ fn api() -> Router<AppState> {
         .merge(account::routes())
         .merge(profiles::routes())
         .merge(follows::routes())
+        .merge(history::routes())
         .merge(entities::routes())
         .merge(search::routes())
         .merge(status::routes())

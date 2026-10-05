@@ -226,6 +226,10 @@
 							>{profilePath(me.username, profile.slug)}</a
 						>
 						<span class="text-sm text-stone-500 tabular-nums">{listenCount(profile.listens)}</span>
+						<a
+							class="text-sm text-stone-600 underline hover:text-stone-900"
+							href="/settings/history/{encodeURIComponent(profile.slug)}">Edit listening history</a
+						>
 						<select
 							class="{select} ml-auto text-sm"
 							aria-label="Who sees {profile.name}"

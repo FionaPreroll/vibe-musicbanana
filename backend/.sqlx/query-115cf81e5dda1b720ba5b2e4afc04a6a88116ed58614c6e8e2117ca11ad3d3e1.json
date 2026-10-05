@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH t AS (\n             SELECT t.*,\n                    make_interval(secs => LEAST(COALESCE(t.duration_ms, r.length_ms, 30000) / 2000.0,\n                                                240)::float8) AS gap,\n                    lag(t.listened_at) OVER (PARTITION BY t.recording_id\n                                             ORDER BY t.listened_at) AS previous\n               FROM UNNEST($2::timestamptz[], $3::text[], $4::text[], $5::text[], $6::int2[],\n                           $7::int4[], $8::text[], $9::text[], $10::int8[], $11::int8[], $12::int8[])\n                 AS t(listened_at, artist_raw, track_raw, album_raw, track_number,\n                      duration_ms, client, extra, artist_id, recording_id, release_id)\n               JOIN recording r ON r.id = t.recording_id)\n         INSERT INTO listen (profile_id, listened_at, artist_raw, track_raw, album_raw,\n                             track_number, duration_ms, client, extra,\n                             artist_id, recording_id, release_id)\n         SELECT $1, t.listened_at, t.artist_raw, t.track_raw, t.album_raw,\n                t.track_number, t.duration_ms, t.client, t.extra::jsonb,\n                t.artist_id, t.recording_id, t.release_id\n           FROM t\n          WHERE (t.previous IS NULL OR t.listened_at - t.previous >= t.gap)\n            AND NOT EXISTS (SELECT FROM listen o\n                             WHERE o.profile_id = $1\n                               AND o.recording_id = t.recording_id\n                               AND o.listened_at > t.listened_at - t.gap\n                               AND o.listened_at < t.listened_at + t.gap)\n            -- Taken out by the owner: a resubmission or another import stays out.\n            AND NOT EXISTS (SELECT FROM listen_trash d\n                             WHERE d.profile_id = $1 AND d.listened_at = t.listened_at)\n         ON CONFLICT (profile_id, listened_at) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "TimestamptzArray",
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "Int2Array",
+        "Int4Array",
+        "TextArray",
+        "TextArray",
+        "Int8Array",
+        "Int8Array",
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "115cf81e5dda1b720ba5b2e4afc04a6a88116ed58614c6e8e2117ca11ad3d3e1"
+}

@@ -31,7 +31,8 @@ pub struct Listen {
 /// needs to count a play: half the track, at most four minutes, or 15 seconds
 /// when the length is unknown. Nobody plays a track twice in less time than that,
 /// so such a pair comes from two scrobblers or a client that sent a play twice.
-/// The same holds between listens of one batch.
+/// The same holds between listens of one batch. Listens the owner moved to the
+/// trash are not taken again either.
 pub async fn record(db: &PgPool, profile_id: i64, listens: &[Listen]) -> sqlx::Result<u64> {
     let mut catalog = Resolver::new(db);
     let mut artist_ids = Vec::with_capacity(listens.len());
@@ -98,6 +99,9 @@ pub async fn record(db: &PgPool, profile_id: i64, listens: &[Listen]) -> sqlx::R
                                AND o.recording_id = t.recording_id
                                AND o.listened_at > t.listened_at - t.gap
                                AND o.listened_at < t.listened_at + t.gap)
+            -- Taken out by the owner: a resubmission or another import stays out.
+            AND NOT EXISTS (SELECT FROM listen_trash d
+                             WHERE d.profile_id = $1 AND d.listened_at = t.listened_at)
          ON CONFLICT (profile_id, listened_at) DO NOTHING",
         profile_id,
         &listened_at,
