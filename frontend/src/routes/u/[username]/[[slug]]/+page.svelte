@@ -15,6 +15,7 @@
 	import PeriodPicker from '#lib/components/PeriodPicker.svelte';
 	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import VisibilityBadge from '#lib/components/VisibilityBadge.svelte';
+	import WeekGlance from '#lib/components/WeekGlance.svelte';
 	import { formatDate, formatDateTime, listenCount } from '#lib/format.ts';
 	import { parseDay, periodEnd, type Period } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
@@ -40,6 +41,13 @@
 	const entryHref = (kind: EntityKind, id: number, name: string) =>
 		entityPath(data.base, kind, id, name) + withSource('', data.source);
 	const link = (kind: EntityKind) => (entry: ChartEntry) => entryHref(kind, entry.id, entry.name);
+
+	// A profile nobody listened to lately keeps its page as it was.
+	const week = $derived(
+		data.week && (data.week.listens || data.week.last_week || data.week.streak.current)
+			? data.week
+			: null
+	);
 
 	// The top artists of every year don't depend on the period, so they load once per
 	// profile and after the rest of the page. (`data` is new after every navigation,
@@ -156,6 +164,10 @@
 			</p>
 		{/if}
 	</header>
+
+	{#if week}
+		<WeekGlance {week} artistHref={(id, name) => entryHref('artist', id, name)} />
+	{/if}
 
 	<PeriodPicker
 		period={data.period}

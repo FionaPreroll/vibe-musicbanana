@@ -27,6 +27,29 @@ export type Overview = {
 	years: { year: number; listens: number }[];
 };
 
+/** The week at a glance, Monday to Sunday in the viewer's time zone (days as 2026-10-05). */
+export type Week = {
+	from: string;
+	to: string;
+	/** Today, or the day the week was asked for; later days have no listens yet. */
+	day: string;
+	days: { date: string; listens: number; last_week: number }[];
+	listens: number;
+	/** The week before up to the same weekday and time. */
+	last_week_so_far: number;
+	last_week: number;
+	artists: { id: number; name: string; listens: number; last_week: number; new: boolean }[];
+	/** Artists of the week never heard before it. */
+	new_artists: number;
+	streak: {
+		current: number;
+		current_from: string | null;
+		longest: number;
+		longest_from: string | null;
+		longest_to: string | null;
+	};
+};
+
 export type ChartKind = 'artists' | 'releases' | 'recordings';
 
 /** `artist` is set for releases and recordings. */
