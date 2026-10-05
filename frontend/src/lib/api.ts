@@ -1,12 +1,24 @@
-// Types and a small fetch helper for the backend's JSON API (backend/src/profiles.rs and
-// backend/src/entities.rs).
+// Types and small fetch helpers for the backend's JSON API (backend/src/profiles.rs,
+// backend/src/entities.rs and backend/src/account.rs).
 
-export type ProfileSummary = { username: string; slug: string; name: string; listens: number };
+/** Who sees a profile: everybody, its owner and the accounts following it, or its owner only. */
+export type Visibility = 'public' | 'followers' | 'private';
+
+export type ProfileSummary = {
+	username: string;
+	slug: string;
+	name: string;
+	visibility: Visibility;
+	listens: number;
+};
 
 export type Overview = {
 	username: string;
 	slug: string;
 	name: string;
+	visibility: Visibility;
+	/** Whether it belongs to the logged-in account. */
+	own: boolean;
 	listens: number;
 	first_listened_at: string | null;
 	last_listened_at: string | null;
@@ -76,6 +88,20 @@ export type NowPlaying = {
 	duration_ms: number | null;
 };
 
+/** The logged-in account, with its profiles (the default one first). */
+export type Me = { username: string; email: string; profiles: OwnProfile[] };
+
+export type OwnProfile = { slug: string; name: string; visibility: Visibility; listens: number };
+
+/** A scrobble token; the token itself is only shown once, when it is made. */
+export type ApiToken = {
+	id: number;
+	profile: string;
+	label: string;
+	created_at: string;
+	last_used_at: string | null;
+};
+
 export class ApiError extends Error {
 	status: number;
 
@@ -99,6 +125,28 @@ export async function getJson<T>(
 	const res = await fetch(query.size ? `${path}?${query}` : path);
 	if (!res.ok) throw new ApiError(res.status, (await res.text()) || res.statusText);
 	return res.json();
+}
+
+/** Sends JSON to the API and returns the JSON answer, or `null` for an empty one. */
+export async function sendJson<T = null>(
+	fetch: typeof globalThis.fetch,
+	method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+	path: string,
+	body?: unknown
+): Promise<T> {
+	const res = await fetch(path, {
+		method,
+		headers: body === undefined ? {} : { 'content-type': 'application/json' },
+		body: body === undefined ? undefined : JSON.stringify(body)
+	});
+	if (!res.ok) throw new ApiError(res.status, (await res.text()) || res.statusText);
+	return res.status === 204 ? (null as T) : res.json();
+}
+
+/** A message for the person in front of the screen, for any error. */
+export function errorMessage(e: unknown) {
+	const message = e instanceof Error ? e.message : String(e);
+	return message.charAt(0).toUpperCase() + message.slice(1);
 }
 
 export function profileApi(username: string, slug: string) {

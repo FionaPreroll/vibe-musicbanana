@@ -14,7 +14,7 @@ Stand 2026-10-03. Das Schema ist die erste Migration: [backend/migrations/0001_i
 
 | Bereich | Tabellen | Idee |
 |---|---|---|
-| Konten | `account`, `profile`, `api_token`, `follow` | Mehrere Profile pro Konto bleiben. Sichtbarkeit public/followers/private. Pro Scrobble-Client ein eigenes Token. Gerichtetes Folgen statt "friends". |
+| Konten | `account`, `profile`, `api_token`, `follow`, `session` | Mehrere Profile pro Konto bleiben. Sichtbarkeit public/followers/private. Pro Scrobble-Client ein eigenes Token. Gerichtetes Folgen statt "friends". Browser-Logins als `session` (SHA-256 des Cookie-Tokens, 30 Tage ab dem letzten Besuch). |
 | Katalog | `artist`, `release` (Album), `recording` (Stück) | Nach MusicBrainz-Vorbild. Ein Stück hängt am Artist, nicht am Album. Merge über `merged_into` statt `obsolete`. |
 | Zuordnung | `artist_alias`, `release_alias`, `recording_alias`; `artist_mbid`, `release_mbid`, `recording_mbid` | Normalisierter Rohstring → Katalog-Eintrag, ebenso MusicBrainz-ID → Eintrag. Ein Merge biegt beides um, damit auch künftige Scrobbles mit alter Schreibweise oder ID richtig landen. |
 | Scrobbles | `listen`, `now_playing` | Rohdaten unveränderlich, Katalog-FKs änderbar. Index `(profile_id, listened_at DESC)` deckt Charts und "zuletzt gehört" ab. |

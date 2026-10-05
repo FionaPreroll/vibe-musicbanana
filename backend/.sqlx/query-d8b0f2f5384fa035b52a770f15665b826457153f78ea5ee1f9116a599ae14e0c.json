@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT p.id, a.username::text AS \"username!\", p.slug::text AS \"slug!\", p.name\n             FROM profile p\n             JOIN account a ON a.id = p.account_id\n            WHERE a.username = $1::text::citext\n              AND p.slug = $2::text::citext\n              AND p.visibility = 'public'",
+  "query": "SELECT id, username::text AS \"username!\", password_hash, password_legacy_md5\n             FROM account\n            WHERE username = $1::text::citext OR email = $1::text::citext",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Int8",
         "origin": {
           "Table": {
-            "table": "profile",
+            "table": "account",
             "name": "id"
           }
         }
@@ -22,34 +22,38 @@
       },
       {
         "ordinal": 2,
-        "name": "slug!",
-        "type_info": "Text",
-        "origin": "Expression"
-      },
-      {
-        "ordinal": 3,
-        "name": "name",
+        "name": "password_hash",
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "profile",
-            "name": "name"
+            "table": "account",
+            "name": "password_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "password_legacy_md5",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "password_legacy_md5"
           }
         }
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
         "Text"
       ]
     },
     "nullable": [
       false,
       null,
-      null,
+      false,
       false
     ]
   },
-  "hash": "c9965af99c9e93a9038c4e69d1ef824f41b8348f855739719689412ffd3d88f9"
+  "hash": "d8b0f2f5384fa035b52a770f15665b826457153f78ea5ee1f9116a599ae14e0c"
 }

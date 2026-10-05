@@ -1,3 +1,4 @@
+pub mod account;
 pub mod auth;
 pub mod catalog;
 pub mod edit;
@@ -46,6 +47,7 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
 fn api() -> Router<AppState> {
     Router::new()
         .route("/health", get(health))
+        .merge(account::routes())
         .merge(profiles::routes())
         .merge(entities::routes())
         .nest("/listenbrainz/1", listenbrainz::routes())
@@ -72,6 +74,8 @@ async fn health(State(state): State<AppState>) -> Result<Json<Health>, AppError>
 pub enum AppError {
     NotFound,
     BadRequest(String),
+    /// Any other refusal, with its reason.
+    Status(StatusCode, String),
     Internal(anyhow::Error),
 }
 
@@ -80,6 +84,7 @@ impl IntoResponse for AppError {
         match self {
             Self::NotFound => StatusCode::NOT_FOUND.into_response(),
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message).into_response(),
+            Self::Status(status, message) => (status, message).into_response(),
             Self::Internal(err) => {
                 tracing::error!("{err:#}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()

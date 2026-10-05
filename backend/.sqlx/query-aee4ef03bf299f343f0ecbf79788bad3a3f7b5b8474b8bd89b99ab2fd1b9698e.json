@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE api_token SET revoked_at = now()\n          WHERE id = $1 AND revoked_at IS NULL\n            AND profile_id IN (SELECT id FROM profile WHERE account_id = $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aee4ef03bf299f343f0ecbf79788bad3a3f7b5b8474b8bd89b99ab2fd1b9698e"
+}

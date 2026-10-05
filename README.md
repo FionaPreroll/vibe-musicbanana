@@ -48,17 +48,32 @@ cd frontend && pnpm lint && pnpm check && pnpm build
 
 | Page | Data from |
 |---|---|
-| `/` lists the public profiles | `GET /api/profiles` |
+| `/` lists the profiles the viewer may see | `GET /api/profiles` |
 | `/u/<username>` (default profile) or `/u/<username>/<slug>`: listens per year, top artists, albums and tracks, the top artists of each year, recent listens, what is playing now; `?days=30` (also 7, 90, 365), `?year=2012` or `?from=2009-06-01&to=2009-08-31` narrows the top lists and listens to that period | `GET /api/profiles/<username>/<slug>?tz=`, `…/top/{artists,releases,recordings}?year=&from=&to=&tz=&limit=`, `…/top/artists/years?tz=&limit=`, `…/listens?before=&limit=`, `…/now-playing` |
 | `/u/<username>/artist/<id>`, `…/album/<id>` and `…/track/<id>` (after the slug for other profiles): listens per month, first and last listen, phases of heavy listening, the albums and tracks heard | `GET /api/profiles/<username>/<slug>/{artists,releases,recordings}/<id>?tz=` |
+| `/login` | `POST /api/session` (`{"login", "password"}`), `DELETE /api/session` logs out |
+| `/settings`: the account's profiles (create, rename, who sees them), scrobble tokens (create, revoke) and password | `GET /api/me`, `POST /api/me/profiles`, `PATCH /api/me/profiles/<slug>`, `GET`/`POST /api/me/tokens`, `DELETE /api/me/tokens/<id>`, `PUT /api/me/password` |
 
-Only public profiles are served until there is a login. Years and days start at midnight in `tz` (an IANA name such as `Europe/Berlin`, UTC by default); the frontend sends the browser's time zone. `from` and `to` are the first and last day of a period, both included, and either can be left out; `year=2012` is short for the whole year. `listens` pages backwards: pass a page's `next` as `before`. `now-playing` is `null` when nothing plays; the open page asks again every 30 seconds and adds new listens on top. The months of an artist, album or track run from the profile's first listen to its last, leaving out a year or more without any listens (shown as a break); an entry that was merged into another one answers with that one.
+A profile is public, for followers (its owner and the accounts following it) or private (its owner only); to anybody else it does not exist (404), in the list and on every page and API route below it. Years and days start at midnight in `tz` (an IANA name such as `Europe/Berlin`, UTC by default); the frontend sends the browser's time zone. `from` and `to` are the first and last day of a period, both included, and either can be left out; `year=2012` is short for the whole year. `listens` pages backwards: pass a page's `next` as `before`. `now-playing` is `null` when nothing plays; the open page asks again every 30 seconds and adds new listens on top. The months of an artist, album or track run from the profile's first listen to its last, leaving out a year or more without any listens (shown as a break); an entry that was merged into another one answers with that one.
+
+## Accounts and logging in
+
+The accounts of the old musicbanana log in with their old passwords; the first login replaces the old MD5 hash with a proper one. New accounts, and new passwords for forgotten ones, come from the command line (the binary is `musicbanana`, or `cargo run --release --` in `backend/`):
+
+```sh
+musicbanana account create <username> --email <address>   # asks for the password, with a default profile
+musicbanana account password <username>                     # asks for the new password
+```
+
+Both read the password from standard input when that is not a terminal, e.g. `echo "$PASSWORD" | musicbanana account password fiona`. Passwords need at least 8 characters.
+
+A login lasts 30 days after the last visit. Changing the password logs out the account's other browsers. After 10 wrong passwords for a name within 15 minutes, that name is refused for the rest of the 15 minutes. The login cookie is `HttpOnly` and `SameSite=Lax`, and `Secure` when a reverse proxy in front sends `X-Forwarded-Proto: https`, which Caddy, Traefik and nginx (with `proxy_set_header X-Forwarded-Proto $scheme`) do. Requests that change something only take JSON, so other sites can't send them with the cookie.
 
 ## Scrobbling
 
 musicbanana speaks the part of the [ListenBrainz API](https://listenbrainz.readthedocs.io/en/latest/users/api/core.html) that players use to scrobble, under `/api/listenbrainz/1/`: `POST submit-listens` (`single`, `import` and `playing_now`) and `GET validate-token`. Limits, checks and error responses follow listenbrainz-server. A listen keeps the strings and extra data (`additional_info`) exactly as sent and is matched to the catalog through the alias tables; unknown artists, albums and tracks are created. A second listen at the same second is skipped, so clients can safely resend. So is a listen of the same track that follows another one sooner than a player counts a play (half the track, at most four minutes, 15 seconds when the length is unknown): nobody plays a track twice that fast, so it comes from a second scrobbler or a play sent twice.
 
-Every client gets its own token, which belongs to one profile. Tokens are created on the command line for now (the binary is `musicbanana`, or `cargo run --release --` in `backend/`):
+Every client gets its own token, which belongs to one profile. Tokens are created on the settings page, or on the command line:
 
 ```sh
 musicbanana token create --user <username> --label Navidrome                    # prints the token, only this once
@@ -175,11 +190,13 @@ docker compose up -d
 
 The image is private like the repository, hence the login; once the package is public (GitHub, package settings, "Change visibility"), pulling needs none, and the code stays private. An image that could not be pulled is built from the checkout instead, which takes a while (a Rust release build); `docker compose up -d --build` always builds.
 
-Afterwards the web interface is at `http://<server>:3000`; `MUSICBANANA_PORT` in `.env` changes the port. Commands of the binary run inside the container, for example the token for Navidrome:
+Afterwards the web interface is at `http://<server>:3000`; `MUSICBANANA_PORT` in `.env` changes the port. Commands of the binary run inside the container, for example a new account (`-it` so that it can ask for the password):
 
 ```sh
-docker compose exec musicbanana musicbanana token create --user <username> --label Navidrome
+docker compose exec -it musicbanana musicbanana account create <username> --email <address>
 ```
+
+After logging in, the settings page makes the token for Navidrome.
 
 Navidrome needs the address under which its container reaches musicbanana, as `ND_LISTENBRAINZ_BASEURL` in its environment:
 

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO profile (account_id, slug, name) VALUES ($1, 'default', 'Default')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "385c2a7d5438cc5b88a873351b12cf980af59cf07bcaae638d78776a527acfdf"
+}

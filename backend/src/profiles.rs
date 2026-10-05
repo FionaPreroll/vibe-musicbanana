@@ -1,8 +1,9 @@
 //! Read-only API behind the public profile pages: overview, charts for any period,
 //! the top artists of each year, recent listens and what is playing right now.
 //!
-//! Only public profiles are served; a private one answers 404 like an unknown one
-//! until there is a login.
+//! A public profile is there for everyone, one for followers to its owner and the
+//! accounts following it, a private one to its owner only. To anyone else such a
+//! profile answers 404, like an unknown one.
 
 use axum::{
     Json, Router,
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use time::{Date, Month, OffsetDateTime};
 
-use crate::{AppError, AppState};
+use crate::{AppError, AppState, account::Viewer};
 
 // Days in query parameters, e.g. ?from=2009-06-01.
 time::serde::format_description!(day, Date, "[year]-[month]-[day]");
@@ -36,18 +37,28 @@ struct ProfileSummary {
     username: String,
     slug: String,
     name: String,
+    visibility: String,
     listens: i64,
 }
 
-async fn list(State(state): State<AppState>) -> Result<Json<Vec<ProfileSummary>>, AppError> {
+/// The profiles the viewer may see.
+async fn list(
+    State(state): State<AppState>,
+    Viewer(viewer): Viewer,
+) -> Result<Json<Vec<ProfileSummary>>, AppError> {
     let profiles = sqlx::query_as!(
         ProfileSummary,
         r#"SELECT a.username::text AS "username!", p.slug::text AS "slug!", p.name,
+                  p.visibility::text AS "visibility!",
                   (SELECT count(*) FROM listen l WHERE l.profile_id = p.id) AS "listens!"
              FROM profile p
              JOIN account a ON a.id = p.account_id
-            WHERE p.visibility = 'public'
-            ORDER BY a.username, p.slug"#
+            WHERE p.visibility = 'public' OR p.account_id = $1
+               OR (p.visibility = 'followers'
+                   AND EXISTS (SELECT FROM follow f
+                                WHERE f.profile_id = p.id AND f.follower_id = $1))
+            ORDER BY a.username, p.slug"#,
+        viewer,
     )
     .fetch_all(&state.db)
     .await?;
@@ -59,24 +70,35 @@ pub(crate) struct Profile {
     pub username: String,
     pub slug: String,
     pub name: String,
+    pub visibility: String,
+    /// Whether it belongs to the viewer.
+    pub own: bool,
 }
 
+/// The profile, if the viewer may see it.
 pub(crate) async fn find_profile(
     db: &PgPool,
+    Viewer(viewer): Viewer,
     username: &str,
     slug: &str,
 ) -> Result<Profile, AppError> {
     // Cast the parameters to citext: comparing citext to text would compare case-sensitively.
     sqlx::query_as!(
         Profile,
-        r#"SELECT p.id, a.username::text AS "username!", p.slug::text AS "slug!", p.name
+        r#"SELECT p.id, a.username::text AS "username!", p.slug::text AS "slug!", p.name,
+                  p.visibility::text AS "visibility!",
+                  p.account_id IS NOT DISTINCT FROM $3 AS "own!"
              FROM profile p
              JOIN account a ON a.id = p.account_id
             WHERE a.username = $1::text::citext
               AND p.slug = $2::text::citext
-              AND p.visibility = 'public'"#,
+              AND (p.visibility = 'public' OR p.account_id = $3
+                   OR (p.visibility = 'followers'
+                       AND EXISTS (SELECT FROM follow f
+                                    WHERE f.profile_id = p.id AND f.follower_id = $3)))"#,
         username,
         slug,
+        viewer,
     )
     .fetch_optional(db)
     .await?
@@ -94,6 +116,9 @@ struct Overview {
     username: String,
     slug: String,
     name: String,
+    visibility: String,
+    /// Whether it belongs to the viewer.
+    own: bool,
     listens: i64,
     #[serde(with = "time::serde::rfc3339::option")]
     first_listened_at: Option<OffsetDateTime>,
@@ -110,10 +135,11 @@ struct YearCount {
 
 async fn overview(
     State(state): State<AppState>,
+    viewer: Viewer,
     Path((username, slug)): Path<(String, String)>,
     Query(params): Query<OverviewParams>,
 ) -> Result<Json<Overview>, AppError> {
-    let profile = find_profile(&state.db, &username, &slug).await?;
+    let profile = find_profile(&state.db, viewer, &username, &slug).await?;
     let tz = time_zone(&state.db, params.tz).await?;
 
     let years = sqlx::query_as!(
@@ -141,6 +167,8 @@ async fn overview(
         username: profile.username,
         slug: profile.slug,
         name: profile.name,
+        visibility: profile.visibility,
+        own: profile.own,
         listens: years.iter().map(|y| y.listens).sum(),
         first_listened_at: span.first,
         last_listened_at: span.last,
@@ -208,11 +236,12 @@ pub(crate) struct ChartEntry {
 // bound where the period is open.
 async fn top(
     State(state): State<AppState>,
+    viewer: Viewer,
     Path((username, slug, kind)): Path<(String, String, String)>,
     Query(params): Query<TopParams>,
 ) -> Result<Json<Vec<ChartEntry>>, AppError> {
     let (from, to) = params.days()?;
-    let profile = find_profile(&state.db, &username, &slug).await?;
+    let profile = find_profile(&state.db, viewer, &username, &slug).await?;
     let tz = time_zone(&state.db, params.tz).await?;
     let limit = params.limit.unwrap_or(10).clamp(1, 100);
 
@@ -312,10 +341,11 @@ struct YearTop {
 /// to show how the favourites change over the years.
 async fn top_artists_per_year(
     State(state): State<AppState>,
+    viewer: Viewer,
     Path((username, slug)): Path<(String, String)>,
     Query(params): Query<YearsParams>,
 ) -> Result<Json<Vec<YearTop>>, AppError> {
-    let profile = find_profile(&state.db, &username, &slug).await?;
+    let profile = find_profile(&state.db, viewer, &username, &slug).await?;
     let tz = time_zone(&state.db, params.tz).await?;
     let limit = params.limit.unwrap_or(10).clamp(1, 100);
 
@@ -395,10 +425,11 @@ struct ListenEntry {
 
 async fn listens(
     State(state): State<AppState>,
+    viewer: Viewer,
     Path((username, slug)): Path<(String, String)>,
     Query(params): Query<ListensParams>,
 ) -> Result<Json<ListensPage>, AppError> {
-    let profile = find_profile(&state.db, &username, &slug).await?;
+    let profile = find_profile(&state.db, viewer, &username, &slug).await?;
     let limit = params.limit.unwrap_or(50).clamp(1, 200);
 
     // One row more than asked for tells whether there is another page.
@@ -442,9 +473,10 @@ struct NowPlaying {
 /// The track a client reported as playing, or `null` once it has run out.
 async fn now_playing(
     State(state): State<AppState>,
+    viewer: Viewer,
     Path((username, slug)): Path<(String, String)>,
 ) -> Result<Json<Option<NowPlaying>>, AppError> {
-    let profile = find_profile(&state.db, &username, &slug).await?;
+    let profile = find_profile(&state.db, viewer, &username, &slug).await?;
     let playing = sqlx::query_as!(
         NowPlaying,
         "SELECT artist_raw AS artist, track_raw AS track, album_raw AS album, started_at, duration_ms

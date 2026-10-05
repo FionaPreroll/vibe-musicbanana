@@ -1,22 +1,16 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.username::text AS \"username!\", p.slug::text AS \"slug!\", p.name,\n                  (SELECT count(*) FROM listen l WHERE l.profile_id = p.id) AS \"listens!\"\n             FROM profile p\n             JOIN account a ON a.id = p.account_id\n            WHERE p.visibility = 'public'\n            ORDER BY a.username, p.slug",
+  "query": "SELECT p.slug::text AS \"slug!\", p.name, p.visibility::text AS \"visibility!\",\n                  (SELECT count(*) FROM listen l WHERE l.profile_id = p.id) AS \"listens!\"\n             FROM profile p\n            WHERE p.account_id = $1\n            ORDER BY p.slug <> 'default', p.slug",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "username!",
-        "type_info": "Text",
-        "origin": "Expression"
-      },
-      {
-        "ordinal": 1,
         "name": "slug!",
         "type_info": "Text",
         "origin": "Expression"
       },
       {
-        "ordinal": 2,
+        "ordinal": 1,
         "name": "name",
         "type_info": "Text",
         "origin": {
@@ -27,6 +21,12 @@
         }
       },
       {
+        "ordinal": 2,
+        "name": "visibility!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
         "ordinal": 3,
         "name": "listens!",
         "type_info": "Int8",
@@ -34,14 +34,16 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Int8"
+      ]
     },
     "nullable": [
       null,
-      null,
       false,
+      null,
       null
     ]
   },
-  "hash": "0d93805ca6cc1ac75a523a12f87a2235ae5904530cb810a49aa6cd5e557475ed"
+  "hash": "168f2edaae8b57542e480174445565241bceae952c8fde8c50218f31aee4b83e"
 }

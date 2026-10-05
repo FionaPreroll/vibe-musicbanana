@@ -11,6 +11,7 @@
 	import ArtistYears from '#lib/components/ArtistYears.svelte';
 	import Chart from '#lib/components/Chart.svelte';
 	import PeriodPicker from '#lib/components/PeriodPicker.svelte';
+	import VisibilityBadge from '#lib/components/VisibilityBadge.svelte';
 	import { formatDate, formatDateTime, listenCount } from '#lib/format.ts';
 	import { parseDay, periodEnd, type Period } from '#lib/period.ts';
 	import type { PageProps } from './$types';
@@ -116,6 +117,7 @@
 			{#if overview.slug !== 'default'}<span class="font-normal text-stone-500">
 					/ {overview.name}</span
 				>{/if}
+			<VisibilityBadge visibility={overview.visibility} />
 		</h1>
 		<p class="mt-1 text-stone-600">
 			{listenCount(overview.listens)}

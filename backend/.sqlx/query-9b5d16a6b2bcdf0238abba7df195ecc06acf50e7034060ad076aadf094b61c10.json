@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE account SET password_hash = $2, password_legacy_md5 = false\n                  WHERE username = $1::text::citext",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9b5d16a6b2bcdf0238abba7df195ecc06acf50e7034060ad076aadf094b61c10"
+}
