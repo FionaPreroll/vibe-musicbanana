@@ -599,4 +599,14 @@
 			<button class="{button} self-start">Change password</button>
 		</form>
 	</section>
+
+	<section class="mt-12">
+		<h2 class={heading}>Your data</h2>
+		<p class="mb-3 text-sm text-stone-600">
+			One JSON file with everything musicbanana keeps about your account: the account, your profiles
+			with all their listens (in ListenBrainz's import format) and their trash, follows, scrobble
+			tokens, YourSpotify connections and logins. Passwords and tokens stay out.
+		</p>
+		<a class="{button} inline-block" href="/api/me/export" download>Download your data</a>
+	</section>
 </main>
