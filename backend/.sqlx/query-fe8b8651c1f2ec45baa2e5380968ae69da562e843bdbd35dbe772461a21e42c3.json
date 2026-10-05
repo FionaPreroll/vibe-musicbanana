@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM merge_change c\n          WHERE c.tbl = 'listen'\n            AND (c.key ->> 'id')::bigint IN (\n                  SELECT id FROM listen WHERE profile_id = ANY($1)\n                  UNION ALL\n                  SELECT id FROM listen_trash WHERE profile_id = ANY($1))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fe8b8651c1f2ec45baa2e5380968ae69da562e843bdbd35dbe772461a21e42c3"
+}

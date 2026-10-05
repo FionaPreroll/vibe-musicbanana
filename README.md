@@ -86,6 +86,15 @@ Logged-in accounts can follow a profile with the button next to its name; the st
 
 Wrong listens (a scrobbler that ran twice, a party on your account, a bad import) are taken out on the page "Edit listening history", linked from each profile in the settings. It lists the profile's listens, narrowed by words (artist, track or album, ignoring case and accents), a time span and a source, and moves the ones picked, or all that match, to the trash. Listens in the trash leave the charts and every page, and a player or an import sending them again doesn't bring them back. From the trash they can be restored, with an undo right after moving them, or deleted for good.
 
+Users can't delete profiles or their account themselves; the settings page tells them to ask the admin, who runs
+
+```sh
+musicbanana profile delete --user <username> <slug>   # a profile other than the default one, with its listens
+musicbanana account delete <username>                 # the account with all its profiles and listens
+```
+
+Without `--yes` both only list what would go (profiles, listens, listens in the trash, scrobble tokens, YourSpotify connections, followers) and delete nothing. Artists, albums and tracks stay in the shared catalog. The deleted listens are also taken out of the journal of merges, so `merge undo` can't bring them back, and the user name is free again. There is no undo: back up the database first if in doubt.
+
 A login lasts 30 days after the last visit. Changing the password logs out the account's other browsers. After 10 wrong passwords for a name within 15 minutes, that name is refused for the rest of the 15 minutes. The login cookie is `HttpOnly` and `SameSite=Lax`, and `Secure` when a reverse proxy in front sends `X-Forwarded-Proto: https`, which Caddy, Traefik and nginx (with `proxy_set_header X-Forwarded-Proto $scheme`) do. Requests that change something only take JSON, so other sites can't send them with the cookie.
 
 ## Scrobbling

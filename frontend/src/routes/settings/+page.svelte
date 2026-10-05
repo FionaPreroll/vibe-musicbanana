@@ -599,4 +599,13 @@
 			<button class="{button} self-start">Change password</button>
 		</form>
 	</section>
+
+	<section class="mt-12">
+		<h2 class={heading}>Deleting a profile or the account</h2>
+		<p class="text-sm text-stone-600">
+			Ask the admin of this server. A deleted profile takes its listens, scrobble tokens,
+			YourSpotify connection and followers along; a deleted account all its profiles and logins.
+			This can't be undone.
+		</p>
+	</section>
 </main>
