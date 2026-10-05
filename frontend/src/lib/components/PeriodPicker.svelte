@@ -11,6 +11,7 @@
 		samePeriod,
 		type Period
 	} from '#lib/period.ts';
+	import { sourceOf, withSource } from '#lib/source.ts';
 
 	let {
 		period,
@@ -30,7 +31,7 @@
 		{ kind: 'all' },
 		...recentDays.map((days): Period => ({ kind: 'days', days }))
 	];
-	const href = (p: Period) => page.url.pathname + periodSearch(p);
+	const href = (p: Period) => page.url.pathname + withSource(periodSearch(p), sourceOf(page.url));
 	const busiestYear = $derived(Math.max(1, ...years.map((y) => y.listens)));
 
 	// The form for any other period opens on demand and stays open while it names the period.
@@ -123,7 +124,7 @@
 			{#each years as y (y.year)}
 				{@const selected = period.kind === 'year' && period.year === y.year}
 				<a
-					href="?year={y.year}"
+					href={href({ kind: 'year', year: y.year })}
 					data-sveltekit-noscroll
 					class="group flex w-10 shrink-0 flex-col items-center"
 					title={listenCount(y.listens)}

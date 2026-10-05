@@ -50,11 +50,13 @@ cd frontend && pnpm lint && pnpm check && pnpm build
 |---|---|
 | `/` lists the profiles the viewer may see | `GET /api/profiles` |
 | `/u/<username>` (default profile) or `/u/<username>/<slug>`: listens per year, top artists, albums and tracks, the top artists of each year, recent listens, what is playing now; `?days=30` (also 7, 90, 365), `?year=2012` or `?from=2009-06-01&to=2009-08-31` narrows the top lists and listens to that period | `GET /api/profiles/<username>/<slug>?tz=`, `…/top/{artists,releases,recordings}?year=&from=&to=&tz=&limit=`, `…/top/artists/years?tz=&limit=`, `…/listens?before=&limit=`, `…/now-playing` |
-| `/u/<username>/artist/<id>`, `…/album/<id>` and `…/track/<id>` (after the slug for other profiles): listens per month, first and last listen, phases of heavy listening, the albums and tracks heard | `GET /api/profiles/<username>/<slug>/{artists,releases,recordings}/<id>?tz=` |
+| `/u/<username>/artist/<id>-<name>`, `…/album/…` and `…/track/…` (after the slug for other profiles), e.g. `/u/fiona/artist/1-die-arzte`: listens per month, first and last listen, phases of heavy listening, the albums and tracks heard | `GET /api/profiles/<username>/<slug>/{artists,releases,recordings}/<id>?tz=` |
+| `/u/<username>/search?q=` (after the slug for other profiles), also from the search field in the header of a profile's pages: the artists, albums and tracks the profile has heard whose names hold every word, ignoring case and accents, the most heard first; a word may also be the artist's name of an album or track ("ärzte unrockbar") | `GET /api/profiles/<username>/<slug>/search?q=&limit=` |
+| `?source=Navidrome` on any page of a profile (overview, artist, album, track, search), picked under the period: only the listens from that source; the sources are the clients without their version ("Navidrome 0.64.2 (…)" is "Navidrome"), "Spotify via YourSpotify" and the imports such as `import:php-2016` | every API route of a profile takes `source=`; `GET /api/profiles/<username>/<slug>/sources` lists them with their listens |
 | `/login` | `POST /api/session` (`{"login", "password"}`), `DELETE /api/session` logs out |
-| `/settings`: the account's profiles (create, rename, who sees them), scrobble tokens (create, revoke) and password | `GET /api/me`, `POST /api/me/profiles`, `PATCH /api/me/profiles/<slug>`, `GET`/`POST /api/me/tokens`, `DELETE /api/me/tokens/<id>`, `PUT /api/me/password` |
+| `/settings`: the account's profiles (create, rename, who sees them), scrobble tokens (create, revoke), YourSpotify connections (connect, remove) and password | `GET /api/me`, `POST /api/me/profiles`, `PATCH /api/me/profiles/<slug>`, `GET`/`POST /api/me/tokens`, `DELETE /api/me/tokens/<id>`, `GET`/`POST /api/me/yourspotify`, `DELETE /api/me/yourspotify/<id>`, `PUT /api/me/password` |
 
-A profile is public, for followers (its owner and the accounts following it) or private (its owner only); to anybody else it does not exist (404), in the list and on every page and API route below it. Years and days start at midnight in `tz` (an IANA name such as `Europe/Berlin`, UTC by default); the frontend sends the browser's time zone. `from` and `to` are the first and last day of a period, both included, and either can be left out; `year=2012` is short for the whole year. `listens` pages backwards: pass a page's `next` as `before`. `now-playing` is `null` when nothing plays; the open page asks again every 30 seconds and adds new listens on top. The months of an artist, album or track run from the profile's first listen to its last, leaving out a year or more without any listens (shown as a break); an entry that was merged into another one answers with that one.
+A profile is public, for followers (its owner and the accounts following it) or private (its owner only); to anybody else it does not exist (404), in the list and on every page and API route below it. Years and days start at midnight in `tz` (an IANA name such as `Europe/Berlin`, UTC by default); the frontend sends the browser's time zone. `from` and `to` are the first and last day of a period, both included, and either can be left out; `year=2012` is short for the whole year. `listens` pages backwards: pass a page's `next` as `before`. `now-playing` is `null` when nothing plays; the open page asks again every 30 seconds and adds new listens on top. Only the id in the address of an artist, album or track counts; the name after it is for the reader, and the page moves to the current one when it differs, as after a rename or for links with the id alone. The months of an artist, album or track run from the profile's first listen to its last, leaving out a year or more without any listens (shown as a break); an entry that was merged into another one answers with that one.
 
 ## Accounts and logging in
 
@@ -66,6 +68,12 @@ musicbanana account password <username>                     # asks for the new p
 ```
 
 Both read the password from standard input when that is not a terminal, e.g. `echo "$PASSWORD" | musicbanana account password fiona`. Passwords need at least 8 characters.
+
+A further profile, for example one per player or for a second person's listens, comes from the settings page or from
+
+```sh
+musicbanana profile create --user <username> <slug> --name "Spotify" --visibility private   # public (default), followers or private
+```
 
 A login lasts 30 days after the last visit. Changing the password logs out the account's other browsers. After 10 wrong passwords for a name within 15 minutes, that name is refused for the rest of the 15 minutes. The login cookie is `HttpOnly` and `SameSite=Lax`, and `Secure` when a reverse proxy in front sends `X-Forwarded-Proto: https`, which Caddy, Traefik and nginx (with `proxy_set_header X-Forwarded-Proto $scheme`) do. Requests that change something only take JSON, so other sites can't send them with the cookie.
 
@@ -128,7 +136,17 @@ With Docker, prefix them with `docker compose exec musicbanana`. A suggestion sa
 - **one letter apart:** a letter more, missing, different or swapped with its neighbour, in names of six letters or more and never where digits differ ("Chapter 1", "Chapter 2");
 - **version:** the same title apart from a note in brackets, after a dash or "feat.", so possibly a live version; these come last.
 
-The entry with fewer listens goes into the one with more, a version into the plain title. Releases and recordings are compared within one artist only, so merge artists first: merging an artist also merges its releases and recordings into the other artist's ones with the same title and moves the rest over. A merge points the listens and the spellings at the remaining entry, so later scrobbles with the old spelling land there too; the raw strings of the listens stay as they were. There is no undo yet, hence `--dry-run`.
+The entry with fewer listens goes into the one with more, a version into the plain title. Releases and recordings are compared within one artist only, so merge artists first: merging an artist also merges its releases and recordings into the other artist's ones with the same title and moves the rest over. A merge points the listens and the spellings at the remaining entry, so later scrobbles with the old spelling land there too; the raw strings of the listens stay as they were.
+
+Every merge can be taken back. A merge prints its number, and `merge log` lists them:
+
+```sh
+musicbanana merge log                  # the latest 30, newest first
+musicbanana merge undo 12 --dry-run    # what undoing merge 12 would put back
+musicbanana merge undo 12
+```
+
+Undoing puts back what the merge changed: the listens, spellings and MusicBrainz IDs go back to the merged entry, which stands on its own again, and an artist gets its albums and tracks back. What changed since stays as it is now, such as listens that came in under the merged spelling after the merge, and the command says how many such rows it left. A merge that a later one built on (merging the remaining entry on into a third one, say) can only be undone after that later one.
 
 Two entries that both have a MusicBrainz ID are not suggested, as their IDs say they are different ones of the same name, and merging them takes `--force`: for an artist's other name that should count for the main one, or a recording MusicBrainz lists twice. Merging an artist moves its albums and tracks over instead of merging them with one of another ID. A merge takes the IDs along, so listens with the ID of the merged entry count for the remaining one.
 
@@ -143,7 +161,7 @@ musicbanana merge editions --dry-run   # one line per album and track it would c
 musicbanana merge editions
 ```
 
-Each album or track with an edition note is merged into the one of its plain title, or renamed to the plain title where there is none yet. One whose plain title belongs to an entry with other MusicBrainz IDs is kept, as the IDs say they are different. Running it again is harmless.
+Each album or track with an edition note is merged into the one of its plain title, or renamed to the plain title where there is none yet. One whose plain title belongs to an entry with other MusicBrainz IDs is kept, as the IDs say they are different. Running it again is harmless. Each merge it makes shows up in `merge log` and can be taken back with `merge undo`; renaming is not undone, but does no harm, as listens with the old title still find the entry.
 
 ## Renaming and MusicBrainz IDs by hand
 
@@ -186,6 +204,19 @@ The first run fetches the whole history, oldest first, a month at a time, and st
 
 A play counts for its first artist, with track and album titled as on Spotify; the Spotify IDs and all artists stay in the listen's extra data. Spotify gives no MusicBrainz IDs. Its titles often carry an edition like "(Deluxe Edition)" or "- Remastered 2011", which the catalog leaves out (see [Remasters and deluxe editions](#remasters-and-deluxe-editions); plays imported before that need `merge editions` once). Other additions such as "- Live" stay, and `merge suggest` finds those next to the albums and tracks from other players.
 
+### Connections the server keeps up to date
+
+Instead of running the importer yourself, a profile can be connected to a YourSpotify: on the settings page under "Spotify via YourSpotify" (profile, API address, public token), or with
+
+```sh
+export YOURSPOTIFY_TOKEN=…
+musicbanana yourspotify add --from http://192.168.1.10:8080 --user <username> --profile <slug>
+musicbanana yourspotify list                 # all connections with their state
+musicbanana yourspotify remove <id>
+```
+
+The token is tried before the connection is kept. From then on `musicbanana serve` imports the whole history once and afterwards the new plays every 15 minutes, as the importer above would; the settings page shows when it last finished, how many plays it brought in so far and the last error. Each profile takes one connection, so two Spotify accounts go to two profiles, of the same account or of different ones. The token is stored in the database and never shown again, logged or sent to the browser; removing the connection deletes it. The server fetches from the address given there, so only hand out accounts to people you would also let reach your network from the server.
+
 YourSpotify has no documented API; the importer uses the route its web interface reads the history from (`GET /spotify/gethistory`), which a new YourSpotify version could change. A YourSpotify that takes no time range there gets the old way: everything fetched newest first, then stored at once.
 
 ## Running with Docker
@@ -218,7 +249,7 @@ Navidrome needs the address under which its container reaches musicbanana, as `N
 
 Then restart Navidrome and link the token as described [above](#navidrome-and-apps-that-play-from-it-supersonic-ultrasonic-).
 
-**Spotify plays from YourSpotify** (see [above](#spotify-plays-from-yourspotify)): with these lines in `.env`, `docker compose up -d` also starts the service `yourspotify`, which imports the history once and then the new plays every 15 minutes (`YOURSPOTIFY_EVERY` changes that). The address is the one under which the container reaches YourSpotify's API, as for Navidrome not `localhost`. `docker compose logs yourspotify` shows what it imported.
+**Spotify plays from YourSpotify** (see [above](#spotify-plays-from-yourspotify)): the simplest way is a [connection](#connections-the-server-keeps-up-to-date) on the settings page, which the `musicbanana` container keeps up to date by itself. The older way still works: with these lines in `.env`, `docker compose up -d` also starts the service `yourspotify`, which imports the history once and then the new plays every 15 minutes (`YOURSPOTIFY_EVERY` changes that). The address is the one under which the container reaches YourSpotify's API, as for Navidrome not `localhost`. `docker compose logs yourspotify` shows what it imported.
 
 ```sh
 COMPOSE_PROFILES=yourspotify

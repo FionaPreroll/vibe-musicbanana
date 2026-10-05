@@ -1,5 +1,6 @@
 <script lang="ts">
 	import {
+		entityPath,
 		getJson,
 		timeZone,
 		type ChartEntry,
@@ -11,9 +12,11 @@
 	import ArtistYears from '#lib/components/ArtistYears.svelte';
 	import Chart from '#lib/components/Chart.svelte';
 	import PeriodPicker from '#lib/components/PeriodPicker.svelte';
+	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import VisibilityBadge from '#lib/components/VisibilityBadge.svelte';
 	import { formatDate, formatDateTime, listenCount } from '#lib/format.ts';
 	import { parseDay, periodEnd, type Period } from '#lib/period.ts';
+	import { withSource } from '#lib/source.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -32,17 +35,21 @@
 		}));
 	});
 
-	const link = (kind: EntityKind) => (entry: ChartEntry) => `${data.base}/${kind}/${entry.id}`;
+	// Entry pages stay with the chosen source.
+	const entryHref = (kind: EntityKind, id: number, name: string) =>
+		entityPath(data.base, kind, id, name) + withSource('', data.source);
+	const link = (kind: EntityKind) => (entry: ChartEntry) => entryHref(kind, entry.id, entry.name);
 
 	// The top artists of every year don't depend on the period, so they load once per
 	// profile and after the rest of the page. (`data` is new after every navigation,
 	// `api` only for another profile.)
 	const api = $derived(data.api);
+	const source = $derived(data.source);
 	let artistYears: YearTop[] = $state([]);
 	$effect(() => {
 		let current = true;
 		artistYears = [];
-		getJson<YearTop[]>(fetch, `${api}/top/artists/years`, { tz: timeZone, limit: 10 })
+		getJson<YearTop[]>(fetch, `${api}/top/artists/years`, { tz: timeZone, limit: 10, source })
 			.then((years) => {
 				if (current) artistYears = years;
 			})
@@ -70,18 +77,19 @@
 	// unless the period is over.
 	$effect(() => {
 		const api = data.api;
+		const source = data.source;
 		const live = periodEnd(data.period) === null;
 		const timer = setInterval(() => {
-			if (!document.hidden) refresh(api, live);
+			if (!document.hidden) refresh(api, source, live);
 		}, 30_000);
 		return () => clearInterval(timer);
 	});
 
-	async function refresh(api: string, live: boolean) {
+	async function refresh(api: string, source: string | null, live: boolean) {
 		try {
 			nowPlaying = await getJson<NowPlaying | null>(fetch, `${api}/now-playing`);
 			if (!live) return;
-			const latest = await getJson<ListensPage>(fetch, `${api}/listens`, { limit: 25 });
+			const latest = await getJson<ListensPage>(fetch, `${api}/listens`, { limit: 25, source });
 			const newest = listens.length ? Date.parse(listens[0].listened_at) : -Infinity;
 			const fresh = latest.listens.filter((l) => Date.parse(l.listened_at) > newest);
 			if (fresh.length > 0) listens = [...fresh, ...listens];
@@ -96,7 +104,8 @@
 		try {
 			const older = await getJson<ListensPage>(fetch, `${data.api}/listens`, {
 				before: next,
-				limit: 50
+				limit: 50,
+				source: data.source
 			});
 			listens = [...listens, ...older.listens];
 			next = older.next;
@@ -150,6 +159,7 @@
 		first={overview.first_listened_at}
 		last={overview.last_listened_at}
 	/>
+	<SourcePicker sources={data.sources} />
 
 	<div class="mt-8 grid gap-8 md:grid-cols-3">
 		<Chart title="Top artists" entries={data.artists} href={link('artist')} />
@@ -182,16 +192,19 @@
 							datetime={listen.listened_at}>{formatDateTime(listen.listened_at)}</time
 						>
 						<span class="min-w-0 truncate">
-							<a class="font-medium hover:underline" href="{data.base}/track/{listen.recording_id}"
-								>{listen.track}</a
+							<a
+								class="font-medium hover:underline"
+								href={entryHref('track', listen.recording_id, listen.track)}>{listen.track}</a
 							>
 							<span class="text-stone-500">
-								· <a class="hover:underline" href="{data.base}/artist/{listen.artist_id}"
-									>{listen.artist}</a
+								· <a
+									class="hover:underline"
+									href={entryHref('artist', listen.artist_id, listen.artist)}>{listen.artist}</a
 								>
 								{#if listen.album && listen.release_id}
-									· <a class="hover:underline" href="{data.base}/album/{listen.release_id}"
-										>{listen.album}</a
+									· <a
+										class="hover:underline"
+										href={entryHref('album', listen.release_id, listen.album)}>{listen.album}</a
 									>
 								{/if}
 							</span>

@@ -1,6 +1,7 @@
 <script lang="ts">
-	import type { ChartEntry, EntityKind } from '#lib/api.ts';
+	import { entityPath, type ChartEntry, type EntityKind } from '#lib/api.ts';
 	import Chart from '#lib/components/Chart.svelte';
+	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import MonthCurve from '#lib/components/MonthCurve.svelte';
 	import {
 		formatDate,
@@ -9,6 +10,7 @@
 		formatPercent,
 		listenCount
 	} from '#lib/format.ts';
+	import { withSource } from '#lib/source.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -30,8 +32,12 @@
 	const musicBrainz = (mbid: string) =>
 		`https://musicbrainz.org/${musicBrainzKinds[data.kind]}/${mbid}`;
 
-	const albumHref = (entry: ChartEntry) => `${data.base}/album/${entry.id}`;
-	const trackHref = (entry: ChartEntry) => `${data.base}/track/${entry.id}`;
+	// Links stay with the chosen source.
+	const keep = $derived(withSource('', data.source));
+	const albumHref = (entry: ChartEntry) =>
+		entityPath(data.base, 'album', entry.id, entry.name) + keep;
+	const trackHref = (entry: ChartEntry) =>
+		entityPath(data.base, 'track', entry.id, entry.name) + keep;
 </script>
 
 <svelte:head>
@@ -41,7 +47,7 @@
 <main class="mx-auto max-w-6xl px-4 pb-16 sm:px-8">
 	<header class="mt-6">
 		<p class="text-sm text-stone-500">
-			<a class="hover:text-stone-900 hover:underline" href={data.base}
+			<a class="hover:text-stone-900 hover:underline" href={data.base + keep}
 				>{profile.username}{#if profile.slug !== 'default'}&nbsp;/ {profile.name}{/if}</a
 			>
 			· {kindNames[data.kind]}
@@ -65,10 +71,12 @@
 			<p class="mt-1 text-lg text-stone-600">
 				by <a
 					class="font-medium text-stone-900 hover:underline"
-					href="{data.base}/artist/{entity.artist.id}">{entity.artist.name}</a
+					href={entityPath(data.base, 'artist', entity.artist.id, entity.artist.name) + keep}
+					>{entity.artist.name}</a
 				>
 			</p>
 		{/if}
+		<SourcePicker sources={data.sources} />
 		<dl class="mt-5 flex flex-wrap gap-x-10 gap-y-3">
 			<div>
 				<dt class="text-xs font-semibold tracking-wide text-stone-500 uppercase">Listens</dt>

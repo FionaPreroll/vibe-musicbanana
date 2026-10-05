@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT undone_at FROM merge_op WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "undone_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "merge_op",
+            "name": "undone_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "39dba470ea56a0093d171158dfef75ebf8e7965d1d76664632e5e9574abd3851"
+}

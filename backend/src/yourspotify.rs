@@ -81,6 +81,11 @@ impl Source {
         })
     }
 
+    /// Asks YourSpotify for its latest plays, to see that address and token work.
+    pub async fn check(&self) -> anyhow::Result<()> {
+        self.page(0, None).await.map(|_| ())
+    }
+
     /// The plays from `offset` on, newest first, of those from `from` up to
     /// (without) `to`, or of all.
     async fn page(

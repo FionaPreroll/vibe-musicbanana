@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH RECURSIVE heard(month) AS (\n               -- The months with listens in the profile, one index lookup each.\n               SELECT date_trunc('month', min(listened_at) AT TIME ZONE $5)\n                 FROM listen\n                WHERE profile_id = $1\n               UNION ALL\n               SELECT (SELECT date_trunc('month', min(l.listened_at) AT TIME ZONE $5)\n                         FROM listen l\n                        WHERE l.profile_id = $1\n                          AND l.listened_at >= (h.month + interval '1 month') AT TIME ZONE $5)\n                 FROM heard h\n                WHERE h.month IS NOT NULL\n           ), shown AS (\n               -- Each of them, and the months up to the next one unless that is a year away.\n               SELECT generate_series(\n                          month,\n                          CASE WHEN next < month + interval '13 months'\n                               THEN next - interval '1 month' ELSE month END,\n                          interval '1 month') AS month\n                 FROM (SELECT month, lead(month) OVER (ORDER BY month) AS next\n                         FROM heard\n                        WHERE month IS NOT NULL) bounds\n           ), counts AS (\n               SELECT date_trunc('month', listened_at AT TIME ZONE $5) AS month, count(*) AS listens\n                 FROM listen\n                WHERE profile_id = $1\n                  AND ($2::bigint IS NULL OR artist_id = $2)\n                  AND ($3::bigint IS NULL OR release_id = $3)\n                  AND ($4::bigint IS NULL OR recording_id = $4)\n                  AND ($6::text IS NULL OR listen_source(client) = $6)\n                GROUP BY 1\n           )\n           SELECT to_char(s.month, 'YYYY-MM') AS \"month!\", coalesce(c.listens, 0) AS \"listens!\"\n             FROM shown s\n             LEFT JOIN counts c ON c.month = s.month\n            ORDER BY s.month",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "month!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "e0b08dbf0a69f21ce329dc165371b73c52860349c2b980a1e21fdd5b1dd655e5"
+}

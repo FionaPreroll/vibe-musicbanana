@@ -141,7 +141,28 @@ async fn merge_editions_cleans_up_what_came_before(db: PgPool) {
         "Hyperballad - Remastered"
     );
 
-    assert_eq!(lines(&merge::editions(&db, false).await.unwrap()), expected);
+    // For real, each merge with its number for `merge undo`.
+    let done = merge::editions(&db, false).await.unwrap();
+    let ops: Vec<i64> = done
+        .iter()
+        .filter_map(|e| match e {
+            Edition::Merged(m) => m.op,
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ops.len(), 3);
+    let mut numbered = ops.iter();
+    let expected_done: Vec<String> = expected
+        .iter()
+        .map(|line| match line.starts_with("merge") {
+            true => format!(
+                "{line} (undo with: musicbanana merge undo {})",
+                numbered.next().unwrap()
+            ),
+            false => line.to_string(),
+        })
+        .collect();
+    assert_eq!(lines(&done), expected_done);
     assert_eq!(title(&db, "release", 10).await.1, Some(1));
     assert_eq!(title(&db, "recording", 10).await.1, Some(1));
     assert_eq!(title(&db, "recording", 11).await.1, None);
@@ -181,5 +202,12 @@ async fn merge_editions_cleans_up_what_came_before(db: PgPool) {
     assert_eq!(
         lines(&merge::editions(&db, false).await.unwrap()),
         [expected[2]]
+    );
+
+    // The last merge can be taken back like any other.
+    merge::undo(&db, ops[2], false).await.unwrap();
+    assert_eq!(
+        title(&db, "recording", 14).await,
+        ("Hyperballad (2015 Remaster)".to_owned(), None)
     );
 }

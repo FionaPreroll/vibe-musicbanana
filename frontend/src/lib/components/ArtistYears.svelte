@@ -1,6 +1,8 @@
 <script lang="ts">
-	import type { YearTop } from '#lib/api.ts';
+	import { page } from '$app/state';
+	import { entityPath, type YearTop } from '#lib/api.ts';
 	import { formatPercent, listenCount } from '#lib/format.ts';
+	import { sourceOf, withSource } from '#lib/source.ts';
 
 	let {
 		years,
@@ -162,7 +164,7 @@
 			<span class="text-stone-500">Longest at the top:</span>
 			{#each colors as [id, { name, color }] (id)}
 				<a
-					href="{base}/artist/{id}"
+					href={entityPath(base, 'artist', id, name) + withSource('', sourceOf(page.url))}
 					class="flex items-center gap-1.5 hover:underline"
 					onpointerenter={() => (active = { id })}
 					onpointerleave={() => (active = null)}
@@ -256,7 +258,7 @@
 				{#each years as y, i (y.year)}
 					<div class="absolute top-0" style:left="{layout.xs[i]}px" style:width="{layout.column}px">
 						<a
-							href="?year={y.year}"
+							href={withSource(`?year=${y.year}`, sourceOf(page.url))}
 							data-sveltekit-noscroll
 							class="block h-6 text-center text-xs leading-6 tabular-nums {y.year === selected
 								? 'font-semibold text-stone-900'
@@ -267,7 +269,8 @@
 							{#each y.artists as artist, rank (artist.id)}
 								<li>
 									<a
-										href="{base}/artist/{artist.id}"
+										href={entityPath(base, 'artist', artist.id, artist.name) +
+											withSource('', sourceOf(page.url))}
 										class="flex h-6 items-center overflow-hidden rounded border bg-white text-xs transition-opacity {dimmed(
 											artist.id
 										)

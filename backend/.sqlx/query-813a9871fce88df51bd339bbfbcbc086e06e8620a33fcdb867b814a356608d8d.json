@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT min(listened_at) AS first, max(listened_at) AS last FROM listen WHERE profile_id = $1",
+  "query": "SELECT min(listened_at) AS first, max(listened_at) AS last\n           FROM listen\n          WHERE profile_id = $1 AND ($2::text IS NULL OR listen_source(client) = $2)",
   "describe": {
     "columns": [
       {
@@ -18,7 +18,8 @@
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Int8",
+        "Text"
       ]
     },
     "nullable": [
@@ -26,5 +27,5 @@
       null
     ]
   },
-  "hash": "9a5d7fccaee954c8bdeebc3a6c3f437b952fd255d7838734de597134249d9319"
+  "hash": "813a9871fce88df51bd339bbfbcbc086e06e8620a33fcdb867b814a356608d8d"
 }

@@ -102,6 +102,21 @@ export type ApiToken = {
 	last_used_at: string | null;
 };
 
+/** A YourSpotify account the server imports Spotify plays from into a profile. */
+export type Connection = {
+	id: number;
+	username: string;
+	profile: string;
+	url: string;
+	created_at: string;
+	started_at: string | null;
+	finished_at: string | null;
+	/** Listens it brought so far. */
+	imported: number;
+	/** Why the latest import failed. */
+	error: string | null;
+};
+
 export class ApiError extends Error {
 	status: number;
 
@@ -158,6 +173,41 @@ export function profilePath(username: string, slug = 'default') {
 	const path = `/u/${encodeURIComponent(username)}`;
 	return slug === 'default' ? path : `${path}/${encodeURIComponent(slug)}`;
 }
+
+/** A name as it goes into an address: "Die Ärzte" → "die-arzte", "Jóga" → "joga". */
+export function nameSlug(name: string) {
+	return name
+		.normalize('NFKD')
+		.replace(/\p{M}/gu, '')
+		.toLowerCase()
+		.replace(/ß/g, 'ss')
+		.replace(/[^\p{L}\p{N}]+/gu, '-')
+		.slice(0, 60)
+		.replace(/^-+|-+$/g, '');
+}
+
+/** The id with the name after it, as in /u/fiona/artist/1-die-arzte. Only the id counts. */
+export const entitySegment = (id: number, name: string) =>
+	nameSlug(name) ? `${id}-${nameSlug(name)}` : String(id);
+
+/** The page of an artist, album or track in the profile at `base`. */
+export const entityPath = (base: string, kind: EntityKind, id: number, name: string) =>
+	`${base}/${kind}/${encodeURIComponent(entitySegment(id, name))}`;
+
+/** Where listens of a profile came from; `source` is what `?source=` takes. */
+export type Source = {
+	source: string;
+	listens: number;
+	first_listened_at: string;
+	last_listened_at: string;
+};
+
+/** What a profile's search found, the most heard first. */
+export type SearchResult = {
+	artists: ChartEntry[];
+	releases: ChartEntry[];
+	recordings: ChartEntry[];
+};
 
 /** The viewer's time zone, so that a year starts at their midnight. */
 export const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;

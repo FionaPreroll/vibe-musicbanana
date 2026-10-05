@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO profile (account_id, slug, name, visibility)\n         SELECT id, $2, $3, $4::text::visibility FROM account WHERE username = $1::text::citext\n         ON CONFLICT (account_id, slug) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        {
+          "Custom": {
+            "name": "citext",
+            "kind": "Simple"
+          }
+        },
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "865129362e9376ac031b7144694a466b1eb3017ecaea0a7cc667e6b816b43f4e"
+}
