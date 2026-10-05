@@ -193,6 +193,12 @@ enum AccountCommand {
     /// Give an account another user name. Links with the old one lead to the
     /// new one, and nobody else can take the old one.
     Rename { username: String, new: String },
+    /// Let an account see the status page at /status, or with --off no more.
+    Admin {
+        username: String,
+        #[arg(long)]
+        off: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -561,6 +567,22 @@ async fn account_command(db: &PgPool, command: AccountCommand) -> anyhow::Result
                 .map_err(anyhow::Error::msg)?;
             eprintln!("Renamed {old} to {new}; links with {old} lead to {new}.");
         }
+        AccountCommand::Admin { username, off } => {
+            let changed = sqlx::query!(
+                "UPDATE account SET is_admin = $2 WHERE username = $1::text::citext",
+                username,
+                !off,
+            )
+            .execute(db)
+            .await?;
+            if changed.rows_affected() == 0 {
+                bail!("there is no account {username}");
+            }
+            eprintln!(
+                "{username} {} the status page now.",
+                if off { "no longer sees" } else { "sees" }
+            );
+        }
     }
     Ok(())
 }
@@ -776,6 +798,7 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
         );
     }
 
+    musicbanana::status::started();
     connections::spawn(db.clone());
     let app = router(
         AppState {

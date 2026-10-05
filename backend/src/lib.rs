@@ -10,6 +10,7 @@ pub mod merge;
 mod profiles;
 pub mod scrobble;
 pub mod search;
+pub mod status;
 pub mod tokens;
 pub mod yourspotify;
 
@@ -107,7 +108,9 @@ fn api() -> Router<AppState> {
         .merge(profiles::routes())
         .merge(entities::routes())
         .merge(search::routes())
+        .merge(status::routes())
         .nest("/listenbrainz/1", listenbrainz::routes())
+        .route_layer(middleware::from_fn(status::measure))
         .fallback(|| async { StatusCode::NOT_FOUND })
 }
 

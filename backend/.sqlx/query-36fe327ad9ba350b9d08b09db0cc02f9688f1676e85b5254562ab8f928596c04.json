@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.relname::text AS \"name!\",\n                  greatest(s.n_live_tup, c.reltuples::bigint, 0) AS \"rows!\",\n                  pg_total_relation_size(s.relid) AS \"bytes!\"\n             FROM pg_stat_user_tables s\n             JOIN pg_class c ON c.oid = s.relid\n            WHERE s.relname NOT LIKE '\\_sqlx%'\n            ORDER BY pg_total_relation_size(s.relid) DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "rows!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "bytes!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "36fe327ad9ba350b9d08b09db0cc02f9688f1676e85b5254562ab8f928596c04"
+}

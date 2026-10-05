@@ -279,6 +279,8 @@ async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Result<Res
 struct Me {
     username: String,
     email: String,
+    /// Whether the account sees the status page.
+    admin: bool,
     profiles: Vec<OwnProfile>,
 }
 
@@ -306,7 +308,8 @@ async fn own_profiles(db: &PgPool, account: i64) -> sqlx::Result<Vec<OwnProfile>
 
 async fn me(State(state): State<AppState>, Account(id): Account) -> Result<Json<Me>, AppError> {
     let account = sqlx::query!(
-        r#"SELECT username::text AS "username!", email::text AS "email!" FROM account WHERE id = $1"#,
+        r#"SELECT username::text AS "username!", email::text AS "email!", is_admin
+             FROM account WHERE id = $1"#,
         id,
     )
     .fetch_one(&state.db)
@@ -314,6 +317,7 @@ async fn me(State(state): State<AppState>, Account(id): Account) -> Result<Json<
     Ok(Json(Me {
         username: account.username,
         email: account.email,
+        admin: account.is_admin,
         profiles: own_profiles(&state.db, id).await?,
     }))
 }

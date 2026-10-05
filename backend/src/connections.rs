@@ -183,12 +183,20 @@ async fn sync(
     Ok(())
 }
 
+static LAST_ROUND: std::sync::Mutex<Option<OffsetDateTime>> = std::sync::Mutex::new(None);
+
+/// When the server last looked for connections that are due.
+pub fn last_round() -> Option<OffsetDateTime> {
+    *LAST_ROUND.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 /// Keeps importing from the connections while the server runs. A round does not
 /// wait for the imports of the one before; those are skipped until they are done.
 pub fn spawn(db: PgPool) {
     tokio::spawn(async move {
         loop {
             let db = db.clone();
+            *LAST_ROUND.lock().unwrap_or_else(|e| e.into_inner()) = Some(OffsetDateTime::now_utc());
             tokio::spawn(async move {
                 if let Err(e) = sync_due(&db).await {
                     tracing::warn!("YourSpotify connections: {e:#}");

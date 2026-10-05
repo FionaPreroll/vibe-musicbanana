@@ -91,7 +91,52 @@ export type NowPlaying = {
 };
 
 /** The logged-in account, with its profiles (the default one first). */
-export type Me = { username: string; email: string; profiles: OwnProfile[] };
+export type Me = { username: string; email: string; admin: boolean; profiles: OwnProfile[] };
+
+/** GET /api/admin/status, see backend/src/status.rs. */
+export type Status = {
+	build: {
+		version: string;
+		commit: string | null;
+		debug: boolean;
+		started_at: string;
+		uptime_seconds: number;
+	};
+	process: {
+		pid: number;
+		threads: number | null;
+		memory_bytes: number | null;
+		memory_peak_bytes: number | null;
+		cpu_seconds: number | null;
+		cpu_percent: number | null;
+		cores: number;
+		load_average: [number, number, number] | null;
+		memory_total_bytes: number | null;
+		memory_available_bytes: number | null;
+		memory_limit_bytes: number | null;
+	};
+	database: {
+		version: string;
+		bytes: number;
+		migration: number | null;
+		pool_size: number;
+		pool_idle: number;
+		connections: number | null;
+		cache_hit_percent: number | null;
+		tables: { name: string; rows: number; bytes: number }[];
+		last_day: { source: string; listens: number }[];
+	};
+	workers: { last_round_at: string | null; yourspotify: Connection[] };
+	routes: {
+		route: string;
+		requests: number;
+		server_errors: number;
+		mean_ms: number;
+		p50_ms: number;
+		p95_ms: number;
+		max_ms: number;
+	}[];
+};
 
 export type OwnProfile = { slug: string; name: string; visibility: Visibility; listens: number };
 

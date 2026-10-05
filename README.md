@@ -66,6 +66,7 @@ The accounts of the old musicbanana log in with their old passwords; the first l
 musicbanana account create <username> --email <address>   # asks for the password, with a default profile
 musicbanana account password <username>                     # asks for the new password
 musicbanana account rename <username> <new name>
+musicbanana account admin <username> [--off]               # the status page, see below
 ```
 
 Both read the password from standard input when that is not a terminal, e.g. `echo "$PASSWORD" | musicbanana account password fiona`. Passwords need at least 8 characters.
@@ -295,3 +296,9 @@ The server logs to standard output (`docker compose logs -f musicbanana`). Besid
 - `musicbanana::connections`: each round of a YourSpotify connection, when it starts and what it brought, or why it failed; the import's progress comes from `musicbanana::yourspotify`.
 
 `RUST_LOG` picks what is logged, by target and level (default `musicbanana=info,tower_http=info`): `RUST_LOG=musicbanana=info,musicbanana::account=warn` keeps only failed logins of the settings, `RUST_LOG=musicbanana=debug` logs more, and `musicbanana::access=off` is the same as `ACCESS_LOG=off`.
+
+## Status page
+
+Admins have a Status link at the top that leads to `/status`: the build (version and commit), the server's CPU and memory, the machine's load and memory, the database (size, migration, connections, cache hits, rows and size per table, listens of the last 24 hours by source), the YourSpotify connections and how long each API route took since the server started (mean, median, 95th percentile, maximum and 5xx errors). It refreshes every 10 seconds. `musicbanana account admin <username>` makes an account an admin, `--off` takes that back; nobody else sees the page.
+
+The commit comes from the image build (`--build-arg GIT_COMMIT=…`, which CI sets); a local build shows none.

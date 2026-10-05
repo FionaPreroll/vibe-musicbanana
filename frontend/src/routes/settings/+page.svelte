@@ -7,6 +7,7 @@
 		type Connection,
 		type Visibility
 	} from '#lib/api.ts';
+	import { connectionState } from '#lib/connections.ts';
 	import { formatDateTime, listenCount } from '#lib/format.ts';
 	import type { PageProps } from './$types';
 
@@ -115,15 +116,6 @@
 		if (!confirm(`Stop importing from YourSpotify into ${c.profile}? Its listens stay.`)) return;
 		change('connections', () => sendJson(fetch, 'DELETE', `/api/me/yourspotify/${c.id}`));
 	};
-
-	function connectionState(c: Connection) {
-		if (!c.started_at) return 'Starts within a minute.';
-		if (!c.finished_at || c.finished_at < c.started_at) {
-			return `Importing since ${formatDateTime(c.started_at)}…`;
-		}
-		if (c.error) return `Failed at ${formatDateTime(c.finished_at)}: ${c.error}`;
-		return `Up to date as of ${formatDateTime(c.finished_at)}.`;
-	}
 
 	// While an import runs, ask again now and then.
 	$effect(() => {

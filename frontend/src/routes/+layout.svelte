@@ -31,7 +31,9 @@
 </svelte:head>
 
 <header class="border-b border-stone-200 bg-white">
-	<div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-8">
+	<div
+		class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-8"
+	>
 		<a href="/" class="shrink-0 text-lg font-bold">musicbanana 🍌</a>
 		{#if profile && !onSearchPage}
 			<form class="min-w-0 flex-1 sm:max-w-xs" method="GET" action="{profile}/search" role="search">
@@ -47,11 +49,14 @@
 				{/if}
 			</form>
 		{/if}
-		<nav class="flex shrink-0 items-baseline gap-4 text-sm">
+		<nav class="flex shrink-0 items-baseline gap-3 text-sm sm:gap-4">
 			{#if data.me}
 				<a class="font-medium hover:underline" href="/u/{encodeURIComponent(data.me.username)}"
 					>{data.me.username}</a
 				>
+				{#if data.me.admin}
+					<a class="text-stone-600 hover:underline" href="/status">Status</a>
+				{/if}
 				<a class="text-stone-600 hover:underline" href="/settings">Settings</a>
 				<button class="text-stone-600 hover:underline" onclick={logOut}>Log out</button>
 			{:else}
