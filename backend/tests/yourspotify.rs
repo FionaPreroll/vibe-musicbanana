@@ -602,7 +602,10 @@ async fn connections_in_the_settings(db: PgPool) {
         .await
         .unwrap();
     let app = musicbanana::router(
-        AppState { db: db.clone() },
+        AppState {
+            yourspotify_allowed: Arc::new(yourspotify::Allowlist::parse(&api).unwrap()),
+            ..AppState::new(db.clone())
+        },
         std::path::Path::new("does-not-exist"),
     );
     let call = |method: Method, uri: &str, cookie: Option<String>, body: Option<Value>| {
@@ -634,6 +637,31 @@ async fn connections_in_the_settings(db: PgPool) {
     let login = json!({"login": "fiona", "password": "banana-split"});
     let (_, _, cookie) = call(Method::POST, "/api/session", None, Some(login)).await;
     let me = cookie.unwrap();
+
+    // Only the addresses the server allows.
+    let (_, allowed, _) = call(
+        Method::GET,
+        "/api/me/yourspotify/allowed",
+        Some(me.clone()),
+        None,
+    )
+    .await;
+    assert_eq!(allowed, json!([api.trim_end_matches('/')]));
+    for elsewhere in ["http://169.254.169.254/latest", "http://127.0.0.1:1/"] {
+        let body = json!({"profile": "default", "url": elsewhere, "token": TOKEN});
+        let (status, body, _) = call(
+            Method::POST,
+            "/api/me/yourspotify",
+            Some(me.clone()),
+            Some(body),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(
+            body.as_str().unwrap().contains("takes YourSpotify at"),
+            "{body}"
+        );
+    }
 
     let connect = |profile: &str, token: &str| json!({"profile": profile, "url": api.clone(), "token": token});
     let (status, body, _) = call(

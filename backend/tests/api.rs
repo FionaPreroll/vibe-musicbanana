@@ -13,7 +13,7 @@ use tower::ServiceExt;
 
 #[sqlx::test]
 async fn health_counts_listens(db: PgPool) {
-    let app = router(AppState { db }, Path::new("does-not-exist"));
+    let app = router(AppState::new(db), Path::new("does-not-exist"));
 
     let res = app
         .oneshot(Request::get("/api/health").body(Body::empty()).unwrap())
@@ -28,7 +28,7 @@ async fn health_counts_listens(db: PgPool) {
 
 #[sqlx::test]
 async fn unknown_api_route_is_404(db: PgPool) {
-    let app = router(AppState { db }, Path::new("does-not-exist"));
+    let app = router(AppState::new(db), Path::new("does-not-exist"));
 
     let res = app
         .oneshot(Request::get("/api/nope").body(Body::empty()).unwrap())

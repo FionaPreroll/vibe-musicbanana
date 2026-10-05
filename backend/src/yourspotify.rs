@@ -42,6 +42,66 @@ const LONGEST_WINDOW: Duration = Duration::days(365);
 /// Spotify started in 2008; anything older comes in one window.
 const SPOTIFY_STARTED: OffsetDateTime = datetime!(2008-01-01 0:00 UTC);
 
+/// The YourSpotify addresses accounts may connect in their settings (from
+/// YOURSPOTIFY_ALLOWED_URLS). An address allows itself and the paths below it,
+/// with the same scheme, host and port. The command line takes any address.
+#[derive(Debug, Default)]
+pub struct Allowlist(Vec<Url>);
+
+impl Allowlist {
+    /// Addresses separated by commas or white space.
+    pub fn parse(list: &str) -> anyhow::Result<Self> {
+        list.split(|c: char| c == ',' || c.is_whitespace())
+            .filter(|a| !a.is_empty())
+            .map(|a| {
+                let url = base_url(a)?;
+                if url.query().is_some() || !url.username().is_empty() || url.password().is_some() {
+                    bail!("{a} should be a plain address, such as http://yourspotify:8080");
+                }
+                Ok(url)
+            })
+            .collect::<anyhow::Result<_>>()
+            .map(Self)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn addresses(&self) -> Vec<String> {
+        self.0
+            .iter()
+            .map(|u| u.as_str().trim_end_matches('/').to_owned())
+            .collect()
+    }
+
+    pub fn allows(&self, api: &str) -> bool {
+        let Ok(url) = base_url(api) else {
+            return false;
+        };
+        url.username().is_empty()
+            && url.password().is_none()
+            && url.query().is_none()
+            && self.0.iter().any(|allowed| {
+                url.scheme() == allowed.scheme()
+                    && url.host() == allowed.host()
+                    && url.port_or_known_default() == allowed.port_or_known_default()
+                    && url.path().starts_with(allowed.path())
+            })
+    }
+}
+
+/// `api` with a slash at the end, so that paths below it join on.
+fn base_url(api: &str) -> anyhow::Result<Url> {
+    let api = api.trim();
+    let base = Url::parse(&format!("{}/", api.trim_end_matches('/')))
+        .with_context(|| format!("{api} is not an address"))?;
+    if !matches!(base.scheme(), "http" | "https") {
+        bail!("{api} is not an http(s) address");
+    }
+    Ok(base)
+}
+
 /// A YourSpotify server and the token to read an account's history with.
 pub struct Source {
     http: reqwest::Client,
@@ -55,13 +115,8 @@ impl Source {
     /// `api` is the address of YourSpotify's API (its API_ENDPOINT), such as
     /// `http://yourspotify:8080` or `https://spotify.example.org/api`.
     pub fn new(api: &str, token: &str) -> anyhow::Result<Self> {
-        let api = api.trim();
-        let shown = api.trim_end_matches('/').to_owned();
-        let base =
-            Url::parse(&format!("{shown}/")).with_context(|| format!("{api} is not an address"))?;
-        if !matches!(base.scheme(), "http" | "https") {
-            bail!("{api} is not an http(s) address");
-        }
+        let shown = api.trim().trim_end_matches('/').to_owned();
+        let base = base_url(api)?;
         let token = token.trim();
         if token.is_empty() {
             bail!("the YourSpotify token is empty");
@@ -71,6 +126,8 @@ impl Source {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(60))
+            // Only the address that was allowed, not where it might send us on.
+            .redirect(reqwest::redirect::Policy::none())
             .user_agent(concat!("musicbanana/", env!("CARGO_PKG_VERSION")))
             .build()?;
         Ok(Self {
@@ -452,4 +509,43 @@ impl fmt::Display for Report {
 fn minutes(at: OffsetDateTime) -> String {
     let at = at.to_offset(time::UtcOffset::UTC);
     format!("{} {:02}:{:02} UTC", at.date(), at.hour(), at.minute())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn allowlist() {
+        let allowed =
+            Allowlist::parse("http://yourspotify:8080, https://music.example.org/spotify/api/")
+                .unwrap();
+        for fine in [
+            "http://yourspotify:8080",
+            "http://YourSpotify:8080/",
+            "http://yourspotify:8080/api",
+            "https://music.example.org/spotify/api",
+            "https://music.example.org:443/spotify/api/",
+        ] {
+            assert!(allowed.allows(fine), "{fine}");
+        }
+        for not in [
+            "http://yourspotify",
+            "https://yourspotify:8080",
+            "http://yourspotify:8081",
+            "http://yourspotify.evil:8080",
+            "http://yourspotify:8080@evil:8080",
+            "http://evil/?http://yourspotify:8080",
+            "https://music.example.org/spotify",
+            "https://music.example.org/spotify/apix",
+            "file:///etc/passwd",
+            "",
+        ] {
+            assert!(!allowed.allows(not), "{not}");
+        }
+        assert!(!Allowlist::default().allows("http://yourspotify:8080"));
+        assert!(Allowlist::parse("").unwrap().is_empty());
+        assert!(Allowlist::parse("yourspotify:8080").is_err());
+        assert!(Allowlist::parse("http://user:pw@yourspotify:8080").is_err());
+    }
 }

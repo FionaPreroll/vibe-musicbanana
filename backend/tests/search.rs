@@ -17,7 +17,7 @@ use tower::ServiceExt;
 // her private profile Tiësto, and alex Deine Schuld.
 
 async fn search(db: &PgPool, profile: &str, q: &str) -> (StatusCode, Value) {
-    let app = router(AppState { db: db.clone() }, Path::new("does-not-exist"));
+    let app = router(AppState::new(db.clone()), Path::new("does-not-exist"));
     let q: String = url_escape(q);
     let uri = format!("/api/profiles/{profile}/search?q={q}");
     let res = app

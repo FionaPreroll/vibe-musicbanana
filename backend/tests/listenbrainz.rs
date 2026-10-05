@@ -18,7 +18,7 @@ const SUBMIT: &str = "/api/listenbrainz/1/submit-listens";
 const VALIDATE: &str = "/api/listenbrainz/1/validate-token";
 
 async fn send(db: &PgPool, request: Request<Body>) -> (StatusCode, Value) {
-    let app = router(AppState { db: db.clone() }, Path::new("does-not-exist"));
+    let app = router(AppState::new(db.clone()), Path::new("does-not-exist"));
     let res = app.oneshot(request).await.unwrap();
     let status = res.status();
     let body = res.into_body().collect().await.unwrap().to_bytes();

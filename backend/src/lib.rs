@@ -13,12 +13,13 @@ pub mod search;
 pub mod tokens;
 pub mod yourspotify;
 
-use std::path::Path;
+use std::{net::SocketAddr, path::Path, sync::Arc, time::Instant};
 
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{ConnectInfo, Request, State},
     http::StatusCode,
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
 };
@@ -32,6 +33,21 @@ use tower_http::{
 #[derive(Clone)]
 pub struct AppState {
     pub db: PgPool,
+    /// The YourSpotify addresses accounts may connect in their settings.
+    pub yourspotify_allowed: Arc<yourspotify::Allowlist>,
+    /// Whether each request goes into the log, see [`log_request`].
+    pub access_log: bool,
+}
+
+impl AppState {
+    /// No access log, and no YourSpotify address allowed in the settings.
+    pub fn new(db: PgPool) -> Self {
+        Self {
+            db,
+            yourspotify_allowed: Arc::default(),
+            access_log: false,
+        }
+    }
 }
 
 /// The whole app: JSON API under `/api`, everything else is the SvelteKit SPA.
@@ -39,11 +55,49 @@ pub fn router(state: AppState, static_dir: &Path) -> Router {
     // Unknown paths get index.html so client-side routes survive a reload.
     let spa = ServeDir::new(static_dir).fallback(ServeFile::new(static_dir.join("index.html")));
 
-    Router::new()
+    let app = Router::new()
         .nest("/api", api())
         .fallback_service(spa)
-        .layer(TraceLayer::new_for_http())
-        .with_state(state)
+        .layer(TraceLayer::new_for_http());
+    let app = if state.access_log {
+        app.layer(middleware::from_fn(log_request))
+    } else {
+        app
+    };
+    app.with_state(state)
+}
+
+/// One line per request, under the target `musicbanana::access`: client,
+/// method, path with query, status and time taken. The client is the first
+/// address in X-Forwarded-For when a reverse proxy sends one. Health checks and
+/// the frontend's files are left out.
+async fn log_request(request: Request, next: Next) -> Response {
+    let start = Instant::now();
+    let method = request.method().clone();
+    let uri = request.uri().clone();
+    let forwarded = request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .map(|v| v.trim().to_owned());
+    let client = forwarded.unwrap_or_else(|| {
+        request
+            .extensions()
+            .get::<ConnectInfo<SocketAddr>>()
+            .map_or_else(|| "-".into(), |c| c.0.ip().to_string())
+    });
+    let response = next.run(request).await;
+    let path = uri.path();
+    if path != "/api/health" && !path.starts_with("/_app/") {
+        tracing::info!(
+            target: "musicbanana::access",
+            "{client} {method} {uri} {} {} ms",
+            response.status().as_u16(),
+            start.elapsed().as_millis()
+        );
+    }
+    response
 }
 
 fn api() -> Router<AppState> {

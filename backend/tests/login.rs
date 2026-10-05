@@ -89,7 +89,7 @@ async fn log_in(app: &Router, login: &str, password: &str) -> String {
 }
 
 fn app(db: PgPool) -> Router {
-    router(AppState { db }, Path::new("does-not-exist"))
+    router(AppState::new(db), Path::new("does-not-exist"))
 }
 
 #[sqlx::test(fixtures("profiles"))]

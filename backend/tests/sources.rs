@@ -17,7 +17,7 @@ use tower::ServiceExt;
 // Navidrome.
 
 async fn get(db: &PgPool, uri: &str) -> Value {
-    let app = router(AppState { db: db.clone() }, Path::new("does-not-exist"));
+    let app = router(AppState::new(db.clone()), Path::new("does-not-exist"));
     let res = app
         .oneshot(Request::get(uri).body(Body::empty()).unwrap())
         .await
