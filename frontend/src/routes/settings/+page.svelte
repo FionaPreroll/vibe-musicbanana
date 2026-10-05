@@ -1,6 +1,12 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
-	import { errorMessage, profilePath, sendJson, type Visibility } from '#lib/api.ts';
+	import {
+		errorMessage,
+		profilePath,
+		sendJson,
+		type Connection,
+		type Visibility
+	} from '#lib/api.ts';
 	import { formatDateTime, listenCount } from '#lib/format.ts';
 	import type { PageProps } from './$types';
 
@@ -81,6 +87,46 @@
 		if (!confirm(`Revoke the token "${label}"? Its client can't scrobble any more.`)) return;
 		change('tokens', () => sendJson(fetch, 'DELETE', `/api/me/tokens/${id}`));
 	};
+
+	// YourSpotify
+
+	let newConnection = $state({ profile: 'default', url: '', token: '' });
+	let connecting = $state(false);
+
+	async function connect(event: SubmitEvent) {
+		event.preventDefault();
+		connecting = true;
+		if (
+			await change('connection', () =>
+				sendJson(fetch, 'POST', '/api/me/yourspotify', newConnection)
+			)
+		) {
+			newConnection = { profile: 'default', url: newConnection.url, token: '' };
+		}
+		connecting = false;
+	}
+
+	const disconnect = (c: Connection) => {
+		if (!confirm(`Stop importing from YourSpotify into ${c.profile}? Its listens stay.`)) return;
+		change('connections', () => sendJson(fetch, 'DELETE', `/api/me/yourspotify/${c.id}`));
+	};
+
+	function connectionState(c: Connection) {
+		if (!c.started_at) return 'Starts within a minute.';
+		if (!c.finished_at || c.finished_at < c.started_at) {
+			return `Importing since ${formatDateTime(c.started_at)}…`;
+		}
+		if (c.error) return `Failed at ${formatDateTime(c.finished_at)}: ${c.error}`;
+		return `Up to date as of ${formatDateTime(c.finished_at)}.`;
+	}
+
+	// While an import runs, ask again now and then.
+	$effect(() => {
+		if (!data.connections.some((c) => !c.finished_at || (c.started_at ?? '') > c.finished_at))
+			return;
+		const timer = setInterval(() => invalidateAll(), 10_000);
+		return () => clearInterval(timer);
+	});
 
 	// Password
 
@@ -277,6 +323,68 @@
 			<button class={button}>Create token</button>
 		</form>
 		{@render error('new-token')}
+	</section>
+
+	<section class="mt-12">
+		<h2 class={heading}>Spotify via YourSpotify</h2>
+		<p class="mb-3 text-sm text-stone-600">
+			<a class="underline" href="https://github.com/Yooooomi/your_spotify">YourSpotify</a> keeps the history
+			of a Spotify account. Connected to a profile, musicbanana imports its whole history, then the new
+			plays every 15 minutes. One Spotify account per profile.
+		</p>
+		{#if data.connections.length > 0}
+			<ul class="divide-y divide-stone-200">
+				{#each data.connections as c (c.id)}
+					<li class="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-2 text-sm">
+						<a class="font-medium hover:underline" href={profilePath(me.username, c.profile)}
+							>{c.profile}</a
+						>
+						<span class="min-w-0 truncate text-stone-500">{c.url}</span>
+						<span class="text-stone-500 tabular-nums">{listenCount(c.imported)} so far</span>
+						<button class="{button} ml-auto" onclick={() => disconnect(c)}>Remove</button>
+						<p class="w-full {c.error ? 'text-red-700' : 'text-stone-500'}">{connectionState(c)}</p>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		{@render error('connections')}
+
+		<form class="mt-4 grid gap-3 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-end" onsubmit={connect}>
+			<label class="flex flex-col gap-1 text-sm">
+				<span>Profile</span>
+				<select class={select} bind:value={newConnection.profile}>
+					{#each me.profiles as profile (profile.slug)}
+						<option value={profile.slug}>{profile.name}</option>
+					{/each}
+				</select>
+			</label>
+			<label class="flex flex-col gap-1 text-sm">
+				<span>YourSpotify API address</span>
+				<input
+					class={input}
+					required
+					type="url"
+					placeholder="http://192.168.1.10:8080"
+					bind:value={newConnection.url}
+				/>
+			</label>
+			<label class="flex flex-col gap-1 text-sm">
+				<span>Public token</span>
+				<input
+					class={input}
+					required
+					type="password"
+					autocomplete="off"
+					bind:value={newConnection.token}
+				/>
+			</label>
+			<button class={button} disabled={connecting}>{connecting ? 'Checking…' : 'Connect'}</button>
+		</form>
+		<p class="mt-2 text-sm text-stone-500">
+			The address is YourSpotify's API (its API_ENDPOINT, not the web interface), as the musicbanana
+			server reaches it. The public token is in YourSpotify's settings.
+		</p>
+		{@render error('connection')}
 	</section>
 
 	<section class="mt-12">

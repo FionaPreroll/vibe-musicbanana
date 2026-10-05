@@ -102,6 +102,21 @@ export type ApiToken = {
 	last_used_at: string | null;
 };
 
+/** A YourSpotify account the server imports Spotify plays from into a profile. */
+export type Connection = {
+	id: number;
+	username: string;
+	profile: string;
+	url: string;
+	created_at: string;
+	started_at: string | null;
+	finished_at: string | null;
+	/** Listens it brought so far. */
+	imported: number;
+	/** Why the latest import failed. */
+	error: string | null;
+};
+
 export class ApiError extends Error {
 	status: number;
 

@@ -25,7 +25,11 @@ use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{AppError, AppState, auth, tokens};
+use crate::{
+    AppError, AppState, auth,
+    connections::{self, Connection},
+    tokens,
+};
 
 const COOKIE: &str = "musicbanana_session";
 
@@ -41,6 +45,11 @@ pub fn routes() -> Router<AppState> {
         .route("/me/profiles/{slug}", patch(update_profile))
         .route("/me/tokens", get(list_tokens).post(create_token))
         .route("/me/tokens/{id}", delete(revoke_token))
+        .route(
+            "/me/yourspotify",
+            get(list_connections).post(add_connection),
+        )
+        .route("/me/yourspotify/{id}", delete(remove_connection))
 }
 
 /// The account logged in with the request's cookie, if any.
@@ -552,4 +561,57 @@ async fn revoke_token(
         return Err(AppError::NotFound);
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+// ---------------------------------------------------------------- YourSpotify
+
+/// The account's YourSpotify connections; the tokens stay on the server.
+async fn list_connections(
+    State(state): State<AppState>,
+    Account(id): Account,
+) -> Result<Json<Vec<Connection>>, AppError> {
+    Ok(Json(connections::list(&state.db, Some(id)).await?))
+}
+
+#[derive(Deserialize)]
+struct NewConnection {
+    profile: String,
+    url: String,
+    token: String,
+}
+
+/// Connects a YourSpotify account to one of the account's profiles, once
+/// YourSpotify has taken the token; the server imports from it within a minute.
+async fn add_connection(
+    State(state): State<AppState>,
+    Account(id): Account,
+    Json(new): Json<NewConnection>,
+) -> Result<(StatusCode, Json<Vec<Connection>>), AppError> {
+    let profile = sqlx::query_scalar!(
+        "SELECT id FROM profile WHERE account_id = $1 AND slug = $2::text::citext",
+        id,
+        new.profile,
+    )
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    connections::add(&state.db, profile, &new.url, &new.token)
+        .await
+        .map_err(|e| AppError::BadRequest(format!("{e:#}")))?;
+    Ok((
+        StatusCode::CREATED,
+        Json(connections::list(&state.db, Some(id)).await?),
+    ))
+}
+
+async fn remove_connection(
+    State(state): State<AppState>,
+    Account(account): Account,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, AppError> {
+    if connections::remove(&state.db, id, Some(account)).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(AppError::NotFound)
+    }
 }

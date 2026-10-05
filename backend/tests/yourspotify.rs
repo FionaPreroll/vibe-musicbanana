@@ -15,7 +15,10 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use musicbanana::yourspotify::{self, CLIENT, Report, Source};
+use musicbanana::{
+    AppState, auth, connections,
+    yourspotify::{self, CLIENT, Report, Source},
+};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339, macros::datetime};
@@ -494,4 +497,185 @@ async fn refuses_without_showing_the_token(db: PgPool) {
             .to_string(),
         "user Fiona has no profile urlaub"
     );
+}
+
+// ---------------------------------------------------------------- connections
+
+/// Makes every connection due, as 15 minutes after its latest import.
+async fn later(db: &PgPool) {
+    sqlx::query(
+        "UPDATE yourspotify_connection
+            SET started_at = started_at - interval '20 minutes',
+                finished_at = finished_at - interval '20 minutes'",
+    )
+    .execute(db)
+    .await
+    .unwrap();
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn a_connection_imports_by_itself(db: PgPool) {
+    let server = Arc::new(YourSpotify::default());
+    *server.plays.lock().unwrap() = plays(3);
+    let api = serve(&server).await;
+
+    // Only with a token YourSpotify takes, and one per profile.
+    let wrong = connections::add(&db, 1, &api, "not-the-token")
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{wrong:#}").contains("does not take the token"),
+        "{wrong:#}"
+    );
+    let id = connections::add(&db, 1, &api, TOKEN).await.unwrap();
+    let again = connections::add(&db, 1, &api, TOKEN).await.unwrap_err();
+    assert!(again.to_string().contains("already"), "{again}");
+
+    // The whole history right away, then nothing until the next round is due.
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 1);
+    assert_eq!(imported(&db).await, 3);
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 0);
+    let listed = connections::list(&db, Some(1)).await.unwrap();
+    assert_eq!(
+        (listed[0].id, listed[0].imported, &listed[0].error),
+        (id, 3, &None)
+    );
+    assert!(listed[0].finished_at >= listed[0].started_at);
+
+    // New plays in the next round.
+    server.plays.lock().unwrap().splice(
+        0..0,
+        [
+            play(at(11), "Jóga", &["Björk"], Some("Homogenic")),
+            play(at(10), "Bachelorette", &["Björk"], Some("Homogenic")),
+        ],
+    );
+    later(&db).await;
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 1);
+    assert_eq!(imported(&db).await, 5);
+    assert_eq!(connections::list(&db, None).await.unwrap()[0].imported, 5);
+
+    // Another account cannot remove it; removing keeps the listens.
+    assert!(!connections::remove(&db, id, Some(2)).await.unwrap());
+    assert!(connections::remove(&db, id, Some(1)).await.unwrap());
+    assert!(connections::list(&db, None).await.unwrap().is_empty());
+    assert_eq!(imported(&db).await, 5);
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn a_failed_import_is_noted_without_the_token(db: PgPool) {
+    let server = Arc::new(YourSpotify::default());
+    *server.plays.lock().unwrap() = plays(2);
+    let api = serve(&server).await;
+    connections::add(&db, 1, &api, TOKEN).await.unwrap();
+    // The token was reset in YourSpotify since.
+    sqlx::query("UPDATE yourspotify_connection SET token = 'old-token'")
+        .execute(&db)
+        .await
+        .unwrap();
+
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 1);
+    let error = connections::list(&db, None).await.unwrap()[0]
+        .error
+        .clone()
+        .unwrap();
+    assert!(error.contains("does not take the token"), "{error}");
+    assert!(!error.contains("old-token"), "{error}");
+    assert_eq!(imported(&db).await, 0);
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn connections_in_the_settings(db: PgPool) {
+    use axum::{
+        body::Body,
+        http::{Method, Request, header},
+    };
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    let server = Arc::new(YourSpotify::default());
+    *server.plays.lock().unwrap() = plays(1);
+    let api = serve(&server).await;
+    sqlx::query("UPDATE account SET password_hash = $1 WHERE id = 1")
+        .bind(auth::hash_password("banana-split").unwrap())
+        .execute(&db)
+        .await
+        .unwrap();
+    let app = musicbanana::router(
+        AppState { db: db.clone() },
+        std::path::Path::new("does-not-exist"),
+    );
+    let call = |method: Method, uri: &str, cookie: Option<String>, body: Option<Value>| {
+        let mut request = Request::builder().method(method).uri(uri);
+        if let Some(cookie) = cookie {
+            request = request.header(header::COOKIE, cookie);
+        }
+        let request = match body {
+            Some(body) => request
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string())),
+            None => request.body(Body::empty()),
+        }
+        .unwrap();
+        let app = app.clone();
+        async move {
+            let response = app.oneshot(request).await.unwrap();
+            let status = response.status();
+            let cookie = response
+                .headers()
+                .get(header::SET_COOKIE)
+                .map(|v| v.to_str().unwrap().split(';').next().unwrap().to_owned());
+            let bytes = response.into_body().collect().await.unwrap().to_bytes();
+            let body = serde_json::from_slice(&bytes)
+                .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into_owned()));
+            (status, body, cookie)
+        }
+    };
+    let login = json!({"login": "fiona", "password": "banana-split"});
+    let (_, _, cookie) = call(Method::POST, "/api/session", None, Some(login)).await;
+    let me = cookie.unwrap();
+
+    let connect = |profile: &str, token: &str| json!({"profile": profile, "url": api.clone(), "token": token});
+    let (status, body, _) = call(
+        Method::POST,
+        "/api/me/yourspotify",
+        Some(me.clone()),
+        Some(connect("default", "nope")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body.as_str().unwrap().contains("does not take the token"),
+        "{body}"
+    );
+    // Only to one's own profiles.
+    let (status, _, _) = call(
+        Method::POST,
+        "/api/me/yourspotify",
+        Some(me.clone()),
+        Some(connect("nobodys", TOKEN)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, body, _) = call(
+        Method::POST,
+        "/api/me/yourspotify",
+        Some(me.clone()),
+        Some(connect("arbeit", TOKEN)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body[0]["profile"], "arbeit");
+    assert_eq!(body[0]["url"], api.trim_end_matches('/'));
+    assert!(!body.to_string().contains(TOKEN), "{body}");
+    let id = body[0]["id"].as_i64().unwrap();
+
+    let (status, body, _) = call(Method::GET, "/api/me/yourspotify", None, None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+    let uri = format!("/api/me/yourspotify/{id}");
+    let (status, _, _) = call(Method::DELETE, &uri, Some(me.clone()), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, body, _) = call(Method::GET, "/api/me/yourspotify", Some(me), None).await;
+    assert_eq!(body, json!([]));
 }

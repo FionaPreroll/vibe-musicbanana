@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum, builder::NonEmptyStringValueParser};
 use musicbanana::{
-    AppState, account, auth, edit, import_php,
+    AppState, account, auth, connections, edit, import_php,
     merge::{self, Kind, Suggestion},
     router, tokens, yourspotify,
 };
@@ -41,9 +41,16 @@ enum Command {
     /// Import Spotify plays from YourSpotify: the whole history the first time,
     /// then only the plays since.
     ImportYourspotify(YourSpotifyArgs),
+    /// Connect YourSpotify accounts to profiles; the server then imports their
+    /// Spotify plays by itself, the new ones every 15 minutes.
+    #[command(subcommand)]
+    Yourspotify(ConnectionCommand),
     /// Create accounts and set their passwords.
     #[command(subcommand)]
     Account(AccountCommand),
+    /// Create profiles, e.g. one per player or per Spotify account.
+    #[command(subcommand)]
+    Profile(ProfileCommand),
     /// Manage the tokens scrobble clients use (ListenBrainz API).
     #[command(subcommand)]
     Token(TokenCommand),
@@ -96,6 +103,61 @@ struct YourSpotifyArgs {
     /// Keep running and import the new plays every so often, e.g. 15m or 1h.
     #[arg(long, value_parser = parse_interval)]
     every: Option<Duration>,
+}
+
+#[derive(Subcommand)]
+enum ConnectionCommand {
+    /// Connect a YourSpotify account to a profile, once YourSpotify has taken the
+    /// token. The running server imports the whole history within a minute.
+    Add {
+        /// Address of YourSpotify's API (its API_ENDPOINT, not the web interface),
+        /// as the musicbanana server reaches it, e.g. http://yourspotify-server:8080
+        #[arg(long, value_parser = NonEmptyStringValueParser::new())]
+        from: String,
+        /// The public token from YourSpotify's settings. Better set as
+        /// YOURSPOTIFY_TOKEN, so that it stays out of the shell history.
+        #[arg(
+            long,
+            env = "YOURSPOTIFY_TOKEN",
+            hide_env_values = true,
+            value_parser = NonEmptyStringValueParser::new()
+        )]
+        token: String,
+        /// Account the plays go to.
+        #[arg(long, value_parser = NonEmptyStringValueParser::new())]
+        user: String,
+        /// Profile the plays go to.
+        #[arg(long, default_value = "default")]
+        profile: String,
+    },
+    /// List the connections and how their latest import went.
+    List,
+    /// Remove a connection; the listens it brought stay.
+    Remove { id: i64 },
+}
+
+#[derive(Subcommand)]
+enum ProfileCommand {
+    /// Create a profile of an account, at /u/<user>/<slug>.
+    Create {
+        #[arg(long, value_parser = NonEmptyStringValueParser::new())]
+        user: String,
+        /// Its address: lower-case letters, digits and dashes.
+        slug: String,
+        /// Its name, the slug by default.
+        #[arg(long)]
+        name: Option<String>,
+        /// Who sees it.
+        #[arg(long, value_enum, default_value_t = Visibility::Public)]
+        visibility: Visibility,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum Visibility {
+    Public,
+    Followers,
+    Private,
 }
 
 /// "90s", "15m" or "2h".
@@ -285,7 +347,9 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Command::ImportYourspotify(args) => import_yourspotify(&db, args).await,
+        Command::Yourspotify(command) => connection_command(&db, command).await,
         Command::Account(command) => account_command(&db, command).await,
+        Command::Profile(command) => profile_command(&db, command).await,
         Command::Token(command) => token(&db, command).await,
         Command::Merge(command) => merge_command(&db, command).await,
         Command::Rename { kind, id, name } => {
@@ -295,6 +359,85 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Mbid(command) => mbid_command(&db, command).await,
     }
+}
+
+async fn connection_command(db: &PgPool, command: ConnectionCommand) -> anyhow::Result<()> {
+    match command {
+        ConnectionCommand::Add {
+            from,
+            token,
+            user,
+            profile,
+        } => {
+            let profile_id = yourspotify::profile_id(db, &user, &profile).await?;
+            let id = connections::add(db, profile_id, &from, &token).await?;
+            println!(
+                "Connected YourSpotify at {from} to {user}/{profile} (connection {id}). The \
+                 running server imports its plays within a minute, the whole history first."
+            );
+        }
+        ConnectionCommand::List => {
+            let all = connections::list(db, None).await?;
+            if all.is_empty() {
+                println!("No YourSpotify connections.");
+            }
+            for c in all {
+                let state = match (&c.error, c.started_at, c.finished_at) {
+                    (_, None, _) => "not imported yet".to_owned(),
+                    (_, Some(started), finished) if finished.is_none_or(|f| f < started) => {
+                        format!("importing since {}", minutes(started))
+                    }
+                    (Some(error), _, _) => format!("failed: {error}"),
+                    (None, _, Some(finished)) => format!("imported at {}", minutes(finished)),
+                    (None, _, None) => unreachable!(),
+                };
+                println!(
+                    "{:>4}  {}/{}  {}  {} listens so far, {state}",
+                    c.id, c.username, c.profile, c.url, c.imported
+                );
+            }
+        }
+        ConnectionCommand::Remove { id } => {
+            if !connections::remove(db, id, None).await? {
+                bail!("there is no connection {id}");
+            }
+            println!("Removed connection {id}; the listens it brought stay.");
+        }
+    }
+    Ok(())
+}
+
+async fn profile_command(db: &PgPool, command: ProfileCommand) -> anyhow::Result<()> {
+    let ProfileCommand::Create {
+        user,
+        slug,
+        name,
+        visibility,
+    } = command;
+    let slug = slug.trim();
+    account::check_slug(slug).map_err(anyhow::Error::msg)?;
+    let name = name.as_deref().map_or(slug, str::trim);
+    let visibility = match visibility {
+        Visibility::Public => "public",
+        Visibility::Followers => "followers",
+        Visibility::Private => "private",
+    };
+    let created = sqlx::query!(
+        "INSERT INTO profile (account_id, slug, name, visibility)
+         SELECT id, $2, $3, $4::text::visibility FROM account WHERE username = $1::text::citext
+         ON CONFLICT (account_id, slug) DO NOTHING",
+        user,
+        slug,
+        name,
+        visibility,
+    )
+    .execute(db)
+    .await?;
+    if created.rows_affected() == 0 {
+        bail!("there is no user {user}, or they have a profile {slug} already");
+    }
+    println!("Created the profile {user}/{slug} (\"{name}\", {visibility}).");
+    Ok(())
 }
 
 async fn import_yourspotify(db: &PgPool, args: YourSpotifyArgs) -> anyhow::Result<()> {
@@ -566,6 +709,7 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
     let static_dir =
         PathBuf::from(env::var("STATIC_DIR").unwrap_or_else(|_| "../frontend/build".into()));
 
+    connections::spawn(db.clone());
     let app = router(AppState { db }, &static_dir);
     let listener = TcpListener::bind(&listen_addr).await?;
     tracing::info!("listening on http://{listen_addr}");

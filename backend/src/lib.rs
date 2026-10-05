@@ -1,6 +1,7 @@
 pub mod account;
 pub mod auth;
 pub mod catalog;
+pub mod connections;
 pub mod edit;
 mod entities;
 pub mod import_php;
