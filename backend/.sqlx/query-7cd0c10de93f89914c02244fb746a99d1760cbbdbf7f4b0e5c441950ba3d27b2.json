@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE follow f SET accepted_at = now()\n               FROM profile p\n              WHERE f.profile_id = p.id AND f.accepted_at IS NULL\n                AND p.account_id = $1 AND p.slug = $2::text::citext",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7cd0c10de93f89914c02244fb746a99d1760cbbdbf7f4b0e5c441950ba3d27b2"
+}

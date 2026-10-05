@@ -5,6 +5,7 @@
 		profilePath,
 		sendJson,
 		type Connection,
+		type Follower,
 		type Visibility
 	} from '#lib/api.ts';
 	import { connectionState } from '#lib/connections.ts';
@@ -124,6 +125,22 @@
 		const timer = setInterval(() => invalidateAll(), 10_000);
 		return () => clearInterval(timer);
 	});
+
+	// Followers
+
+	const answer = (f: Follower, method: 'PUT' | 'DELETE') =>
+		change('followers', () =>
+			sendJson(
+				fetch,
+				method,
+				`/api/me/followers/${encodeURIComponent(f.profile)}/${encodeURIComponent(f.username)}`
+			)
+		);
+
+	function removeFollower(f: Follower) {
+		const what = f.state === 'requested' ? `Say no to ${f.username}?` : `Remove ${f.username}?`;
+		if (confirm(what)) answer(f, 'DELETE');
+	}
 
 	// User name
 
@@ -411,6 +428,44 @@
 			</p>
 		{/if}
 		{@render error('connection')}
+	</section>
+
+	<section class="mt-12">
+		<h2 class={heading}>Followers</h2>
+		<p class="mb-3 text-sm text-stone-600">
+			Anybody logged in can follow a public profile. A profile for followers shows itself to those
+			you said yes to; removing someone hides it from them again.
+		</p>
+		{#if data.followers.length === 0}
+			<p class="text-sm text-stone-500">Nobody follows your profiles yet.</p>
+		{:else}
+			<ul class="divide-y divide-stone-200 text-sm">
+				{#each data.followers as f (`${f.profile}/${f.username}`)}
+					<li class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2">
+						<span>
+							<a class="font-medium hover:underline" href={profilePath(f.username)}>{f.username}</a>
+							<span class="text-stone-500">
+								{f.state === 'requested' ? 'asks to follow' : 'follows'}
+								<a class="hover:underline" href={profilePath(me.username, f.profile)}
+									>{profilePath(me.username, f.profile)}</a
+								>
+								{f.state === 'requested' ? 'since' : 'as of'}
+								{formatDateTime(f.since)}
+							</span>
+						</span>
+						<span class="flex gap-2">
+							{#if f.state === 'requested'}
+								<button class={button} onclick={() => answer(f, 'PUT')}>Say yes</button>
+								<button class={button} onclick={() => removeFollower(f)}>Say no</button>
+							{:else}
+								<button class={button} onclick={() => removeFollower(f)}>Remove</button>
+							{/if}
+						</span>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		{@render error('followers')}
 	</section>
 
 	<section class="mt-12">

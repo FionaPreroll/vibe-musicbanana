@@ -2,7 +2,8 @@
 //! the top artists of each year, recent listens and what is playing right now.
 //!
 //! A public profile is there for everyone, one for followers to its owner and the
-//! accounts following it, a private one to its owner only. To anyone else such a
+//! accounts following it with the owner's yes (see [`crate::follows`]), a private
+//! one to its owner only. To anyone else such a
 //! profile answers 404, like an unknown one.
 
 use axum::{
@@ -86,7 +87,8 @@ async fn list(
             WHERE p.visibility = 'public' OR p.account_id = $1
                OR (p.visibility = 'followers'
                    AND EXISTS (SELECT FROM follow f
-                                WHERE f.profile_id = p.id AND f.follower_id = $1))
+                                WHERE f.profile_id = p.id AND f.follower_id = $1
+                                  AND f.accepted_at IS NOT NULL))
             ORDER BY a.username, p.slug"#,
         viewer,
     )
@@ -125,7 +127,8 @@ pub(crate) async fn find_profile(
               AND (p.visibility = 'public' OR p.account_id = $3
                    OR (p.visibility = 'followers'
                        AND EXISTS (SELECT FROM follow f
-                                    WHERE f.profile_id = p.id AND f.follower_id = $3)))"#,
+                                    WHERE f.profile_id = p.id AND f.follower_id = $3
+                                      AND f.accepted_at IS NOT NULL)))"#,
         username,
         slug,
         viewer,

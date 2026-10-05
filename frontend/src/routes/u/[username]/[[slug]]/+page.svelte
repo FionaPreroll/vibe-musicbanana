@@ -11,6 +11,7 @@
 	} from '#lib/api.ts';
 	import ArtistYears from '#lib/components/ArtistYears.svelte';
 	import Chart from '#lib/components/Chart.svelte';
+	import FollowButton from '#lib/components/FollowButton.svelte';
 	import PeriodPicker from '#lib/components/PeriodPicker.svelte';
 	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import VisibilityBadge from '#lib/components/VisibilityBadge.svelte';
@@ -128,6 +129,9 @@
 				>{/if}
 			<VisibilityBadge visibility={overview.visibility} />
 		</h1>
+		{#if data.follow}
+			<div class="mt-2"><FollowButton info={data.follow} /></div>
+		{/if}
 		<p class="mt-1 text-stone-600">
 			{listenCount(overview.listens)}
 			{#if overview.first_listened_at && overview.last_listened_at}
