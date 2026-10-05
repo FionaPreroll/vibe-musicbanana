@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT mbid FROM release_mbid WHERE release_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mbid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "release_mbid",
+            "name": "mbid"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b5655d90db26d5a283eb5457bd23348e7345364b1393d6441feae0861ca93f53"
+}
