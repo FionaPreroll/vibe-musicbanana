@@ -193,6 +193,8 @@ enum AccountCommand {
     /// Give an account another user name. Links with the old one lead to the
     /// new one, and nobody else can take the old one.
     Rename { username: String, new: String },
+    /// Give an account another email address, which logs in too.
+    Email { username: String, address: String },
     /// Let an account see the status page at /status, or with --off no more.
     Admin {
         username: String,
@@ -511,6 +513,7 @@ async fn account_command(db: &PgPool, command: AccountCommand) -> anyhow::Result
     match command {
         AccountCommand::Create { username, email } => {
             account::check_username(username.trim()).map_err(anyhow::Error::msg)?;
+            account::check_email(email.trim()).map_err(anyhow::Error::msg)?;
             let hash = auth::hash_password(&read_password()?)?;
             let mut tx = db.begin().await?;
             let id = sqlx::query_scalar!(
@@ -566,6 +569,19 @@ async fn account_command(db: &PgPool, command: AccountCommand) -> anyhow::Result
                 .await?
                 .map_err(anyhow::Error::msg)?;
             eprintln!("Renamed {old} to {new}; links with {old} lead to {new}.");
+        }
+        AccountCommand::Email { username, address } => {
+            let id = sqlx::query_scalar!(
+                "SELECT id FROM account WHERE username = $1::text::citext",
+                username
+            )
+            .fetch_optional(db)
+            .await?
+            .with_context(|| format!("there is no account {username}"))?;
+            let (old, new) = account::change_email(db, id, &address)
+                .await?
+                .map_err(anyhow::Error::msg)?;
+            eprintln!("Changed the email address of {username} from {old} to {new}.");
         }
         AccountCommand::Admin { username, off } => {
             let changed = sqlx::query!(
