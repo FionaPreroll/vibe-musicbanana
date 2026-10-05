@@ -36,6 +36,16 @@ const COOKIE: &str = "musicbanana_session";
 /// Days a login lasts after the last request.
 const LIFETIME_DAYS: i32 = 30;
 
+/// The user name of account `id`, for the log lines of changes.
+async fn name_of(db: &PgPool, id: i64) -> sqlx::Result<String> {
+    sqlx::query_scalar!(
+        r#"SELECT username::text AS "username!" FROM account WHERE id = $1"#,
+        id
+    )
+    .fetch_one(db)
+    .await
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/session", post(login).delete(logout))
@@ -51,6 +61,7 @@ pub fn routes() -> Router<AppState> {
             get(list_connections).post(add_connection),
         )
         .route("/me/yourspotify/{id}", delete(remove_connection))
+        .route("/me/yourspotify/allowed", get(allowed_addresses))
 }
 
 /// The account logged in with the request's cookie, if any.
@@ -183,6 +194,7 @@ async fn login(
 ) -> Result<Response, AppError> {
     let name = credentials.login.trim().to_lowercase();
     if throttle::locked(&name) {
+        tracing::warn!("login refused for {name:?}: too many failed logins");
         return Err(AppError::Status(
             StatusCode::TOO_MANY_REQUESTS,
             "too many failed logins; try again in 15 minutes".into(),
@@ -202,6 +214,7 @@ async fn login(
     );
     let right = verify(stored, legacy, credentials.password.clone()).await?;
     let Some(account) = account.filter(|_| right) else {
+        tracing::warn!("failed login for {name:?}");
         throttle::failed(&name);
         return Err(AppError::Status(
             StatusCode::UNAUTHORIZED,
@@ -234,6 +247,7 @@ async fn login(
     .execute(&state.db)
     .await?;
     let cookie = set_cookie(&headers, &token, LIFETIME_DAYS);
+    tracing::info!("{} logged in", account.username);
     Ok((
         [(header::SET_COOKIE, cookie)],
         Json(LoggedIn {
@@ -245,12 +259,17 @@ async fn login(
 
 async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Result<Response, AppError> {
     if let Some(token) = session_cookie(&headers) {
-        sqlx::query!(
-            "DELETE FROM session WHERE token_hash = $1",
+        let ended = sqlx::query_scalar!(
+            r#"DELETE FROM session s USING account a
+                WHERE s.token_hash = $1 AND a.id = s.account_id
+               RETURNING a.username::text AS "username!""#,
             tokens::hash(&token)
         )
-        .execute(&state.db)
+        .fetch_optional(&state.db)
         .await?;
+        if let Some(username) = ended {
+            tracing::info!("{username} logged out");
+        }
     }
     let cookie = set_cookie(&headers, "", 0);
     Ok((StatusCode::NO_CONTENT, [(header::SET_COOKIE, cookie)]).into_response())
@@ -260,6 +279,8 @@ async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Result<Res
 struct Me {
     username: String,
     email: String,
+    /// Whether the account sees the status page.
+    admin: bool,
     profiles: Vec<OwnProfile>,
 }
 
@@ -287,7 +308,8 @@ async fn own_profiles(db: &PgPool, account: i64) -> sqlx::Result<Vec<OwnProfile>
 
 async fn me(State(state): State<AppState>, Account(id): Account) -> Result<Json<Me>, AppError> {
     let account = sqlx::query!(
-        r#"SELECT username::text AS "username!", email::text AS "email!" FROM account WHERE id = $1"#,
+        r#"SELECT username::text AS "username!", email::text AS "email!", is_admin
+             FROM account WHERE id = $1"#,
         id,
     )
     .fetch_one(&state.db)
@@ -295,6 +317,7 @@ async fn me(State(state): State<AppState>, Account(id): Account) -> Result<Json<
     Ok(Json(Me {
         username: account.username,
         email: account.email,
+        admin: account.is_admin,
         profiles: own_profiles(&state.db, id).await?,
     }))
 }
@@ -356,6 +379,10 @@ async fn change_password(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    tracing::info!(
+        "{} changed the password; other logins ended",
+        name_of(&state.db, id).await?
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -401,7 +428,10 @@ async fn change_username(
     Json(change): Json<UsernameChange>,
 ) -> Result<Json<Renamed>, AppError> {
     match rename(&state.db, id, &change.username).await? {
-        Ok((_, username)) => Ok(Json(Renamed { username })),
+        Ok((old, username)) => {
+            tracing::info!("{old} renamed the account to {username}");
+            Ok(Json(Renamed { username }))
+        }
         Err(refusal) => Err(AppError::BadRequest(refusal)),
     }
 }
@@ -536,6 +566,12 @@ async fn create_profile(
             format!("you have a profile \"{slug}\" already"),
         ));
     }
+    tracing::info!(
+        "{} created the profile {slug} ({:?}, {})",
+        name_of(&state.db, id).await?,
+        name,
+        visibility.as_str()
+    );
     Ok((
         StatusCode::CREATED,
         Json(own_profiles(&state.db, id).await?),
@@ -572,6 +608,13 @@ async fn update_profile(
     .await?;
     if changed.rows_affected() == 0 {
         return Err(AppError::NotFound);
+    }
+    let owner = name_of(&state.db, id).await?;
+    if let Some(name) = name {
+        tracing::info!("{owner} named the profile {slug} {name:?}");
+    }
+    if let Some(visibility) = change.visibility {
+        tracing::info!("{owner} made the profile {slug} {}", visibility.as_str());
     }
     Ok(Json(own_profiles(&state.db, id).await?))
 }
@@ -638,6 +681,11 @@ async fn create_token(
     let created = tokens::create(&state.db, &username, &new.profile, label)
         .await
         .map_err(|_| AppError::NotFound)?;
+    tracing::info!(
+        "{username} created scrobble token {} {label:?} for the profile {}",
+        created.id,
+        new.profile
+    );
     Ok((
         StatusCode::CREATED,
         Json(CreatedToken {
@@ -664,6 +712,10 @@ async fn revoke_token(
     if revoked.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
+    tracing::info!(
+        "{} revoked scrobble token {token}",
+        name_of(&state.db, id).await?
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -699,9 +751,31 @@ async fn add_connection(
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound)?;
-    connections::add(&state.db, profile, &new.url, &new.token)
+    let owner = name_of(&state.db, id).await?;
+    let allowed = &state.yourspotify_allowed;
+    if !allowed.allows(&new.url) {
+        tracing::warn!(
+            "{owner} tried to connect the profile {} to YourSpotify at {:?}, which is not allowed",
+            new.profile,
+            new.url
+        );
+        return Err(AppError::BadRequest(if allowed.is_empty() {
+            "this server takes YourSpotify connections from its command line only".into()
+        } else {
+            format!(
+                "this server takes YourSpotify at {} only",
+                allowed.addresses().join(" or ")
+            )
+        }));
+    }
+    let connection = connections::add(&state.db, profile, &new.url, &new.token)
         .await
         .map_err(|e| AppError::BadRequest(format!("{e:#}")))?;
+    tracing::info!(
+        "{owner} connected the profile {} to YourSpotify at {} (connection {connection})",
+        new.profile,
+        new.url.trim()
+    );
     Ok((
         StatusCode::CREATED,
         Json(connections::list(&state.db, Some(id)).await?),
@@ -714,8 +788,20 @@ async fn remove_connection(
     Path(id): Path<i64>,
 ) -> Result<StatusCode, AppError> {
     if connections::remove(&state.db, id, Some(account)).await? {
+        tracing::info!(
+            "{} removed YourSpotify connection {id}",
+            name_of(&state.db, account).await?
+        );
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(AppError::NotFound)
     }
+}
+
+/// The YourSpotify addresses the settings take, see [`crate::yourspotify::Allowlist`].
+async fn allowed_addresses(
+    State(state): State<AppState>,
+    Account(_): Account,
+) -> Json<Vec<String>> {
+    Json(state.yourspotify_allowed.addresses())
 }

@@ -5,9 +5,11 @@ import type { PageLoad } from './$types';
 export const load: PageLoad = async ({ parent, fetch }) => {
 	const { me } = await parent();
 	if (!me) redirect(307, '/login?next=/settings');
-	const [tokens, connections] = await Promise.all([
+	const [tokens, connections, allowed] = await Promise.all([
 		getJson<ApiToken[]>(fetch, '/api/me/tokens'),
-		getJson<Connection[]>(fetch, '/api/me/yourspotify')
+		getJson<Connection[]>(fetch, '/api/me/yourspotify'),
+		// The YourSpotify addresses the server takes from here.
+		getJson<string[]>(fetch, '/api/me/yourspotify/allowed')
 	]);
-	return { me, tokens, connections };
+	return { me, tokens, connections, allowed };
 };

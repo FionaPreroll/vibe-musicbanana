@@ -2,6 +2,7 @@ use std::{
     env,
     io::{self, IsTerminal},
     path::PathBuf,
+    sync::Arc,
     time::Duration,
 };
 
@@ -192,6 +193,12 @@ enum AccountCommand {
     /// Give an account another user name. Links with the old one lead to the
     /// new one, and nobody else can take the old one.
     Rename { username: String, new: String },
+    /// Let an account see the status page at /status, or with --off no more.
+    Admin {
+        username: String,
+        #[arg(long)]
+        off: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -560,6 +567,22 @@ async fn account_command(db: &PgPool, command: AccountCommand) -> anyhow::Result
                 .map_err(anyhow::Error::msg)?;
             eprintln!("Renamed {old} to {new}; links with {old} lead to {new}.");
         }
+        AccountCommand::Admin { username, off } => {
+            let changed = sqlx::query!(
+                "UPDATE account SET is_admin = $2 WHERE username = $1::text::citext",
+                username,
+                !off,
+            )
+            .execute(db)
+            .await?;
+            if changed.rows_affected() == 0 {
+                bail!("there is no account {username}");
+            }
+            eprintln!(
+                "{username} {} the status page now.",
+                if off { "no longer sees" } else { "sees" }
+            );
+        }
     }
     Ok(())
 }
@@ -756,13 +779,46 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
     let static_dir =
         PathBuf::from(env::var("STATIC_DIR").unwrap_or_else(|_| "../frontend/build".into()));
 
+    let access_log = match env::var("ACCESS_LOG").as_deref() {
+        Err(_) | Ok("" | "on" | "true" | "1") => true,
+        Ok("off" | "false" | "0") => false,
+        Ok(other) => bail!("ACCESS_LOG is on or off, not {other}"),
+    };
+    let allowed =
+        yourspotify::Allowlist::parse(&env::var("YOURSPOTIFY_ALLOWED_URLS").unwrap_or_default())
+            .context("YOURSPOTIFY_ALLOWED_URLS")?;
+    if allowed.is_empty() {
+        tracing::info!(
+            "YourSpotify connections only from the command line (YOURSPOTIFY_ALLOWED_URLS is empty)"
+        );
+    } else {
+        tracing::info!(
+            "YourSpotify connections in the settings allowed for {}",
+            allowed.addresses().join(", ")
+        );
+    }
+
+    musicbanana::status::started();
     connections::spawn(db.clone());
-    let app = router(AppState { db }, &static_dir);
+    let app = router(
+        AppState {
+            db,
+            yourspotify_allowed: Arc::new(allowed),
+            access_log,
+        },
+        &static_dir,
+    );
     let listener = TcpListener::bind(&listen_addr).await?;
-    tracing::info!("listening on http://{listen_addr}");
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    tracing::info!(
+        "listening on http://{listen_addr}, access log {}",
+        if access_log { "on" } else { "off" }
+    );
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
     Ok(())
 }
 

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE account SET is_admin = $2 WHERE username = $1::text::citext",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fea18fa668a4d6cb9ff4bd59ce4acefa285d392c39b3072f5ba6806ed5ea4a34"
+}

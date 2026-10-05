@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT version() AS \"version!\",\n                  pg_database_size(current_database()) AS \"bytes!\",\n                  (SELECT max(version) FROM _sqlx_migrations WHERE success) AS migration,\n                  d.numbackends AS connections,\n                  round(100.0 * d.blks_hit / nullif(d.blks_hit + d.blks_read, 0), 1)::float8\n                      AS cache_hit_percent\n             FROM pg_stat_database d\n            WHERE d.datname = current_database()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "bytes!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "migration",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "connections",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "pg_stat_database",
+            "name": "numbackends"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "cache_hit_percent",
+        "type_info": "Float8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      true,
+      null
+    ]
+  },
+  "hash": "58b0a174e0f4d40d7fee97ede2794d88f7e51db899965e375560ee37d92358b0"
+}

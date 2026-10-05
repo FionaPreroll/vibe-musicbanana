@@ -102,14 +102,19 @@ pub async fn remove(db: &PgPool, id: i64, account: Option<i64>) -> sqlx::Result<
 /// servers on one database.
 pub async fn sync_due(db: &PgPool) -> anyhow::Result<usize> {
     let due = sqlx::query!(
-        "UPDATE yourspotify_connection
-            SET started_at = now()
-          WHERE started_at IS NULL
-             OR (finished_at >= started_at AND finished_at < now() - make_interval(secs => $1))
-             -- An import that died with its server.
-             OR (finished_at IS NULL OR finished_at < started_at)
-                AND started_at < now() - interval '1 day'
-         RETURNING id, profile_id, api_url, token",
+        r#"UPDATE yourspotify_connection c
+              SET started_at = now()
+             FROM profile p
+             JOIN account a ON a.id = p.account_id
+            WHERE p.id = c.profile_id
+              AND (c.started_at IS NULL
+                   OR (c.finished_at >= c.started_at
+                       AND c.finished_at < now() - make_interval(secs => $1))
+                   -- An import that died with its server.
+                   OR (c.finished_at IS NULL OR c.finished_at < c.started_at)
+                      AND c.started_at < now() - interval '1 day')
+           RETURNING c.id, c.profile_id, c.api_url, c.token, c.finished_at,
+                     a.username::text AS "username!", p.slug::text AS "slug!""#,
         EVERY.as_secs_f64(),
     )
     .fetch_all(db)
@@ -119,7 +124,21 @@ pub async fn sync_due(db: &PgPool) -> anyhow::Result<usize> {
     let mut imports = tokio::task::JoinSet::new();
     for c in due {
         let db = db.clone();
-        imports.spawn(async move { sync(&db, c.id, c.profile_id, &c.api_url, &c.token).await });
+        let what = format!(
+            "YourSpotify connection {} ({}/{})",
+            c.id, c.username, c.slug
+        );
+        tracing::info!(
+            "{what}: fetching {} from {}",
+            if c.finished_at.is_none() {
+                "the history"
+            } else {
+                "new plays"
+            },
+            c.api_url
+        );
+        imports
+            .spawn(async move { sync(&db, c.id, &what, c.profile_id, &c.api_url, &c.token).await });
     }
     let mut count = 0;
     while let Some(done) = imports.join_next().await {
@@ -129,20 +148,25 @@ pub async fn sync_due(db: &PgPool) -> anyhow::Result<usize> {
     Ok(count)
 }
 
-async fn sync(db: &PgPool, id: i64, profile_id: i64, url: &str, token: &str) -> sqlx::Result<()> {
+async fn sync(
+    db: &PgPool,
+    id: i64,
+    what: &str,
+    profile_id: i64,
+    url: &str,
+    token: &str,
+) -> sqlx::Result<()> {
     let result = match Source::new(url, token) {
         Ok(source) => yourspotify::import(db, &source, profile_id, false).await,
         Err(e) => Err(e),
     };
     let (imported, error) = match &result {
         Ok(report) => {
-            if report.recorded > 0 {
-                tracing::info!("YourSpotify connection {id}: {report}");
-            }
+            tracing::info!("{what}: {report}");
             (report.recorded as i64, None)
         }
         Err(e) => {
-            tracing::warn!("YourSpotify connection {id}: {e:#}");
+            tracing::warn!("{what}: {e:#}");
             (0, Some(format!("{e:#}")))
         }
     };
@@ -159,12 +183,20 @@ async fn sync(db: &PgPool, id: i64, profile_id: i64, url: &str, token: &str) -> 
     Ok(())
 }
 
+static LAST_ROUND: std::sync::Mutex<Option<OffsetDateTime>> = std::sync::Mutex::new(None);
+
+/// When the server last looked for connections that are due.
+pub fn last_round() -> Option<OffsetDateTime> {
+    *LAST_ROUND.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 /// Keeps importing from the connections while the server runs. A round does not
 /// wait for the imports of the one before; those are skipped until they are done.
 pub fn spawn(db: PgPool) {
     tokio::spawn(async move {
         loop {
             let db = db.clone();
+            *LAST_ROUND.lock().unwrap_or_else(|e| e.into_inner()) = Some(OffsetDateTime::now_utc());
             tokio::spawn(async move {
                 if let Err(e) = sync_due(&db).await {
                     tracing::warn!("YourSpotify connections: {e:#}");

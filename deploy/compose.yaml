@@ -17,6 +17,9 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://musicbanana:${MUSICBANANA_DB_PASSWORD:?set MUSICBANANA_DB_PASSWORD in .env}@db:5432/musicbanana
+      ACCESS_LOG: ${ACCESS_LOG:-on}
+      YOURSPOTIFY_ALLOWED_URLS: ${YOURSPOTIFY_ALLOWED_URLS:-}
+      RUST_LOG: ${RUST_LOG:-musicbanana=info,tower_http=info}
     ports:
       - "${MUSICBANANA_PORT:-3000}:3000"
     depends_on:

@@ -14,7 +14,7 @@ use tower::ServiceExt;
 // private profile, and alex has one.
 
 async fn get(db: &PgPool, uri: &str) -> (StatusCode, Value) {
-    let app = router(AppState { db: db.clone() }, Path::new("does-not-exist"));
+    let app = router(AppState::new(db.clone()), Path::new("does-not-exist"));
     let res = app
         .oneshot(Request::get(uri).body(Body::empty()).unwrap())
         .await

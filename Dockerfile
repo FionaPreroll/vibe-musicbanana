@@ -21,6 +21,8 @@ FROM rust:1-slim-trixie AS backend
 WORKDIR /src/backend
 # Queries are checked against the committed cache in backend/.sqlx.
 ENV SQLX_OFFLINE=true
+# Shown on the status page; CI passes the commit.
+ARG GIT_COMMIT=
 COPY backend/ ./
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/backend/target \

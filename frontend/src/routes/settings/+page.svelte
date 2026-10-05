@@ -7,6 +7,7 @@
 		type Connection,
 		type Visibility
 	} from '#lib/api.ts';
+	import { connectionState } from '#lib/connections.ts';
 	import { formatDateTime, listenCount } from '#lib/format.ts';
 	import type { PageProps } from './$types';
 
@@ -90,7 +91,12 @@
 
 	// YourSpotify
 
-	let newConnection = $state({ profile: 'default', url: '', token: '' });
+	// svelte-ignore state_referenced_locally
+	let newConnection = $state({
+		profile: 'default',
+		url: data.allowed.length === 1 ? data.allowed[0] : '',
+		token: ''
+	});
 	let connecting = $state(false);
 
 	async function connect(event: SubmitEvent) {
@@ -110,15 +116,6 @@
 		if (!confirm(`Stop importing from YourSpotify into ${c.profile}? Its listens stay.`)) return;
 		change('connections', () => sendJson(fetch, 'DELETE', `/api/me/yourspotify/${c.id}`));
 	};
-
-	function connectionState(c: Connection) {
-		if (!c.started_at) return 'Starts within a minute.';
-		if (!c.finished_at || c.finished_at < c.started_at) {
-			return `Importing since ${formatDateTime(c.started_at)}…`;
-		}
-		if (c.error) return `Failed at ${formatDateTime(c.finished_at)}: ${c.error}`;
-		return `Up to date as of ${formatDateTime(c.finished_at)}.`;
-	}
 
 	// While an import runs, ask again now and then.
 	$effect(() => {
@@ -363,41 +360,56 @@
 		{/if}
 		{@render error('connections')}
 
-		<form class="mt-4 grid gap-3 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-end" onsubmit={connect}>
-			<label class="flex flex-col gap-1 text-sm">
-				<span>Profile</span>
-				<select class={select} bind:value={newConnection.profile}>
-					{#each me.profiles as profile (profile.slug)}
-						<option value={profile.slug}>{profile.name}</option>
-					{/each}
-				</select>
-			</label>
-			<label class="flex flex-col gap-1 text-sm">
-				<span>YourSpotify API address</span>
-				<input
-					class={input}
-					required
-					type="url"
-					placeholder="http://192.168.1.10:8080"
-					bind:value={newConnection.url}
-				/>
-			</label>
-			<label class="flex flex-col gap-1 text-sm">
-				<span>Public token</span>
-				<input
-					class={input}
-					required
-					type="password"
-					autocomplete="off"
-					bind:value={newConnection.token}
-				/>
-			</label>
-			<button class={button} disabled={connecting}>{connecting ? 'Checking…' : 'Connect'}</button>
-		</form>
-		<p class="mt-2 text-sm text-stone-500">
-			The address is YourSpotify's API (its API_ENDPOINT, not the web interface), as the musicbanana
-			server reaches it. The public token is in YourSpotify's settings.
-		</p>
+		{#if data.allowed.length === 0}
+			<p class="mt-4 text-sm text-stone-500">
+				This server takes YourSpotify connections from its command line only. Its admin can allow
+				addresses for this page with <code class="text-stone-700">YOURSPOTIFY_ALLOWED_URLS</code>.
+			</p>
+		{:else}
+			<form
+				class="mt-4 grid gap-3 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-end"
+				onsubmit={connect}
+			>
+				<label class="flex flex-col gap-1 text-sm">
+					<span>Profile</span>
+					<select class={select} bind:value={newConnection.profile}>
+						{#each me.profiles as profile (profile.slug)}
+							<option value={profile.slug}>{profile.name}</option>
+						{/each}
+					</select>
+				</label>
+				<label class="flex flex-col gap-1 text-sm">
+					<span>YourSpotify API address</span>
+					<input
+						class={input}
+						required
+						type="url"
+						list="yourspotify-allowed"
+						placeholder={data.allowed[0]}
+						bind:value={newConnection.url}
+					/>
+					<datalist id="yourspotify-allowed">
+						{#each data.allowed as address (address)}<option value={address}></option>{/each}
+					</datalist>
+				</label>
+				<label class="flex flex-col gap-1 text-sm">
+					<span>Public token</span>
+					<input
+						class={input}
+						required
+						type="password"
+						autocomplete="off"
+						bind:value={newConnection.token}
+					/>
+				</label>
+				<button class={button} disabled={connecting}>{connecting ? 'Checking…' : 'Connect'}</button>
+			</form>
+			<p class="mt-2 text-sm text-stone-500">
+				The address is YourSpotify's API (its API_ENDPOINT, not the web interface), as the
+				musicbanana server reaches it: {data.allowed.join(' or ')}, or below. The public token is in
+				YourSpotify's settings.
+			</p>
+		{/if}
 		{@render error('connection')}
 	</section>
 

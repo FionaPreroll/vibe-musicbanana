@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM session s USING account a\n                WHERE s.token_hash = $1 AND a.id = s.account_id\n               RETURNING a.username::text AS \"username!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "username!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "23851824f4c6af2950ae7adbbd6c4652808c6ee3e66852f04a5fcdf32a18fc36"
+}

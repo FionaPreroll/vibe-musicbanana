@@ -66,6 +66,7 @@ The accounts of the old musicbanana log in with their old passwords; the first l
 musicbanana account create <username> --email <address>   # asks for the password, with a default profile
 musicbanana account password <username>                     # asks for the new password
 musicbanana account rename <username> <new name>
+musicbanana account admin <username> [--off]               # the status page, see below
 ```
 
 Both read the password from standard input when that is not a terminal, e.g. `echo "$PASSWORD" | musicbanana account password fiona`. Passwords need at least 8 characters.
@@ -218,7 +219,7 @@ musicbanana yourspotify list                 # all connections with their state
 musicbanana yourspotify remove <id>
 ```
 
-The token is tried before the connection is kept. From then on `musicbanana serve` imports the whole history once and afterwards the new plays every 15 minutes, as the importer above would; the settings page shows when it last finished, how many plays it brought in so far and the last error. Each profile takes one connection, so two Spotify accounts go to two profiles, of the same account or of different ones. The token is stored in the database and never shown again, logged or sent to the browser; removing the connection deletes it. The server fetches from the address given there, so only hand out accounts to people you would also let reach your network from the server.
+The token is tried before the connection is kept. From then on `musicbanana serve` imports the whole history once and afterwards the new plays every 15 minutes, as the importer above would; the settings page shows when it last finished, how many plays it brought in so far and the last error. Each profile takes one connection, so two Spotify accounts go to two profiles, of the same account or of different ones. The token is stored in the database and never shown again, logged or sent to the browser; removing the connection deletes it. The settings page only takes the addresses in `YOURSPOTIFY_ALLOWED_URLS` (separated by commas, e.g. `http://192.168.1.10:8080`; an address also allows the paths below it, with the same scheme, host and port), so that nobody can make the server fetch from elsewhere in your network; without it the page takes none, and the command line takes any address. The server does not follow redirects from YourSpotify. Connections made before an address left the list keep running; `yourspotify list` shows them and `yourspotify remove` stops them.
 
 YourSpotify has no documented API; the importer uses the route its web interface reads the history from (`GET /spotify/gethistory`), which a new YourSpotify version could change. A YourSpotify that takes no time range there gets the old way: everything fetched newest first, then stored at once.
 
@@ -284,4 +285,20 @@ cd backend && cargo build --release
 STATIC_DIR=../frontend/build DATABASE_URL=postgres://… ./target/release/musicbanana
 ```
 
-Environment: `DATABASE_URL` (required), `LISTEN_ADDR` (default `127.0.0.1:3000`), `STATIC_DIR` (default `../frontend/build`), `RUST_LOG`.
+Environment: `DATABASE_URL` (required), `LISTEN_ADDR` (default `127.0.0.1:3000`), `STATIC_DIR` (default `../frontend/build`), `ACCESS_LOG`, `RUST_LOG` (see [Logs](#logs)), `YOURSPOTIFY_ALLOWED_URLS` (see [above](#connections-the-server-keeps-up-to-date)).
+
+## Logs
+
+The server logs to standard output (`docker compose logs -f musicbanana`). Besides start-up and errors:
+
+- `musicbanana::access`: one line per request, with the client (the first `X-Forwarded-For` address behind a reverse proxy), method, path with query, status and milliseconds, e.g. `192.168.1.20 POST /api/me/profiles 201 12 ms`. Health checks and the frontend's files are left out. `ACCESS_LOG=off` switches it off.
+- `musicbanana::account`: logins (failed ones as warnings, with the name tried), logouts and every change in the settings: profiles, scrobble tokens, YourSpotify connections (never their token), user name and password.
+- `musicbanana::connections`: each round of a YourSpotify connection, when it starts and what it brought, or why it failed; the import's progress comes from `musicbanana::yourspotify`.
+
+`RUST_LOG` picks what is logged, by target and level (default `musicbanana=info,tower_http=info`): `RUST_LOG=musicbanana=info,musicbanana::account=warn` keeps only failed logins of the settings, `RUST_LOG=musicbanana=debug` logs more, and `musicbanana::access=off` is the same as `ACCESS_LOG=off`.
+
+## Status page
+
+Admins have a Status link at the top that leads to `/status`: the build (version and commit), the server's CPU and memory, the machine's load and memory, the database (size, migration, connections, cache hits, rows and size per table, listens of the last 24 hours by source), the YourSpotify connections and how long each API route took since the server started (mean, median, 95th percentile, maximum and 5xx errors). It refreshes every 10 seconds. `musicbanana account admin <username>` makes an account an admin, `--off` takes that back; nobody else sees the page.
+
+The commit comes from the image build (`--build-arg GIT_COMMIT=…`, which CI sets); a local build shows none.

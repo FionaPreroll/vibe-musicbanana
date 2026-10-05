@@ -536,7 +536,7 @@ async fn a_forced_merge_joins_what_the_ids_tell_apart(db: PgPool) {
 
 /// GET or POST against the API, as the frontend and Navidrome do.
 async fn send(db: &PgPool, request: Request<Body>) -> (StatusCode, Value) {
-    let app = router(AppState { db: db.clone() }, Path::new("does-not-exist"));
+    let app = router(AppState::new(db.clone()), Path::new("does-not-exist"));
     let res = app.oneshot(request).await.unwrap();
     let status = res.status();
     let body = res.into_body().collect().await.unwrap().to_bytes();
