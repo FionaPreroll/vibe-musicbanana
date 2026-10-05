@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM merge_change c\n          USING listen l\n          WHERE c.tbl = 'listen' AND (c.key ->> 'id')::bigint = l.id\n            AND l.profile_id = ANY($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cf54ba65a5e8ef1b512de5ebbb657e9f2ff520ef5b6ebc839d15dcb04cbfe042"
+}
