@@ -156,6 +156,21 @@
 		}
 	}
 
+	// Email address
+
+	let email = $state({ address: null as string | null, password: '' });
+	let emailChanged = $state(false);
+
+	async function changeEmail(event: SubmitEvent) {
+		event.preventDefault();
+		emailChanged = false;
+		const body = { email: email.address, password: email.password };
+		if (await change('email', () => sendJson(fetch, 'PUT', '/api/me/email', body))) {
+			email = { address: null, password: '' };
+			emailChanged = true;
+		}
+	}
+
 	// Password
 
 	let password = $state({ current: '', new: '', repeated: '' });
@@ -499,6 +514,45 @@
 				<a class="underline" href={profilePath(me.username)}>{profilePath(me.username)}</a>.
 			</p>
 		{/if}
+	</section>
+
+	<section class="mt-12">
+		<h2 class={heading}>Email address</h2>
+		<p class="mb-3 text-sm text-stone-600">
+			It logs you in, as does your user name. musicbanana sends no mail, so it is not checked.
+		</p>
+		<form class="flex max-w-sm flex-col gap-3" onsubmit={changeEmail}>
+			<label class="flex flex-col gap-1 text-sm">
+				<span>New address</span>
+				<input
+					class={input}
+					type="email"
+					autocomplete="email"
+					required
+					maxlength="254"
+					value={email.address ?? me.email}
+					oninput={(e) => (email.address = e.currentTarget.value)}
+				/>
+			</label>
+			<label class="flex flex-col gap-1 text-sm">
+				<span>Your password</span>
+				<input
+					class={input}
+					type="password"
+					autocomplete="current-password"
+					required
+					bind:value={email.password}
+				/>
+			</label>
+			{@render error('email')}
+			{#if emailChanged}
+				<p class="text-sm text-green-800" role="status">Changed to {me.email}.</p>
+			{/if}
+			<button
+				class="{button} self-start"
+				disabled={email.address === null || email.address === me.email}>Change address</button
+			>
+		</form>
 	</section>
 
 	<section class="mt-12">

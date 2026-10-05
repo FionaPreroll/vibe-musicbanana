@@ -66,12 +66,15 @@ The accounts of the old musicbanana log in with their old passwords; the first l
 musicbanana account create <username> --email <address>   # asks for the password, with a default profile
 musicbanana account password <username>                     # asks for the new password
 musicbanana account rename <username> <new name>
+musicbanana account email <username> <address>
 musicbanana account admin <username> [--off]               # the status page, see below
 ```
 
 Both read the password from standard input when that is not a terminal, e.g. `echo "$PASSWORD" | musicbanana account password fiona`. Passwords need at least 8 characters.
 
 A user name has up to 32 letters, digits, dashes, dots and underscores and starts with a letter or digit. It can be changed on the settings page or with `account rename`. Links with the old name lead to the new one, as long as the viewer may see the profile, and no other account can take the old name; renaming back to it is fine. Scrobble tokens and YourSpotify connections stay as they are.
+
+The email address logs in too and can be changed on the settings page (with the password) or with `account email`. musicbanana sends no mail, so nobody checks that it works.
 
 A further profile, for example one per player or for a second person's listens, comes from the settings page or from
 
