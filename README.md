@@ -130,7 +130,17 @@ With Docker, prefix them with `docker compose exec musicbanana`. A suggestion sa
 - **one letter apart:** a letter more, missing, different or swapped with its neighbour, in names of six letters or more and never where digits differ ("Chapter 1", "Chapter 2");
 - **version:** the same title apart from a note in brackets, after a dash or "feat.", so possibly a live version or a remaster; these come last.
 
-The entry with fewer listens goes into the one with more, a version into the plain title. Releases and recordings are compared within one artist only, so merge artists first: merging an artist also merges its releases and recordings into the other artist's ones with the same title and moves the rest over. A merge points the listens and the spellings at the remaining entry, so later scrobbles with the old spelling land there too; the raw strings of the listens stay as they were. There is no undo yet, hence `--dry-run`.
+The entry with fewer listens goes into the one with more, a version into the plain title. Releases and recordings are compared within one artist only, so merge artists first: merging an artist also merges its releases and recordings into the other artist's ones with the same title and moves the rest over. A merge points the listens and the spellings at the remaining entry, so later scrobbles with the old spelling land there too; the raw strings of the listens stay as they were.
+
+Every merge can be taken back. A merge prints its number, and `merge log` lists them:
+
+```sh
+musicbanana merge log                  # the latest 30, newest first
+musicbanana merge undo 12 --dry-run    # what undoing merge 12 would put back
+musicbanana merge undo 12
+```
+
+Undoing puts back what the merge changed: the listens, spellings and MusicBrainz IDs go back to the merged entry, which stands on its own again, and an artist gets its albums and tracks back. What changed since stays as it is now, such as listens that came in under the merged spelling after the merge, and the command says how many such rows it left. A merge that a later one built on (merging the remaining entry on into a third one, say) can only be undone after that later one.
 
 Two entries that both have a MusicBrainz ID are not suggested, as their IDs say they are different ones of the same name, and merging them takes `--force`: for an artist's other name that should count for the main one, or a recording MusicBrainz lists twice. Merging an artist moves its albums and tracks over instead of merging them with one of another ID. A merge takes the IDs along, so listens with the ID of the merged entry count for the remaining one.
 

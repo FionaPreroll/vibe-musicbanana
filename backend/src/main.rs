@@ -168,6 +168,21 @@ enum MergeCommand {
         #[arg(long, default_value_t = 30)]
         limit: usize,
     },
+    /// List the latest merges, newest first, with the number that undoes each.
+    Log {
+        /// Merges shown.
+        #[arg(long, default_value_t = 30)]
+        limit: i64,
+    },
+    /// Take a merge back: the merged entry stands on its own again, with its
+    /// listens, spellings and MusicBrainz IDs.
+    Undo {
+        /// Its number, as `merge log` and the merge itself show it.
+        op: i64,
+        /// Only show what would change.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Merge an artist into another one, with its releases and recordings.
     Artist(MergeArgs),
     /// Merge a release (album) into another one.
@@ -459,6 +474,20 @@ async fn merge_command(db: &PgPool, command: MergeCommand) -> anyhow::Result<()>
                 let found = merge::suggest(db, kind).await?;
                 print_suggestions(kind, &found, limit);
             }
+            return Ok(());
+        }
+        MergeCommand::Log { limit } => {
+            let ops = merge::log(db, limit.max(1)).await?;
+            if ops.is_empty() {
+                println!("No merges yet.");
+            }
+            for op in ops {
+                println!("{op}");
+            }
+            return Ok(());
+        }
+        MergeCommand::Undo { op, dry_run } => {
+            println!("{}", merge::undo(db, op, dry_run).await?);
             return Ok(());
         }
         MergeCommand::Artist(args) => (Kind::Artist, args),

@@ -5,6 +5,9 @@
 //! spellings (alias rows) of one entry at the other one and marks the first as
 //! `merged_into` the second, so later scrobbles with the old spelling count for
 //! the remaining entry too.
+//!
+//! Each merge is written down with every row it changed, so that [`undo`] can
+//! take it back (see migrations/0008_merge_undo.sql).
 
 use std::{
     cmp::Reverse,
@@ -460,6 +463,8 @@ pub struct Merged {
     pub releases_merged: u64,
     pub recordings_moved: u64,
     pub recordings_merged: u64,
+    /// The number [`undo`] takes it back by; none in a dry run.
+    pub op: Option<i64>,
 }
 
 impl Merged {
@@ -475,6 +480,7 @@ impl Merged {
             releases_merged: 0,
             recordings_moved: 0,
             recordings_merged: 0,
+            op: None,
         }
     }
 }
@@ -508,6 +514,8 @@ impl fmt::Display for Merged {
         }
         if self.dry_run {
             write!(f, "\nDry run, nothing was changed.")?;
+        } else if let Some(op) = self.op {
+            write!(f, "\nUndo with: musicbanana merge undo {op}")?;
         }
         Ok(())
     }
@@ -533,11 +541,13 @@ pub async fn merge(
     options: Options,
 ) -> anyhow::Result<Merged> {
     let mut tx = db.begin().await?;
+    let op = start_journal(&mut tx, kind, from, into).await?;
     let merged = match kind {
         Kind::Artist => artist(&mut tx, from, into, options.force).await?,
         Kind::Release => release(&mut tx, from, into, options.force).await?,
         Kind::Recording => recording(&mut tx, from, into, options.force).await?,
     };
+    end_journal(&mut tx, op, &merged).await?;
     if options.dry_run {
         tx.rollback().await?;
     } else {
@@ -545,7 +555,201 @@ pub async fn merge(
     }
     Ok(Merged {
         dry_run: options.dry_run,
+        op: (!options.dry_run).then_some(op),
         ..merged
+    })
+}
+
+/// Starts writing down the changes of a merge, see migrations/0008_merge_undo.sql.
+async fn start_journal(
+    conn: &mut PgConnection,
+    kind: Kind,
+    from: i64,
+    into: i64,
+) -> sqlx::Result<i64> {
+    let op = sqlx::query_scalar!(
+        "INSERT INTO merge_op (kind, from_id, into_id, from_name, into_name)
+         VALUES ($1, $2, $3, '', '') RETURNING id",
+        kind.to_string(),
+        from,
+        into,
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    sqlx::query_scalar!(
+        "SELECT set_config('musicbanana.merge_op', $1, true)",
+        op.to_string()
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    Ok(op)
+}
+
+/// Stops writing down changes and names the merged entries in the log.
+async fn end_journal(conn: &mut PgConnection, op: i64, merged: &Merged) -> sqlx::Result<()> {
+    sqlx::query_scalar!("SELECT set_config('musicbanana.merge_op', '', true)")
+        .fetch_one(&mut *conn)
+        .await?;
+    sqlx::query!(
+        "UPDATE merge_op SET from_name = $2, into_name = $3 WHERE id = $1",
+        op,
+        merged.from.1,
+        merged.into.1,
+    )
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------- undoing
+
+/// A merge as the log lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeOp {
+    pub id: i64,
+    pub kind: String,
+    pub from: (i64, String),
+    pub into: (i64, String),
+    pub merged_at: time::OffsetDateTime,
+    pub undone_at: Option<time::OffsetDateTime>,
+}
+
+impl fmt::Display for MergeOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let day = |t: time::OffsetDateTime| {
+            let (y, m, d) = t.to_calendar_date();
+            format!(
+                "{y}-{:02}-{d:02} {:02}:{:02}",
+                m as u8,
+                t.hour(),
+                t.minute()
+            )
+        };
+        write!(
+            f,
+            "{:>5}  {}  {} {} \"{}\" into {} \"{}\"",
+            self.id,
+            day(self.merged_at),
+            self.kind,
+            self.from.0,
+            self.from.1,
+            self.into.0,
+            self.into.1
+        )?;
+        if let Some(undone) = self.undone_at {
+            write!(f, "  (undone {})", day(undone))?;
+        }
+        Ok(())
+    }
+}
+
+/// The latest merges, newest first.
+pub async fn log(db: &PgPool, limit: i64) -> sqlx::Result<Vec<MergeOp>> {
+    let rows = sqlx::query!(
+        "SELECT id, kind, from_id, from_name, into_id, into_name, merged_at, undone_at
+           FROM merge_op ORDER BY id DESC LIMIT $1",
+        limit
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| MergeOp {
+            id: r.id,
+            kind: r.kind,
+            from: (r.from_id, r.from_name),
+            into: (r.into_id, r.into_name),
+            merged_at: r.merged_at,
+            undone_at: r.undone_at,
+        })
+        .collect())
+}
+
+/// What [`undo`] did.
+#[derive(Debug)]
+pub struct Undone {
+    pub op: MergeOp,
+    /// Changed rows put back as they were before the merge.
+    pub restored: i64,
+    /// Rows that have changed again since and kept their current values.
+    pub kept: i64,
+    pub dry_run: bool,
+}
+
+impl fmt::Display for Undone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (kind, from, into) = (&self.op.kind, &self.op.from, &self.op.into);
+        let verb = if self.dry_run { "Would undo" } else { "Undid" };
+        write!(
+            f,
+            "{verb} merge {}: {kind} {} \"{}\" is apart from {} \"{}\" again.\n\
+             {} changes put back",
+            self.op.id, from.0, from.1, into.0, into.1, self.restored
+        )?;
+        if self.kept > 0 {
+            write!(
+                f,
+                ", {} left as they are now, as they have changed since",
+                self.kept
+            )?;
+        }
+        write!(f, ".")?;
+        if self.dry_run {
+            write!(f, "\nDry run, nothing was changed.")?;
+        }
+        Ok(())
+    }
+}
+
+/// Takes merge `op` back: the listens, spellings and IDs it moved go back to the
+/// merged entry, which stands on its own again. Merges after it that changed the
+/// same entries have to be undone first.
+pub async fn undo(db: &PgPool, op: i64, dry_run: bool) -> anyhow::Result<Undone> {
+    let mut tx = db.begin().await?;
+    let row = sqlx::query!(
+        "SELECT id, kind, from_id, from_name, into_id, into_name, merged_at, undone_at
+           FROM merge_op WHERE id = $1",
+        op
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .with_context(|| format!("there is no merge {op}; `musicbanana merge log` lists them"))?;
+    if let Some(when) = row.undone_at {
+        bail!("merge {op} was undone already, on {when}");
+    }
+    let changes = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "n!" FROM merge_change WHERE op_id = $1"#,
+        op
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    let kept = sqlx::query_scalar!(r#"SELECT undo_merge($1) AS "kept!""#, op)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| match e.as_database_error() {
+            Some(db) => anyhow::anyhow!("{}", db.message()),
+            None => e.into(),
+        })?;
+    let undone_at = sqlx::query_scalar!("SELECT undone_at FROM merge_op WHERE id = $1", op)
+        .fetch_one(&mut *tx)
+        .await?;
+    if dry_run {
+        tx.rollback().await?;
+    } else {
+        tx.commit().await?;
+    }
+    Ok(Undone {
+        op: MergeOp {
+            id: row.id,
+            kind: row.kind,
+            from: (row.from_id, row.from_name),
+            into: (row.into_id, row.into_name),
+            merged_at: row.merged_at,
+            undone_at: if dry_run { None } else { undone_at },
+        },
+        restored: changes - kept,
+        kept,
+        dry_run,
     })
 }
 

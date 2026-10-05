@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE merge_op SET from_name = $2, into_name = $3 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "00db20d6d2448c9ca4ce0c22f781d6efd370a9a0506703a551b4b4f509c253a3"
+}

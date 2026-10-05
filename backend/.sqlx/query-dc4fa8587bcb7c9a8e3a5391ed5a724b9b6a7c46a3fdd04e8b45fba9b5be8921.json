@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, kind, from_id, from_name, into_id, into_name, merged_at, undone_at\n           FROM merge_op WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "merge_op",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "merge_op",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "from_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "merge_op",
+            "name": "from_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "from_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "merge_op",
+            "name": "from_name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "into_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "merge_op",
+            "name": "into_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "into_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "merge_op",
+            "name": "into_name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "merged_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "merge_op",
+            "name": "merged_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "undone_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "merge_op",
+            "name": "undone_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "dc4fa8587bcb7c9a8e3a5391ed5a724b9b6a7c46a3fdd04e8b45fba9b5be8921"
+}
