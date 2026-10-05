@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum, builder::NonEmptyStringValueParser};
 use musicbanana::{
-    AppState, edit, import_php,
+    AppState, account, auth, edit, import_php,
     merge::{self, Kind, Suggestion},
     router, tokens, yourspotify,
 };
@@ -41,6 +41,9 @@ enum Command {
     /// Import Spotify plays from YourSpotify: the whole history the first time,
     /// then only the plays since.
     ImportYourspotify(YourSpotifyArgs),
+    /// Create accounts and set their passwords.
+    #[command(subcommand)]
+    Account(AccountCommand),
     /// Manage the tokens scrobble clients use (ListenBrainz API).
     #[command(subcommand)]
     Token(TokenCommand),
@@ -110,6 +113,20 @@ fn parse_interval(text: &str) -> Result<Duration, String> {
         Some(seconds) if seconds > 0 => Ok(Duration::from_secs(seconds)),
         _ => Err(format!("\"{text}\" is not a time like 15m or 1h")),
     }
+}
+
+#[derive(Subcommand)]
+enum AccountCommand {
+    /// Create an account with a default profile. Asks for the password, or
+    /// reads it from standard input when that is not a terminal.
+    Create {
+        username: String,
+        #[arg(long)]
+        email: String,
+    },
+    /// Set the password of an account, e.g. when it is forgotten. Asks for it,
+    /// or reads it from standard input when that is not a terminal.
+    Password { username: String },
 }
 
 #[derive(Subcommand)]
@@ -253,6 +270,7 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Command::ImportYourspotify(args) => import_yourspotify(&db, args).await,
+        Command::Account(command) => account_command(&db, command).await,
         Command::Token(command) => token(&db, command).await,
         Command::Merge(command) => merge_command(&db, command).await,
         Command::Rename { kind, id, name } => {
@@ -310,6 +328,75 @@ async fn mbid_command(db: &PgPool, command: MbidCommand) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+async fn account_command(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
+    match command {
+        AccountCommand::Create { username, email } => {
+            let hash = auth::hash_password(&read_password()?)?;
+            let mut tx = db.begin().await?;
+            let id = sqlx::query_scalar!(
+                "INSERT INTO account (username, email, password_hash) VALUES ($1, $2, $3)
+                 ON CONFLICT DO NOTHING
+                 RETURNING id",
+                username.trim(),
+                email.trim(),
+                hash,
+            )
+            .fetch_optional(&mut *tx)
+            .await?
+            .context("there is an account with this user name or email address already")?;
+            sqlx::query!(
+                "INSERT INTO profile (account_id, slug, name) VALUES ($1, 'default', 'Default')",
+                id
+            )
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await?;
+            eprintln!(
+                "Created the account {} with a default profile.",
+                username.trim()
+            );
+        }
+        AccountCommand::Password { username } => {
+            let hash = auth::hash_password(&read_password()?)?;
+            let changed = sqlx::query!(
+                "UPDATE account SET password_hash = $2, password_legacy_md5 = false
+                  WHERE username = $1::text::citext",
+                username,
+                hash,
+            )
+            .execute(db)
+            .await?;
+            if changed.rows_affected() == 0 {
+                bail!("there is no account {username}");
+            }
+            eprintln!("Set the password of {username}.");
+        }
+    }
+    Ok(())
+}
+
+/// Asks twice on a terminal; otherwise takes the first line of standard input.
+fn read_password() -> anyhow::Result<String> {
+    let password = if io::stdin().is_terminal() {
+        let password = rpassword::prompt_password("Password: ")?;
+        if rpassword::prompt_password("Again: ")? != password {
+            bail!("the two passwords differ");
+        }
+        password
+    } else {
+        let mut line = String::new();
+        io::stdin().read_line(&mut line)?;
+        line.trim_end_matches(['\r', '\n']).to_owned()
+    };
+    if password.chars().count() < account::MIN_PASSWORD {
+        bail!(
+            "the password needs at least {} characters",
+            account::MIN_PASSWORD
+        );
+    }
+    Ok(password)
 }
 
 async fn token(db: &PgPool, command: TokenCommand) -> anyhow::Result<()> {

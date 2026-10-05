@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO profile (account_id, slug, name, visibility)\n         VALUES ($1, $2, $3, $4::text::visibility)\n         ON CONFLICT (account_id, slug) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        {
+          "Custom": {
+            "name": "citext",
+            "kind": "Simple"
+          }
+        },
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7afcd0f23bd65c75c6e6bae519643a05adfa5cb303c71d3a99f55f2f547a3fe2"
+}

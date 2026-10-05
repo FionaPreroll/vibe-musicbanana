@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.id, a.username::text AS \"username!\", p.slug::text AS \"slug!\", p.name,\n                  p.visibility::text AS \"visibility!\",\n                  p.account_id IS NOT DISTINCT FROM $3 AS \"own!\"\n             FROM profile p\n             JOIN account a ON a.id = p.account_id\n            WHERE a.username = $1::text::citext\n              AND p.slug = $2::text::citext\n              AND (p.visibility = 'public' OR p.account_id = $3\n                   OR (p.visibility = 'followers'\n                       AND EXISTS (SELECT FROM follow f\n                                    WHERE f.profile_id = p.id AND f.follower_id = $3)))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "profile",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "username!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "slug!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "profile",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "visibility!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "own!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "c8ccac0fcc8fece192c76cfcda2c769dc1c914abd6817128354689d0e57f40b2"
+}

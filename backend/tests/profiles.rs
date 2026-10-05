@@ -49,8 +49,8 @@ async fn lists_public_profiles(db: PgPool) {
     assert_eq!(
         json,
         json!([
-            { "username": "alex", "slug": "default", "name": "Default", "listens": 1 },
-            { "username": "Fiona", "slug": "default", "name": "Default", "listens": 8 },
+            { "username": "alex", "slug": "default", "name": "Default", "visibility": "public", "listens": 1 },
+            { "username": "Fiona", "slug": "default", "name": "Default", "visibility": "public", "listens": 8 },
         ])
     );
 }
@@ -64,6 +64,8 @@ async fn overview_counts_listens_per_year_in_the_given_time_zone(db: PgPool) {
             "username": "Fiona",
             "slug": "default",
             "name": "Default",
+            "visibility": "public",
+            "own": false,
             "listens": 8,
             "first_listened_at": "2015-06-01T12:00:00Z",
             "last_listened_at": "2016-03-04T12:00:00Z",

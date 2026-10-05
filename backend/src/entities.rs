@@ -18,6 +18,7 @@ use uuid::Uuid;
 
 use crate::{
     AppError, AppState,
+    account::Viewer,
     profiles::{ChartEntry, Profile, find_profile, time_zone},
 };
 
@@ -104,10 +105,11 @@ const LIST_LIMIT: i64 = 30;
 
 async fn artist(
     State(state): State<AppState>,
+    viewer: Viewer,
     Path((username, slug, id)): Path<(String, String, i64)>,
     Query(params): Query<Params>,
 ) -> Result<Json<Page>, AppError> {
-    let profile = find_profile(&state.db, &username, &slug).await?;
+    let profile = find_profile(&state.db, viewer, &username, &slug).await?;
     let tz = time_zone(&state.db, params.tz).await?;
     let artist = sqlx::query!(
         r#"SELECT a.id, a.name,
@@ -136,10 +138,11 @@ async fn artist(
 
 async fn release(
     State(state): State<AppState>,
+    viewer: Viewer,
     Path((username, slug, id)): Path<(String, String, i64)>,
     Query(params): Query<Params>,
 ) -> Result<Json<Page>, AppError> {
-    let profile = find_profile(&state.db, &username, &slug).await?;
+    let profile = find_profile(&state.db, viewer, &username, &slug).await?;
     let tz = time_zone(&state.db, params.tz).await?;
     let release = sqlx::query!(
         r#"SELECT r.id, r.title, a.id AS artist_id, a.name AS artist,
@@ -172,10 +175,11 @@ async fn release(
 
 async fn recording(
     State(state): State<AppState>,
+    viewer: Viewer,
     Path((username, slug, id)): Path<(String, String, i64)>,
     Query(params): Query<Params>,
 ) -> Result<Json<Page>, AppError> {
-    let profile = find_profile(&state.db, &username, &slug).await?;
+    let profile = find_profile(&state.db, viewer, &username, &slug).await?;
     let tz = time_zone(&state.db, params.tz).await?;
     let recording = sqlx::query!(
         r#"SELECT r.id, r.title, a.id AS artist_id, a.name AS artist,
