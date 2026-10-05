@@ -20,7 +20,7 @@ use sqlx::{PgConnection, PgPool};
 use unicode_normalization::{UnicodeNormalization, char::is_combining_mark};
 use uuid::Uuid;
 
-use crate::catalog::name_key;
+use crate::catalog::{name_key, without_edition};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -1179,6 +1179,224 @@ async fn recording(
     .execute(&mut *conn)
     .await?;
     Ok(merged)
+}
+
+// ---------------------------------------------------------------- editions
+
+/// What [`editions`] did with a release or recording whose title names an edition.
+#[derive(Debug)]
+pub enum Edition {
+    /// Merged into the entry of the plain title.
+    Merged(Merged),
+    /// Renamed to the plain title, which had no entry yet.
+    Renamed {
+        kind: Kind,
+        id: i64,
+        from: String,
+        to: String,
+    },
+    /// Left alone, as the entry of the plain title has other MusicBrainz IDs.
+    ToldApart {
+        kind: Kind,
+        id: i64,
+        title: String,
+        other: (i64, String),
+    },
+}
+
+impl fmt::Display for Edition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Edition::Merged(m) => write!(
+                f,
+                "merge {} {} \"{}\" into {} \"{}\": {} {}",
+                m.kind,
+                m.from.0,
+                m.from.1,
+                m.into.0,
+                m.into.1,
+                m.listens,
+                if m.listens == 1 { "listen" } else { "listens" }
+            )
+            .and_then(|()| match m.op {
+                Some(op) => write!(f, " (undo with: musicbanana merge undo {op})"),
+                None => Ok(()),
+            }),
+            Edition::Renamed { kind, id, from, to } => {
+                write!(f, "rename {kind} {id} \"{from}\" to \"{to}\"")
+            }
+            Edition::ToldApart {
+                kind,
+                id,
+                title,
+                other,
+            } => write!(
+                f,
+                "keep {kind} {id} \"{title}\": {} \"{}\" has other MusicBrainz IDs",
+                other.0, other.1
+            ),
+        }
+    }
+}
+
+/// Takes the edition notes off the titles of releases and recordings that came
+/// in before the catalog left them out (see [`without_edition`]), such as the
+/// Spotify plays of an earlier import: each one is merged into the entry of its
+/// plain title, or renamed to it where there is none yet. All in one transaction,
+/// which a dry run rolls back; each merge goes into the log, so [`undo`] can take
+/// it back on its own.
+pub async fn editions(db: &PgPool, dry_run: bool) -> anyhow::Result<Vec<Edition>> {
+    let mut tx = db.begin().await?;
+    let mut done = Vec::new();
+    for kind in [Kind::Release, Kind::Recording] {
+        for (id, title, artist_id) in with_titles(&mut tx, kind).await? {
+            let plain = without_edition(&title);
+            if plain == title.trim() {
+                continue;
+            }
+            let key = name_key(plain);
+            let other = titled_as(&mut tx, kind, artist_id, &key)
+                .await?
+                .filter(|other| other.0 != id);
+            match other {
+                Some((other_id, other_title)) => {
+                    let theirs = mbids_of(&mut tx, kind, other_id).await?;
+                    let mine = mbids_of(&mut tx, kind, id).await?;
+                    if told_apart(&mine, &theirs) {
+                        done.push(Edition::ToldApart {
+                            kind,
+                            id,
+                            title,
+                            other: (other_id, other_title),
+                        });
+                        continue;
+                    }
+                    let op = start_journal(&mut tx, kind, id, other_id).await?;
+                    let merged = match kind {
+                        Kind::Release => release(&mut tx, id, other_id, false).await?,
+                        _ => recording(&mut tx, id, other_id, false).await?,
+                    };
+                    end_journal(&mut tx, op, &merged).await?;
+                    done.push(Edition::Merged(Merged {
+                        dry_run,
+                        op: (!dry_run).then_some(op),
+                        ..merged
+                    }));
+                }
+                None => {
+                    match kind {
+                        Kind::Release => {
+                            sqlx::query!(
+                                "WITH renamed AS (UPDATE release SET title = $3 WHERE id = $2)
+                                 INSERT INTO release_alias (artist_id, title_key, release_id)
+                                 VALUES ($1, $4, $2) ON CONFLICT DO NOTHING",
+                                artist_id,
+                                id,
+                                plain,
+                                key,
+                            )
+                            .execute(&mut *tx)
+                            .await?
+                        }
+                        _ => {
+                            sqlx::query!(
+                                "WITH renamed AS (UPDATE recording SET title = $3 WHERE id = $2)
+                                 INSERT INTO recording_alias (artist_id, title_key, recording_id)
+                                 VALUES ($1, $4, $2) ON CONFLICT DO NOTHING",
+                                artist_id,
+                                id,
+                                plain,
+                                key,
+                            )
+                            .execute(&mut *tx)
+                            .await?
+                        }
+                    };
+                    done.push(Edition::Renamed {
+                        kind,
+                        id,
+                        to: plain.to_owned(),
+                        from: title,
+                    });
+                }
+            }
+        }
+    }
+    if dry_run {
+        tx.rollback().await?;
+    } else {
+        tx.commit().await?;
+    }
+    Ok(done)
+}
+
+/// Every release or recording that was not merged away, with its title and artist.
+async fn with_titles(conn: &mut PgConnection, kind: Kind) -> sqlx::Result<Vec<(i64, String, i64)>> {
+    Ok(match kind {
+        Kind::Release => sqlx::query!(
+            "SELECT id, title, artist_id FROM release WHERE merged_into IS NULL ORDER BY id"
+        )
+        .fetch_all(&mut *conn)
+        .await?
+        .into_iter()
+        .map(|r| (r.id, r.title, r.artist_id))
+        .collect(),
+        _ => sqlx::query!(
+            "SELECT id, title, artist_id FROM recording WHERE merged_into IS NULL ORDER BY id"
+        )
+        .fetch_all(&mut *conn)
+        .await?
+        .into_iter()
+        .map(|r| (r.id, r.title, r.artist_id))
+        .collect(),
+    })
+}
+
+/// The release or recording of the artist that the title key leads to.
+async fn titled_as(
+    conn: &mut PgConnection,
+    kind: Kind,
+    artist_id: i64,
+    key: &str,
+) -> sqlx::Result<Option<(i64, String)>> {
+    Ok(match kind {
+        Kind::Release => sqlx::query!(
+            "SELECT r.id, r.title FROM release_alias x JOIN release r ON r.id = x.release_id
+              WHERE x.artist_id = $1 AND x.title_key = $2 AND r.merged_into IS NULL",
+            artist_id,
+            key
+        )
+        .fetch_optional(&mut *conn)
+        .await?
+        .map(|r| (r.id, r.title)),
+        _ => sqlx::query!(
+            "SELECT r.id, r.title FROM recording_alias x JOIN recording r ON r.id = x.recording_id
+              WHERE x.artist_id = $1 AND x.title_key = $2 AND r.merged_into IS NULL",
+            artist_id,
+            key
+        )
+        .fetch_optional(&mut *conn)
+        .await?
+        .map(|r| (r.id, r.title)),
+    })
+}
+
+async fn mbids_of(conn: &mut PgConnection, kind: Kind, id: i64) -> sqlx::Result<Vec<Uuid>> {
+    match kind {
+        Kind::Release => {
+            sqlx::query_scalar!("SELECT mbid FROM release_mbid WHERE release_id = $1", id)
+                .fetch_all(&mut *conn)
+                .await
+        }
+        _ => {
+            sqlx::query_scalar!(
+                "SELECT mbid FROM recording_mbid WHERE recording_id = $1",
+                id
+            )
+            .fetch_all(&mut *conn)
+            .await
+        }
+    }
 }
 
 #[cfg(test)]

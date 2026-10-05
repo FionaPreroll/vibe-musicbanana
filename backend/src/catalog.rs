@@ -13,6 +13,95 @@ pub fn name_key(name: &str) -> String {
     normalized.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// A title without notes about the edition it comes from, which streaming services
+/// add to the same recording and album: "Help! - Remastered 2009", "Rumours (Super
+/// Deluxe Edition)" and "Song [2011 Remaster]" become "Help!", "Rumours" and "Song".
+/// Notes of other versions ("Live", "Radio Edit", "Acoustic", "Mono") stay, as
+/// those sound different.
+pub fn without_edition(title: &str) -> &str {
+    let mut title = title.trim();
+    while let Some((rest, note)) = last_note(title) {
+        let rest = rest.trim_end();
+        if rest.is_empty() || !is_edition(note) {
+            break;
+        }
+        title = rest;
+    }
+    title
+}
+
+/// The title before its last note, and the note: in brackets at the end, or after
+/// the last dash between spaces.
+fn last_note(title: &str) -> Option<(&str, &str)> {
+    let (open, close) = match title.chars().last()? {
+        ')' => ('(', ')'),
+        ']' => ('[', ']'),
+        _ => {
+            return [" - ", " – ", " — "]
+                .iter()
+                .filter_map(|dash| title.rfind(dash).map(|i| (i, dash.len())))
+                .max()
+                .map(|(i, len)| (&title[..i], &title[i + len..]));
+        }
+    };
+    let mut depth = 0;
+    for (i, c) in title.char_indices().rev() {
+        if c == close {
+            depth += 1;
+        } else if c == open {
+            depth -= 1;
+            if depth == 0 {
+                return Some((&title[..i], &title[i + 1..title.len() - 1]));
+            }
+        }
+    }
+    None
+}
+
+/// Whether a note only names an edition: "Remastered 2011", "2009 Remaster",
+/// "Deluxe Edition", "25th Anniversary Edition", "Bonus Track Version", ….
+fn is_edition(note: &str) -> bool {
+    const MARKS: [&str; 8] = [
+        "remaster",
+        "remastered",
+        "mastered",
+        "deluxe",
+        "expanded",
+        "anniversary",
+        "bonus",
+        "edition",
+    ];
+    const ALSO: [&str; 12] = [
+        "re",
+        "version",
+        "super",
+        "special",
+        "legacy",
+        "collector",
+        "collectors",
+        "s",
+        "track",
+        "tracks",
+        "digital",
+        "digitally",
+    ];
+    let words: Vec<String> = note
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    let year_or_ordinal = |w: &str| {
+        let digits = w.trim_end_matches(char::is_alphabetic);
+        !digits.is_empty()
+            && digits.chars().all(|c| c.is_ascii_digit())
+            && matches!(&w[digits.len()..], "" | "st" | "nd" | "rd" | "th")
+    };
+    words.iter().any(|w| MARKS.contains(&w.as_str()))
+        && words.iter().all(|w| {
+            MARKS.contains(&w.as_str()) || ALSO.contains(&w.as_str()) || year_or_ordinal(w)
+        })
+}
+
 /// Undoes UTF-8 that was read as Windows-1252 and stored as UTF-8 again
 /// ("Die Ã„rzte" → "Die Ärzte", "SÃ¶hne Mannheims" → "Söhne Mannheims").
 ///
@@ -138,17 +227,18 @@ impl<'a> Resolver<'a> {
 
     /// The album `title` of the artist, or the one of the release group `mbid`.
     /// Clients only send the track's artist, so that is the album artist here as well.
+    /// Edition notes such as "(Deluxe Edition)" are left out, see [`without_edition`].
     pub async fn release(
         &mut self,
         artist_id: i64,
         title: &str,
         mbid: Option<Uuid>,
     ) -> sqlx::Result<i64> {
+        let title = without_edition(title);
         let key = (artist_id, name_key(title), mbid);
         if let Some(&id) = self.releases.get(&key) {
             return Ok(id);
         }
-        let title = title.trim();
         let id = match mbid {
             Some(mbid) => {
                 retry_on_conflict(|| release_by_mbid(self.db, artist_id, &key.1, title, mbid))
@@ -164,6 +254,7 @@ impl<'a> Resolver<'a> {
 
     /// The track `title` of the artist, whatever album it was played from, or the
     /// one of the recording `mbid`. `length_ms` is only used when the track is new.
+    /// Edition notes such as "- Remastered 2011" are left out, see [`without_edition`].
     pub async fn recording(
         &mut self,
         artist_id: i64,
@@ -171,11 +262,11 @@ impl<'a> Resolver<'a> {
         length_ms: Option<i32>,
         mbid: Option<Uuid>,
     ) -> sqlx::Result<i64> {
+        let title = without_edition(title);
         let key = (artist_id, name_key(title), mbid);
         if let Some(&id) = self.recordings.get(&key) {
             return Ok(id);
         }
-        let title = title.trim();
         let id = match mbid {
             Some(mbid) => {
                 retry_on_conflict(|| {
@@ -576,6 +667,55 @@ mod tests {
         ] {
             assert!(matches!(repair_mojibake(name), Cow::Borrowed(_)), "{name}");
         }
+    }
+
+    #[test]
+    fn edition_notes_go() {
+        for (title, plain) in [
+            ("Help! - Remastered 2009", "Help!"),
+            ("Wonderwall - Remastered", "Wonderwall"),
+            ("Song 2 - 2012 Remaster", "Song 2"),
+            ("Westerland - Remastered Version", "Westerland"),
+            ("Rumours (Super Deluxe Edition)", "Rumours"),
+            (
+                "Die Bestie in Menschengestalt (Deluxe)",
+                "Die Bestie in Menschengestalt",
+            ),
+            ("Album [2011 Remaster]", "Album"),
+            ("Album (25th Anniversary Edition) [Remastered]", "Album"),
+            ("Album (Bonus Track Version)", "Album"),
+            ("Album (Collector's Edition)", "Album"),
+            (
+                "Part 1 - The Beginning - Remastered 2011",
+                "Part 1 - The Beginning",
+            ),
+            ("  Help!  ", "Help!"),
+        ] {
+            assert_eq!(without_edition(title), plain, "{title}");
+        }
+    }
+
+    #[test]
+    fn other_notes_stay() {
+        for title in [
+            "Song (Live)",
+            "Song - Radio Edit",
+            "Song - Live at Wembley / Remastered",
+            "Song - Mono",
+            "Song (Acoustic Version)",
+            "Album (2011)",
+            "Album (Tour Edition Live)",
+            "Part 1 - The Beginning",
+            "(Remastered)",
+            "Deluxe",
+            "Song (Remix) [Remastered",
+        ] {
+            assert_eq!(without_edition(title), title, "{title}");
+        }
+        assert_eq!(
+            without_edition("Song (Live) - Remastered 2011"),
+            "Song (Live)"
+        );
     }
 
     #[test]
