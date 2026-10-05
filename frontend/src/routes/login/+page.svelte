@@ -69,6 +69,8 @@
 	</form>
 	<p class="mt-6 text-sm text-stone-500">
 		The password of the old musicbanana still works. A new account comes from
-		<code class="text-stone-700">musicbanana account create</code> on the server.
+		<code class="text-stone-700">musicbanana account create</code> on the server, and a forgotten
+		password is replaced there with
+		<code class="text-stone-700">musicbanana account password &lt;username&gt;</code>.
 	</p>
 </main>

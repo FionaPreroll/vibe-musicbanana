@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO account (username, email, password_hash)\n                 SELECT $1::text::citext, $2::text::citext, $3\n                  WHERE NOT EXISTS (SELECT FROM former_username\n                                     WHERE username = $1::text::citext)\n                 ON CONFLICT DO NOTHING\n                 RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1d884aceae91c9acec3f8d9be3fa46a4b8b18c2e861d04a02c32119653d5c677"
+}

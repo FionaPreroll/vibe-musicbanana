@@ -189,6 +189,9 @@ enum AccountCommand {
     /// Set the password of an account, e.g. when it is forgotten. Asks for it,
     /// or reads it from standard input when that is not a terminal.
     Password { username: String },
+    /// Give an account another user name. Links with the old one lead to the
+    /// new one, and nobody else can take the old one.
+    Rename { username: String, new: String },
 }
 
 #[derive(Subcommand)]
@@ -500,10 +503,14 @@ async fn mbid_command(db: &PgPool, command: MbidCommand) -> anyhow::Result<()> {
 async fn account_command(db: &PgPool, command: AccountCommand) -> anyhow::Result<()> {
     match command {
         AccountCommand::Create { username, email } => {
+            account::check_username(username.trim()).map_err(anyhow::Error::msg)?;
             let hash = auth::hash_password(&read_password()?)?;
             let mut tx = db.begin().await?;
             let id = sqlx::query_scalar!(
-                "INSERT INTO account (username, email, password_hash) VALUES ($1, $2, $3)
+                "INSERT INTO account (username, email, password_hash)
+                 SELECT $1::text::citext, $2::text::citext, $3
+                  WHERE NOT EXISTS (SELECT FROM former_username
+                                     WHERE username = $1::text::citext)
                  ON CONFLICT DO NOTHING
                  RETURNING id",
                 username.trim(),
@@ -539,6 +546,19 @@ async fn account_command(db: &PgPool, command: AccountCommand) -> anyhow::Result
                 bail!("there is no account {username}");
             }
             eprintln!("Set the password of {username}.");
+        }
+        AccountCommand::Rename { username, new } => {
+            let id = sqlx::query_scalar!(
+                "SELECT id FROM account WHERE username = $1::text::citext",
+                username
+            )
+            .fetch_optional(db)
+            .await?
+            .with_context(|| format!("there is no account {username}"))?;
+            let (old, new) = account::rename(db, id, &new)
+                .await?
+                .map_err(anyhow::Error::msg)?;
+            eprintln!("Renamed {old} to {new}; links with {old} lead to {new}.");
         }
     }
     Ok(())

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT FROM account WHERE username = $2::text::citext AND id <> $1)\n               OR EXISTS (SELECT FROM former_username\n                           WHERE username = $2::text::citext AND account_id <> $1)\n               AS \"taken!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "taken!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7764fd520e42d7039315f2e7249ba83b9fab740926dd319e47e36dfec05b2174"
+}

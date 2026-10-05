@@ -1,6 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import {
 	ApiError,
+	followRename,
 	entityApiKinds,
 	entityPath,
 	entitySegment,
@@ -38,6 +39,7 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		return { base, kind: params.kind, entity, source, sources };
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) {
+			await followRename(fetch, params.username, slug, url);
 			error(404, `There is no such profile or ${params.kind}.`);
 		}
 		if (e instanceof ApiError && e.status === 400) error(400, e.message);
