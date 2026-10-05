@@ -128,11 +128,24 @@ With Docker, prefix them with `docker compose exec musicbanana`. A suggestion sa
 
 - **same letters:** only case, accents, punctuation, spaces, a leading "The" or "&" for "and" differ;
 - **one letter apart:** a letter more, missing, different or swapped with its neighbour, in names of six letters or more and never where digits differ ("Chapter 1", "Chapter 2");
-- **version:** the same title apart from a note in brackets, after a dash or "feat.", so possibly a live version or a remaster; these come last.
+- **version:** the same title apart from a note in brackets, after a dash or "feat.", so possibly a live version; these come last.
 
 The entry with fewer listens goes into the one with more, a version into the plain title. Releases and recordings are compared within one artist only, so merge artists first: merging an artist also merges its releases and recordings into the other artist's ones with the same title and moves the rest over. A merge points the listens and the spellings at the remaining entry, so later scrobbles with the old spelling land there too; the raw strings of the listens stay as they were. There is no undo yet, hence `--dry-run`.
 
 Two entries that both have a MusicBrainz ID are not suggested, as their IDs say they are different ones of the same name, and merging them takes `--force`: for an artist's other name that should count for the main one, or a recording MusicBrainz lists twice. Merging an artist moves its albums and tracks over instead of merging them with one of another ID. A merge takes the IDs along, so listens with the ID of the merged entry count for the remaining one.
+
+### Remasters and deluxe editions
+
+Streaming services name the same track and album after the edition it comes from: "Help! - Remastered 2009", "Song 2 - 2012 Remaster", "Rumours (Super Deluxe Edition)", "Album [Remastered]". musicbanana leaves such notes out when it matches a listen to the catalog, so they count for "Help!" and "Rumours"; the listen itself keeps the title as it was sent. A note counts as an edition when it is made of words like remaster(ed), deluxe, expanded, anniversary, edition, bonus track, version and years ("2009", "25th"); notes of versions that sound different, such as "Live", "Radio Edit", "Acoustic" or "Mono", stay.
+
+Albums and tracks that came in before (for example from a YourSpotify import made with an older musicbanana) are tidied with one command:
+
+```sh
+musicbanana merge editions --dry-run   # one line per album and track it would change
+musicbanana merge editions
+```
+
+Each album or track with an edition note is merged into the one of its plain title, or renamed to the plain title where there is none yet. One whose plain title belongs to an entry with other MusicBrainz IDs is kept, as the IDs say they are different. Running it again is harmless.
 
 ## Renaming and MusicBrainz IDs by hand
 
@@ -173,7 +186,7 @@ musicbanana import-yourspotify --from http://192.168.1.10:8080 --user <username>
 
 The first run fetches the whole history, oldest first, a month at a time, and stores each month before fetching the next, so the plays show up in the profile while it runs; a run that stops halfway goes on from there the next time. Later runs fetch only the plays after the latest one imported. `--all` fetches everything again, for example after YourSpotify has imported an older Spotify export; plays the profile has already are skipped, as with scrobbles. The plays go to the default profile, `--profile <slug>` picks another one, and `--every 15m` keeps the command running and fetches the new plays every 15 minutes (or `90s`, `1h`).
 
-A play counts for its first artist, with track and album titled as on Spotify; the Spotify IDs and all artists stay in the listen's extra data. Spotify gives no MusicBrainz IDs, and its titles often carry an addition like "(Deluxe Edition)" or "- Remastered 2011", so `merge suggest` finds them next to the albums and tracks from other players.
+A play counts for its first artist, with track and album titled as on Spotify; the Spotify IDs and all artists stay in the listen's extra data. Spotify gives no MusicBrainz IDs. Its titles often carry an edition like "(Deluxe Edition)" or "- Remastered 2011", which the catalog leaves out (see [Remasters and deluxe editions](#remasters-and-deluxe-editions); plays imported before that need `merge editions` once). Other additions such as "- Live" stay, and `merge suggest` finds those next to the albums and tracks from other players.
 
 YourSpotify has no documented API; the importer uses the route its web interface reads the history from (`GET /spotify/gethistory`), which a new YourSpotify version could change. A YourSpotify that takes no time range there gets the old way: everything fetched newest first, then stored at once.
 

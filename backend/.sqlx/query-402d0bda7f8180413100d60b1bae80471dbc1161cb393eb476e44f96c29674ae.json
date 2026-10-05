@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT mbid FROM recording_mbid WHERE recording_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mbid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "recording_mbid",
+            "name": "mbid"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "402d0bda7f8180413100d60b1bae80471dbc1161cb393eb476e44f96c29674ae"
+}
