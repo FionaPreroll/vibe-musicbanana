@@ -22,6 +22,8 @@ struct Params {
     q: String,
     /// Hits per kind, 10 by default, at most 50.
     limit: Option<i64>,
+    /// Only the listens of this source, see `listen_source` in the migrations.
+    source: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -61,7 +63,7 @@ async fn search(
            SELECT a.id, a.name, NULL::text AS "artist?", count(*) AS "listens!"
              FROM listen l
              JOIN artist a ON a.id = l.artist_id
-            WHERE l.profile_id = $1
+            WHERE l.profile_id = $1 AND ($4::text IS NULL OR listen_source(l.client) = $4)
               AND l.artist_id = ANY(ARRAY(
                       SELECT a.id FROM artist a
                        WHERE NOT EXISTS (SELECT FROM w WHERE strpos(a.search_name, w) = 0)))
@@ -71,6 +73,7 @@ async fn search(
         profile.id,
         &words as &[&str],
         limit,
+        params.source,
     )
     .fetch_all(&state.db);
 
@@ -81,7 +84,7 @@ async fn search(
              FROM listen l
              JOIN release r ON r.id = l.release_id
              JOIN artist a ON a.id = r.artist_id
-            WHERE l.profile_id = $1
+            WHERE l.profile_id = $1 AND ($4::text IS NULL OR listen_source(l.client) = $4)
               AND l.release_id = ANY(ARRAY(
                       SELECT r.id FROM release r JOIN artist a ON a.id = r.artist_id
                        WHERE NOT EXISTS (SELECT FROM w WHERE strpos(r.search_name, w) = 0
@@ -92,6 +95,7 @@ async fn search(
         profile.id,
         &words as &[&str],
         limit,
+        params.source,
     )
     .fetch_all(&state.db);
 
@@ -102,7 +106,7 @@ async fn search(
              FROM listen l
              JOIN recording r ON r.id = l.recording_id
              JOIN artist a ON a.id = r.artist_id
-            WHERE l.profile_id = $1
+            WHERE l.profile_id = $1 AND ($4::text IS NULL OR listen_source(l.client) = $4)
               AND l.recording_id = ANY(ARRAY(
                       SELECT r.id FROM recording r JOIN artist a ON a.id = r.artist_id
                        WHERE NOT EXISTS (SELECT FROM w WHERE strpos(r.search_name, w) = 0
@@ -113,6 +117,7 @@ async fn search(
         profile.id,
         &words as &[&str],
         limit,
+        params.source,
     )
     .fetch_all(&state.db);
 

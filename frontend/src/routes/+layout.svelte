@@ -42,6 +42,9 @@
 					placeholder="Search {page.params.username}"
 					aria-label="Search the artists, albums and tracks of this profile"
 				/>
+				{#if page.url.searchParams.has('source')}
+					<input type="hidden" name="source" value={page.url.searchParams.get('source')} />
+				{/if}
 			</form>
 		{/if}
 		<nav class="flex shrink-0 items-baseline gap-4 text-sm">

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "WITH span AS (\n                       SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,\n                              coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi\n                   )\n                   SELECT r.id, r.title AS name, a.name AS \"artist?\", count(*) AS \"listens!\"\n                     FROM span, listen l\n                     JOIN recording r ON r.id = l.recording_id\n                     JOIN artist a ON a.id = r.artist_id\n                    WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi\n                    GROUP BY r.id, a.id\n                    ORDER BY count(*) DESC, r.title\n                    LIMIT $5",
+  "query": "WITH span AS (\n                       SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,\n                              coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi\n                   )\n                   SELECT r.id, r.title AS name, a.name AS \"artist?\", count(*) AS \"listens!\"\n                     FROM span, listen l\n                     JOIN recording r ON r.id = l.recording_id\n                     JOIN artist a ON a.id = r.artist_id\n                    WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi\n                      AND ($6::text IS NULL OR listen_source(l.client) = $6)\n                    GROUP BY r.id, a.id\n                    ORDER BY count(*) DESC, r.title\n                    LIMIT $5",
   "describe": {
     "columns": [
       {
@@ -49,7 +49,8 @@
         "Date",
         "Date",
         "Text",
-        "Int8"
+        "Int8",
+        "Text"
       ]
     },
     "nullable": [
@@ -59,5 +60,5 @@
       null
     ]
   },
-  "hash": "63ad2a599e75d5745269d6df00d9934673beb3cd7bdaeb4e75edbfa7e0f5782f"
+  "hash": "fe47bb2c004ba04a2b6f8f5b8ecaa6efa88cfb4ba1b24120bc8ba1a8ae4e032a"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT r.id, r.title AS name, a.name AS \"artist?\", count(*) AS \"listens!\"\n             FROM listen l\n             JOIN release r ON r.id = l.release_id\n             JOIN artist a ON a.id = r.artist_id\n            WHERE l.profile_id = $1\n              AND ($2::bigint IS NULL OR l.artist_id = $2)\n              AND ($3::bigint IS NULL OR l.recording_id = $3)\n            GROUP BY r.id, a.id\n            ORDER BY count(*) DESC, r.title\n            LIMIT $4",
+  "query": "SELECT r.id, r.title AS name, a.name AS \"artist?\", count(*) AS \"listens!\"\n             FROM listen l\n             JOIN recording r ON r.id = l.recording_id\n             JOIN artist a ON a.id = r.artist_id\n            WHERE l.profile_id = $1\n              AND ($2::bigint IS NULL OR l.artist_id = $2)\n              AND ($3::bigint IS NULL OR l.release_id = $3)\n              AND ($5::text IS NULL OR listen_source(l.client) = $5)\n            GROUP BY r.id, a.id\n            ORDER BY count(*) DESC, r.title\n            LIMIT $4",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Int8",
         "origin": {
           "Table": {
-            "table": "release",
+            "table": "recording",
             "name": "id"
           }
         }
@@ -20,7 +20,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "release",
+            "table": "recording",
             "name": "title"
           }
         }
@@ -48,7 +48,8 @@
         "Int8",
         "Int8",
         "Int8",
-        "Int8"
+        "Int8",
+        "Text"
       ]
     },
     "nullable": [
@@ -58,5 +59,5 @@
       null
     ]
   },
-  "hash": "6b8d7d1064c6dbbbcfe49b0d27de93919a27cb6483c58e6c3febbeb9a2e25bdd"
+  "hash": "e7cd5d29a88bf5d7bf634d3222cf85a9dc636bfbb73eab2e6f840d012d8dbdd1"
 }

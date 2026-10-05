@@ -36,6 +36,8 @@ pub fn routes() -> Router<AppState> {
 struct Params {
     /// IANA time zone for the month boundaries, e.g. Europe/Berlin. Defaults to UTC.
     tz: Option<String>,
+    /// Only the listens of this source, see `listen_source` in the migrations.
+    source: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -133,7 +135,9 @@ async fn artist(
             ..Of::default()
         },
     };
-    Ok(Json(page(&state.db, profile, &tz, subject).await?))
+    Ok(Json(
+        page(&state.db, profile, &tz, params.source.as_deref(), subject).await?,
+    ))
 }
 
 async fn release(
@@ -170,7 +174,9 @@ async fn release(
             ..Of::default()
         },
     };
-    Ok(Json(page(&state.db, profile, &tz, subject).await?))
+    Ok(Json(
+        page(&state.db, profile, &tz, params.source.as_deref(), subject).await?,
+    ))
 }
 
 async fn recording(
@@ -207,7 +213,9 @@ async fn recording(
             ..Of::default()
         },
     };
-    Ok(Json(page(&state.db, profile, &tz, subject).await?))
+    Ok(Json(
+        page(&state.db, profile, &tz, params.source.as_deref(), subject).await?,
+    ))
 }
 
 /// The artist, release or recording a page is about.
@@ -220,7 +228,13 @@ struct Subject {
 }
 
 /// Counts, months, phases, albums and tracks of the subject's listens in the profile.
-async fn page(db: &PgPool, profile: Profile, tz: &str, subject: Subject) -> Result<Page, AppError> {
+async fn page(
+    db: &PgPool,
+    profile: Profile,
+    tz: &str,
+    source: Option<&str>,
+    subject: Subject,
+) -> Result<Page, AppError> {
     let of = subject.of;
     let stats = sqlx::query!(
         r#"SELECT count(*) AS "listens!", min(listened_at) AS first, max(listened_at) AS last
@@ -228,11 +242,13 @@ async fn page(db: &PgPool, profile: Profile, tz: &str, subject: Subject) -> Resu
             WHERE profile_id = $1
               AND ($2::bigint IS NULL OR artist_id = $2)
               AND ($3::bigint IS NULL OR release_id = $3)
-              AND ($4::bigint IS NULL OR recording_id = $4)"#,
+              AND ($4::bigint IS NULL OR recording_id = $4)
+              AND ($5::text IS NULL OR listen_source(client) = $5)"#,
         profile.id,
         of.artist,
         of.release,
         of.recording,
+        source,
     )
     .fetch_one(db)
     .await?;
@@ -271,6 +287,7 @@ async fn page(db: &PgPool, profile: Profile, tz: &str, subject: Subject) -> Resu
                   AND ($2::bigint IS NULL OR artist_id = $2)
                   AND ($3::bigint IS NULL OR release_id = $3)
                   AND ($4::bigint IS NULL OR recording_id = $4)
+                  AND ($6::text IS NULL OR listen_source(client) = $6)
                 GROUP BY 1
            )
            SELECT to_char(s.month, 'YYYY-MM') AS "month!", coalesce(c.listens, 0) AS "listens!"
@@ -282,17 +299,18 @@ async fn page(db: &PgPool, profile: Profile, tz: &str, subject: Subject) -> Resu
         of.release,
         of.recording,
         tz,
+        source,
     )
     .fetch_all(db)
     .await?;
 
     // An artist's albums and tracks, an album's tracks, the albums of a track.
     let releases = match of.release {
-        None => releases(db, profile.id, of).await?,
+        None => releases(db, profile.id, of, source).await?,
         Some(_) => Vec::new(),
     };
     let recordings = match of.recording {
-        None => recordings(db, profile.id, of).await?,
+        None => recordings(db, profile.id, of, source).await?,
         Some(_) => Vec::new(),
     };
 
@@ -317,7 +335,12 @@ async fn page(db: &PgPool, profile: Profile, tz: &str, subject: Subject) -> Resu
 }
 
 /// The albums the listens `of` an artist or recording were played from.
-async fn releases(db: &PgPool, profile_id: i64, of: Of) -> sqlx::Result<Vec<ChartEntry>> {
+async fn releases(
+    db: &PgPool,
+    profile_id: i64,
+    of: Of,
+    source: Option<&str>,
+) -> sqlx::Result<Vec<ChartEntry>> {
     sqlx::query_as!(
         ChartEntry,
         r#"SELECT r.id, r.title AS name, a.name AS "artist?", count(*) AS "listens!"
@@ -327,6 +350,7 @@ async fn releases(db: &PgPool, profile_id: i64, of: Of) -> sqlx::Result<Vec<Char
             WHERE l.profile_id = $1
               AND ($2::bigint IS NULL OR l.artist_id = $2)
               AND ($3::bigint IS NULL OR l.recording_id = $3)
+              AND ($5::text IS NULL OR listen_source(l.client) = $5)
             GROUP BY r.id, a.id
             ORDER BY count(*) DESC, r.title
             LIMIT $4"#,
@@ -334,13 +358,19 @@ async fn releases(db: &PgPool, profile_id: i64, of: Of) -> sqlx::Result<Vec<Char
         of.artist,
         of.recording,
         LIST_LIMIT,
+        source,
     )
     .fetch_all(db)
     .await
 }
 
 /// The tracks of the listens `of` an artist or release.
-async fn recordings(db: &PgPool, profile_id: i64, of: Of) -> sqlx::Result<Vec<ChartEntry>> {
+async fn recordings(
+    db: &PgPool,
+    profile_id: i64,
+    of: Of,
+    source: Option<&str>,
+) -> sqlx::Result<Vec<ChartEntry>> {
     sqlx::query_as!(
         ChartEntry,
         r#"SELECT r.id, r.title AS name, a.name AS "artist?", count(*) AS "listens!"
@@ -350,6 +380,7 @@ async fn recordings(db: &PgPool, profile_id: i64, of: Of) -> sqlx::Result<Vec<Ch
             WHERE l.profile_id = $1
               AND ($2::bigint IS NULL OR l.artist_id = $2)
               AND ($3::bigint IS NULL OR l.release_id = $3)
+              AND ($5::text IS NULL OR listen_source(l.client) = $5)
             GROUP BY r.id, a.id
             ORDER BY count(*) DESC, r.title
             LIMIT $4"#,
@@ -357,6 +388,7 @@ async fn recordings(db: &PgPool, profile_id: i64, of: Of) -> sqlx::Result<Vec<Ch
         of.artist,
         of.release,
         LIST_LIMIT,
+        source,
     )
     .fetch_all(db)
     .await

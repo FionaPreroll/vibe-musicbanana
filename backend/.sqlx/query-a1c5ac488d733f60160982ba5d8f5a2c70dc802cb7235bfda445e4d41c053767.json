@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "WITH w AS (SELECT search_fold(x) AS w FROM unnest($2::text[]) x)\n           SELECT r.id, r.title AS name, a.name AS \"artist?\", count(*) AS \"listens!\"\n             FROM listen l\n             JOIN recording r ON r.id = l.recording_id\n             JOIN artist a ON a.id = r.artist_id\n            WHERE l.profile_id = $1\n              AND l.recording_id = ANY(ARRAY(\n                      SELECT r.id FROM recording r JOIN artist a ON a.id = r.artist_id\n                       WHERE NOT EXISTS (SELECT FROM w WHERE strpos(r.search_name, w) = 0\n                                                         AND strpos(a.search_name, w) = 0)))\n            GROUP BY r.id, a.id\n            ORDER BY count(*) DESC, r.title, r.id\n            LIMIT $3",
+  "query": "WITH w AS (SELECT search_fold(x) AS w FROM unnest($2::text[]) x)\n           SELECT r.id, r.title AS name, a.name AS \"artist?\", count(*) AS \"listens!\"\n             FROM listen l\n             JOIN recording r ON r.id = l.recording_id\n             JOIN artist a ON a.id = r.artist_id\n            WHERE l.profile_id = $1 AND ($4::text IS NULL OR listen_source(l.client) = $4)\n              AND l.recording_id = ANY(ARRAY(\n                      SELECT r.id FROM recording r JOIN artist a ON a.id = r.artist_id\n                       WHERE NOT EXISTS (SELECT FROM w WHERE strpos(r.search_name, w) = 0\n                                                         AND strpos(a.search_name, w) = 0)))\n            GROUP BY r.id, a.id\n            ORDER BY count(*) DESC, r.title, r.id\n            LIMIT $3",
   "describe": {
     "columns": [
       {
@@ -47,7 +47,8 @@
       "Left": [
         "Int8",
         "TextArray",
-        "Int8"
+        "Int8",
+        "Text"
       ]
     },
     "nullable": [
@@ -57,5 +58,5 @@
       null
     ]
   },
-  "hash": "55736116c7fb9ff5f58e8a074518b03fcf8a74a73c6f92831582496239e03d34"
+  "hash": "a1c5ac488d733f60160982ba5d8f5a2c70dc802cb7235bfda445e4d41c053767"
 }

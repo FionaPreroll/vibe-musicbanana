@@ -2,6 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { entityPath, type ChartEntry, type EntityKind } from '#lib/api.ts';
 	import Chart from '#lib/components/Chart.svelte';
+	import SourcePicker from '#lib/components/SourcePicker.svelte';
+	import { withSource } from '#lib/source.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -16,12 +18,15 @@
 		clearTimeout(timer);
 		timer = setTimeout(() => {
 			const query = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : '';
-			goto(`${data.base}/search${query}`, { replace: true, reset: false });
+			goto(`${data.base}/search${withSource(query, data.source)}`, {
+				replace: true,
+				reset: false
+			});
 		}, 250);
 	}
 
 	const link = (kind: EntityKind) => (entry: ChartEntry) =>
-		entityPath(data.base, kind, entry.id, entry.name);
+		entityPath(data.base, kind, entry.id, entry.name) + withSource('', data.source);
 	const nothing = $derived(
 		data.found.artists.length + data.found.releases.length + data.found.recordings.length === 0
 	);
@@ -33,7 +38,7 @@
 
 <main class="mx-auto max-w-6xl px-4 pb-16 sm:px-8">
 	<p class="mt-6 text-sm text-stone-500">
-		<a class="hover:text-stone-900 hover:underline" href={data.base}
+		<a class="hover:text-stone-900 hover:underline" href={data.base + withSource('', data.source)}
 			>{overview.username}{#if overview.slug !== 'default'}&nbsp;/ {overview.name}{/if}</a
 		>
 		· Search
@@ -57,6 +62,7 @@
 			oninput={typed}
 		/>
 	</form>
+	<SourcePicker sources={data.sources} />
 
 	{#if data.q && nothing}
 		<p class="mt-8 text-stone-600">Nothing heard matches “{data.q}”.</p>

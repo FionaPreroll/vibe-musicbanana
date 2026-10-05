@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT count(*) AS \"listens!\", min(listened_at) AS first, max(listened_at) AS last\n             FROM listen\n            WHERE profile_id = $1\n              AND ($2::bigint IS NULL OR artist_id = $2)\n              AND ($3::bigint IS NULL OR release_id = $3)\n              AND ($4::bigint IS NULL OR recording_id = $4)",
+  "query": "SELECT count(*) AS \"listens!\", min(listened_at) AS first, max(listened_at) AS last\n             FROM listen\n            WHERE profile_id = $1\n              AND ($2::bigint IS NULL OR artist_id = $2)\n              AND ($3::bigint IS NULL OR release_id = $3)\n              AND ($4::bigint IS NULL OR recording_id = $4)\n              AND ($5::text IS NULL OR listen_source(client) = $5)",
   "describe": {
     "columns": [
       {
@@ -27,7 +27,8 @@
         "Int8",
         "Int8",
         "Int8",
-        "Int8"
+        "Int8",
+        "Text"
       ]
     },
     "nullable": [
@@ -36,5 +37,5 @@
       null
     ]
   },
-  "hash": "9410478bcf503689459c84b5b774aa81bdfdafb68f741f21b482a74ca99dc788"
+  "hash": "9001760cd08fdac76f7bb15e9993b1d6a89a48a44f9bb8481e69e79e11aef705"
 }

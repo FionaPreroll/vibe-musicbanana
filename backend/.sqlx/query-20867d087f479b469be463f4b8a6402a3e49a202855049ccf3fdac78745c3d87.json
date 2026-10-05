@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT l.listened_at, a.name AS artist, r.title AS track, rel.title AS \"album?\",\n                  l.artist_id, l.recording_id, l.release_id\n             FROM listen l\n             JOIN artist a ON a.id = l.artist_id\n             JOIN recording r ON r.id = l.recording_id\n             LEFT JOIN release rel ON rel.id = l.release_id\n            WHERE l.profile_id = $1 AND l.listened_at < coalesce($2::timestamptz, 'infinity')\n            ORDER BY l.listened_at DESC\n            LIMIT $3",
+  "query": "SELECT l.listened_at, a.name AS artist, r.title AS track, rel.title AS \"album?\",\n                  l.artist_id, l.recording_id, l.release_id\n             FROM listen l\n             JOIN artist a ON a.id = l.artist_id\n             JOIN recording r ON r.id = l.recording_id\n             LEFT JOIN release rel ON rel.id = l.release_id\n            WHERE l.profile_id = $1 AND l.listened_at < coalesce($2::timestamptz, 'infinity')\n              AND ($4::text IS NULL OR listen_source(l.client) = $4)\n            ORDER BY l.listened_at DESC\n            LIMIT $3",
   "describe": {
     "columns": [
       {
@@ -85,7 +85,8 @@
       "Left": [
         "Int8",
         "Timestamptz",
-        "Int8"
+        "Int8",
+        "Text"
       ]
     },
     "nullable": [
@@ -98,5 +99,5 @@
       true
     ]
   },
-  "hash": "3ab3927590282bf6e9435f1031958d355b33113ce0cf635da5bd79f900e63412"
+  "hash": "20867d087f479b469be463f4b8a6402a3e49a202855049ccf3fdac78745c3d87"
 }

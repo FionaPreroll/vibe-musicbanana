@@ -179,6 +179,14 @@ export const entitySegment = (id: number, name: string) =>
 export const entityPath = (base: string, kind: EntityKind, id: number, name: string) =>
 	`${base}/${kind}/${encodeURIComponent(entitySegment(id, name))}`;
 
+/** Where listens of a profile came from; `source` is what `?source=` takes. */
+export type Source = {
+	source: string;
+	listens: number;
+	first_listened_at: string;
+	last_listened_at: string;
+};
+
 /** What a profile's search found, the most heard first. */
 export type SearchResult = {
 	artists: ChartEntry[];

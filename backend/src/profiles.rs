@@ -30,6 +30,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/profiles/{username}/{slug}/listens", get(listens))
         .route("/profiles/{username}/{slug}/now-playing", get(now_playing))
+        .route("/profiles/{username}/{slug}/sources", get(sources))
 }
 
 #[derive(Serialize)]
@@ -109,6 +110,8 @@ pub(crate) async fn find_profile(
 struct OverviewParams {
     /// IANA time zone for the year boundaries, e.g. Europe/Berlin. Defaults to UTC.
     tz: Option<String>,
+    /// Only the listens of this source, see `listen_source` in the migrations.
+    source: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -147,18 +150,22 @@ async fn overview(
         r#"SELECT date_part('year', listened_at AT TIME ZONE $2)::int AS "year!",
                   count(*) AS "listens!"
              FROM listen
-            WHERE profile_id = $1
+            WHERE profile_id = $1 AND ($3::text IS NULL OR listen_source(client) = $3)
             GROUP BY 1
             ORDER BY 1"#,
         profile.id,
         tz,
+        params.source,
     )
     .fetch_all(&state.db)
     .await?;
 
     let span = sqlx::query!(
-        "SELECT min(listened_at) AS first, max(listened_at) AS last FROM listen WHERE profile_id = $1",
+        "SELECT min(listened_at) AS first, max(listened_at) AS last
+           FROM listen
+          WHERE profile_id = $1 AND ($2::text IS NULL OR listen_source(client) = $2)",
         profile.id,
+        params.source,
     )
     .fetch_one(&state.db)
     .await?;
@@ -188,6 +195,8 @@ struct TopParams {
     to: Option<Date>,
     tz: Option<String>,
     limit: Option<i64>,
+    /// Only the listens of this source, see `listen_source` in the migrations.
+    source: Option<String>,
 }
 
 impl TopParams {
@@ -257,6 +266,7 @@ async fn top(
                      FROM span, listen l
                      JOIN artist a ON a.id = l.artist_id
                     WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi
+                      AND ($6::text IS NULL OR listen_source(l.client) = $6)
                     GROUP BY a.id
                     ORDER BY count(*) DESC, a.name
                     LIMIT $5"#,
@@ -265,6 +275,7 @@ async fn top(
                 to,
                 tz,
                 limit,
+                params.source,
             )
             .fetch_all(&state.db)
             .await
@@ -281,6 +292,7 @@ async fn top(
                      JOIN release r ON r.id = l.release_id
                      JOIN artist a ON a.id = r.artist_id
                     WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi
+                      AND ($6::text IS NULL OR listen_source(l.client) = $6)
                     GROUP BY r.id, a.id
                     ORDER BY count(*) DESC, r.title
                     LIMIT $5"#,
@@ -289,6 +301,7 @@ async fn top(
                 to,
                 tz,
                 limit,
+                params.source,
             )
             .fetch_all(&state.db)
             .await
@@ -305,6 +318,7 @@ async fn top(
                      JOIN recording r ON r.id = l.recording_id
                      JOIN artist a ON a.id = r.artist_id
                     WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi
+                      AND ($6::text IS NULL OR listen_source(l.client) = $6)
                     GROUP BY r.id, a.id
                     ORDER BY count(*) DESC, r.title
                     LIMIT $5"#,
@@ -313,6 +327,7 @@ async fn top(
                 to,
                 tz,
                 limit,
+                params.source,
             )
             .fetch_all(&state.db)
             .await
@@ -327,6 +342,8 @@ async fn top(
 struct YearsParams {
     tz: Option<String>,
     limit: Option<i64>,
+    /// Only the listens of this source, see `listen_source` in the migrations.
+    source: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -354,7 +371,7 @@ async fn top_artists_per_year(
                SELECT date_part('year', listened_at AT TIME ZONE $2)::int AS year,
                       artist_id, count(*) AS listens
                  FROM listen
-                WHERE profile_id = $1
+                WHERE profile_id = $1 AND ($4::text IS NULL OR listen_source(client) = $4)
                 GROUP BY 1, 2
            ), ranked AS (
                SELECT c.year, a.id, a.name, c.listens,
@@ -371,6 +388,7 @@ async fn top_artists_per_year(
         profile.id,
         tz,
         limit,
+        params.source,
     )
     .fetch_all(&state.db)
     .await?;
@@ -401,6 +419,8 @@ struct ListensParams {
     #[serde(default, with = "time::serde::rfc3339::option")]
     before: Option<OffsetDateTime>,
     limit: Option<i64>,
+    /// Only the listens of this source, see `listen_source` in the migrations.
+    source: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -442,11 +462,13 @@ async fn listens(
              JOIN recording r ON r.id = l.recording_id
              LEFT JOIN release rel ON rel.id = l.release_id
             WHERE l.profile_id = $1 AND l.listened_at < coalesce($2::timestamptz, 'infinity')
+              AND ($4::text IS NULL OR listen_source(l.client) = $4)
             ORDER BY l.listened_at DESC
             LIMIT $3"#,
         profile.id,
         params.before,
         limit + 1,
+        params.source,
     )
     .fetch_all(&state.db)
     .await?;
@@ -458,6 +480,39 @@ async fn listens(
         None
     };
     Ok(Json(ListensPage { listens, next }))
+}
+
+#[derive(Serialize)]
+struct Source {
+    /// What `?source=` takes; '' for listens that named no client.
+    source: String,
+    listens: i64,
+    #[serde(with = "time::serde::rfc3339")]
+    first_listened_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    last_listened_at: OffsetDateTime,
+}
+
+/// Where the profile's listens came from (players, imports), the most recent first.
+async fn sources(
+    State(state): State<AppState>,
+    viewer: Viewer,
+    Path((username, slug)): Path<(String, String)>,
+) -> Result<Json<Vec<Source>>, AppError> {
+    let profile = find_profile(&state.db, viewer, &username, &slug).await?;
+    let sources = sqlx::query_as!(
+        Source,
+        r#"SELECT listen_source(client) AS "source!", count(*) AS "listens!",
+                  min(listened_at) AS "first_listened_at!", max(listened_at) AS "last_listened_at!"
+             FROM listen
+            WHERE profile_id = $1
+            GROUP BY 1
+            ORDER BY max(listened_at) DESC, 1"#,
+        profile.id,
+    )
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(sources))
 }
 
 #[derive(Serialize)]
