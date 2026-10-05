@@ -81,6 +81,8 @@ musicbanana profile create --user <username> <slug> --name "Spotify" --visibilit
 
 Logged-in accounts can follow a profile with the button next to its name; the start page lists the profiles they follow. A public profile is followed right away. A profile for followers shows strangers a page to ask to follow instead (anonymous visitors still get a 404), and the owner says yes or no under Followers in the settings, where followers can be removed again. Making a profile public answers the open requests with yes. Follows from the old musicbanana ("friends") count as accepted.
 
+Wrong listens (a scrobbler that ran twice, a party on your account, a bad import) are taken out on the page "Edit listening history", linked from each profile in the settings. It lists the profile's listens, narrowed by words (artist, track or album, ignoring case and accents), a time span and a source, and moves the ones picked, or all that match, to the trash. Listens in the trash leave the charts and every page, and a player or an import sending them again doesn't bring them back. From the trash they can be restored, with an undo right after moving them, or deleted for good.
+
 A login lasts 30 days after the last visit. Changing the password logs out the account's other browsers. After 10 wrong passwords for a name within 15 minutes, that name is refused for the rest of the 15 minutes. The login cookie is `HttpOnly` and `SameSite=Lax`, and `Secure` when a reverse proxy in front sends `X-Forwarded-Proto: https`, which Caddy, Traefik and nginx (with `proxy_set_header X-Forwarded-Proto $scheme`) do. Requests that change something only take JSON, so other sites can't send them with the cookie.
 
 ## Scrobbling
