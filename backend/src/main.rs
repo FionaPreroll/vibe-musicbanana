@@ -151,6 +151,15 @@ enum MergeCommand {
         #[arg(long, default_value_t = 30)]
         limit: usize,
     },
+    /// Take edition notes such as "- Remastered 2011" or "(Deluxe Edition)" off
+    /// the titles of albums and tracks heard so far: each one is merged into the
+    /// album or track of its plain title, or renamed to it. New listens leave them
+    /// out anyway.
+    Editions {
+        /// Only show what would change.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Merge an artist into another one, with its releases and recordings.
     Artist(MergeArgs),
     /// Merge a release (album) into another one.
@@ -371,6 +380,24 @@ async fn merge_command(db: &PgPool, command: MergeCommand) -> anyhow::Result<()>
             for kind in kinds {
                 let found = merge::suggest(db, kind).await?;
                 print_suggestions(kind, &found, limit);
+            }
+            return Ok(());
+        }
+        MergeCommand::Editions { dry_run } => {
+            let done = merge::editions(db, dry_run).await?;
+            for edition in &done {
+                println!("{edition}");
+            }
+            let count = |f: fn(&merge::Edition) -> bool| done.iter().filter(|e| f(e)).count();
+            let merged = count(|e| matches!(e, merge::Edition::Merged(_)));
+            let renamed = count(|e| matches!(e, merge::Edition::Renamed { .. }));
+            let kept = count(|e| matches!(e, merge::Edition::ToldApart { .. }));
+            println!(
+                "{} {merged} merged, {renamed} renamed, {kept} kept apart.",
+                if dry_run { "Would have:" } else { "Done:" }
+            );
+            if dry_run {
+                println!("Dry run, nothing was changed.");
             }
             return Ok(());
         }
