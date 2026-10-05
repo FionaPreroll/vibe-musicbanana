@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.username::text AS \"username!\"\n             FROM former_username f\n             JOIN account a ON a.id = f.account_id\n            WHERE f.username = $1::text::citext",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "username!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "82097dd7e42343526c89339e461720cb0d338f01a1b44a8fe69b1845fa768dca"
+}

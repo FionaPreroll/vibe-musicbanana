@@ -386,3 +386,94 @@ async fn guessing_a_password_is_slowed_down(db: PgPool) {
         StatusCode::TOO_MANY_REQUESTS
     );
 }
+
+#[sqlx::test(fixtures("profiles"))]
+async fn renaming_keeps_the_old_links(db: PgPool) {
+    set_password(&db, 1, "banana-split").await;
+    set_password(&db, 2, "kiwi-kiwi").await;
+    let app = app(db.clone());
+    let fiona = log_in(&app, "Fiona", "banana-split").await;
+    let alex = log_in(&app, "alex", "kiwi-kiwi").await;
+    let rename = |cookie: String, name: &str| {
+        let app = app.clone();
+        let body = json!({ "username": name });
+        async move {
+            call(
+                &app,
+                Method::PUT,
+                "/api/me/username",
+                Some(&cookie),
+                Some(body),
+            )
+            .await
+        }
+    };
+
+    // Another account's name, and one that would not work in an address.
+    for (name, refusal) in [("ALEX", "taken"), ("fi/ona", "does not work")] {
+        let reply = rename(fiona.clone(), name).await;
+        assert_eq!(reply.status, StatusCode::BAD_REQUEST);
+        assert!(
+            reply.body.as_str().unwrap().contains(refusal),
+            "{}",
+            reply.body
+        );
+    }
+
+    let reply = rename(fiona.clone(), "fiona-banana").await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+    assert_eq!(reply.body["username"], "fiona-banana");
+    assert_eq!(
+        get(&app, "/api/me", Some(&fiona)).await.body["username"],
+        "fiona-banana"
+    );
+    assert_eq!(
+        get(&app, "/api/profiles/fiona-banana/default", None)
+            .await
+            .status,
+        StatusCode::OK
+    );
+    assert_eq!(
+        get(&app, "/api/profiles/Fiona/default", None).await.status,
+        StatusCode::NOT_FOUND
+    );
+
+    // The old name leads to the new one, but only to profiles the viewer may see.
+    let moved = get(&app, "/api/renamed/fiona/default", None).await;
+    assert_eq!(moved.status, StatusCode::OK);
+    assert_eq!(moved.body["username"], "fiona-banana");
+    for cookie in [None, Some(alex.as_str())] {
+        assert_eq!(
+            get(&app, "/api/renamed/Fiona/arbeit", cookie).await.status,
+            StatusCode::NOT_FOUND
+        );
+    }
+    assert_eq!(
+        get(&app, "/api/renamed/Fiona/arbeit", Some(&fiona))
+            .await
+            .status,
+        StatusCode::OK
+    );
+    assert_eq!(
+        get(&app, "/api/renamed/alex/default", None).await.status,
+        StatusCode::NOT_FOUND
+    );
+
+    // Nobody else can take the old name, its owner can; logging in takes the new one.
+    let reply = rename(alex.clone(), "Fiona").await;
+    assert_eq!(reply.status, StatusCode::BAD_REQUEST);
+    assert!(reply.body.as_str().unwrap().contains("taken"));
+    log_in(&app, "fiona-banana", "banana-split").await;
+    let reply = rename(fiona.clone(), "Fiona").await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+    assert_eq!(
+        get(&app, "/api/renamed/fiona-banana/default", None)
+            .await
+            .body["username"],
+        "Fiona"
+    );
+    assert_eq!(
+        get(&app, "/api/renamed/Fiona/default", None).await.status,
+        StatusCode::NOT_FOUND
+    );
+}

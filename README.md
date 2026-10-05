@@ -54,7 +54,7 @@ cd frontend && pnpm lint && pnpm check && pnpm build
 | `/u/<username>/search?q=` (after the slug for other profiles), also from the search field in the header of a profile's pages: the artists, albums and tracks the profile has heard whose names hold every word, ignoring case and accents, the most heard first; a word may also be the artist's name of an album or track ("ärzte unrockbar") | `GET /api/profiles/<username>/<slug>/search?q=&limit=` |
 | `?source=Navidrome` on any page of a profile (overview, artist, album, track, search), picked under the period: only the listens from that source; the sources are the clients without their version ("Navidrome 0.64.2 (…)" is "Navidrome"), "Spotify via YourSpotify" and the imports such as `import:php-2016` | every API route of a profile takes `source=`; `GET /api/profiles/<username>/<slug>/sources` lists them with their listens |
 | `/login` | `POST /api/session` (`{"login", "password"}`), `DELETE /api/session` logs out |
-| `/settings`: the account's profiles (create, rename, who sees them), scrobble tokens (create, revoke), YourSpotify connections (connect, remove) and password | `GET /api/me`, `POST /api/me/profiles`, `PATCH /api/me/profiles/<slug>`, `GET`/`POST /api/me/tokens`, `DELETE /api/me/tokens/<id>`, `GET`/`POST /api/me/yourspotify`, `DELETE /api/me/yourspotify/<id>`, `PUT /api/me/password` |
+| `/settings`: the account's profiles (create, rename, who sees them), scrobble tokens (create, revoke), YourSpotify connections (connect, remove), user name and password | `GET /api/me`, `POST /api/me/profiles`, `PATCH /api/me/profiles/<slug>`, `GET`/`POST /api/me/tokens`, `DELETE /api/me/tokens/<id>`, `GET`/`POST /api/me/yourspotify`, `DELETE /api/me/yourspotify/<id>`, `PUT /api/me/username`, `PUT /api/me/password`; `GET /api/renamed/<old name>/<slug>` gives the current name |
 
 A profile is public, for followers (its owner and the accounts following it) or private (its owner only); to anybody else it does not exist (404), in the list and on every page and API route below it. Years and days start at midnight in `tz` (an IANA name such as `Europe/Berlin`, UTC by default); the frontend sends the browser's time zone. `from` and `to` are the first and last day of a period, both included, and either can be left out; `year=2012` is short for the whole year. `listens` pages backwards: pass a page's `next` as `before`. `now-playing` is `null` when nothing plays; the open page asks again every 30 seconds and adds new listens on top. Only the id in the address of an artist, album or track counts; the name after it is for the reader, and the page moves to the current one when it differs, as after a rename or for links with the id alone. The months of an artist, album or track run from the profile's first listen to its last, leaving out a year or more without any listens (shown as a break); an entry that was merged into another one answers with that one.
 
@@ -65,9 +65,12 @@ The accounts of the old musicbanana log in with their old passwords; the first l
 ```sh
 musicbanana account create <username> --email <address>   # asks for the password, with a default profile
 musicbanana account password <username>                     # asks for the new password
+musicbanana account rename <username> <new name>
 ```
 
 Both read the password from standard input when that is not a terminal, e.g. `echo "$PASSWORD" | musicbanana account password fiona`. Passwords need at least 8 characters.
+
+A user name has up to 32 letters, digits, dashes, dots and underscores and starts with a letter or digit. It can be changed on the settings page or with `account rename`. Links with the old name lead to the new one, as long as the viewer may see the profile, and no other account can take the old name; renaming back to it is fine. Scrobble tokens and YourSpotify connections stay as they are.
 
 A further profile, for example one per player or for a second person's listens, comes from the settings page or from
 

@@ -133,6 +133,20 @@
 		return () => clearInterval(timer);
 	});
 
+	// User name
+
+	let username: string | null = $state(null);
+	let renamedFrom: string | null = $state(null);
+
+	async function changeUsername(event: SubmitEvent) {
+		event.preventDefault();
+		const old = me.username;
+		if (await change('username', () => sendJson(fetch, 'PUT', '/api/me/username', { username }))) {
+			renamedFrom = old;
+			username = null;
+		}
+	}
+
 	// Password
 
 	let password = $state({ current: '', new: '', repeated: '' });
@@ -405,6 +419,35 @@
 			</p>
 		{/if}
 		{@render error('connection')}
+	</section>
+
+	<section class="mt-12">
+		<h2 class={heading}>User name</h2>
+		<p class="mb-3 text-sm text-stone-600">
+			It is in the address of your profiles and logs you in, as does your email address. Links with
+			an old name lead to the new one, and nobody else can take it. Scrobble tokens and YourSpotify
+			connections stay as they are.
+		</p>
+		<form class="flex max-w-sm gap-2" onsubmit={changeUsername}>
+			<input
+				class="{input} min-w-0 flex-1"
+				aria-label="User name"
+				autocomplete="username"
+				required
+				maxlength="32"
+				value={username ?? me.username}
+				oninput={(e) => (username = e.currentTarget.value)}
+			/>
+			<button class={button} disabled={username === null || username === me.username}>Rename</button
+			>
+		</form>
+		{@render error('username')}
+		{#if renamedFrom}
+			<p class="mt-2 text-sm text-green-800" role="status">
+				Renamed. Links with {renamedFrom} lead to
+				<a class="underline" href={profilePath(me.username)}>{profilePath(me.username)}</a>.
+			</p>
+		{/if}
 	</section>
 
 	<section class="mt-12">

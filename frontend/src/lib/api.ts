@@ -1,3 +1,5 @@
+import { redirect } from '@sveltejs/kit';
+
 // Types and small fetch helpers for the backend's JSON API (backend/src/profiles.rs,
 // backend/src/entities.rs and backend/src/account.rs).
 
@@ -166,6 +168,31 @@ export function errorMessage(e: unknown) {
 
 export function profileApi(username: string, slug: string) {
 	return `/api/profiles/${encodeURIComponent(username)}/${encodeURIComponent(slug)}`;
+}
+
+/**
+ * After a 404 on a page under /u/<username>: when the account was renamed (and
+ * the viewer may see the profile), moves to the same page under the new name.
+ * Returns when there is nothing to move to.
+ */
+export async function followRename(
+	fetch: typeof globalThis.fetch,
+	username: string,
+	slug: string,
+	url: { pathname: string; search: string }
+) {
+	let renamed: { username: string };
+	try {
+		renamed = await getJson(
+			fetch,
+			`/api/renamed/${encodeURIComponent(username)}/${encodeURIComponent(slug)}`
+		);
+	} catch {
+		return;
+	}
+	const parts = url.pathname.split('/');
+	parts[2] = encodeURIComponent(renamed.username);
+	redirect(308, parts.join('/') + url.search);
 }
 
 /** The page of a profile: /u/<username> for the default one, /u/<username>/<slug> for others. */

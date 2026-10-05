@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "LOCK TABLE former_username IN SHARE ROW EXCLUSIVE MODE",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "cebaf907aae8929c73fe5226f0e7601a6ab3a6ab11b02890b652d07216467655"
+}
