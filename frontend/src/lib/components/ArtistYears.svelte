@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { YearTop } from '#lib/api.ts';
+	import { entityPath, type YearTop } from '#lib/api.ts';
 	import { formatPercent, listenCount } from '#lib/format.ts';
 
 	let {
@@ -162,7 +162,7 @@
 			<span class="text-stone-500">Longest at the top:</span>
 			{#each colors as [id, { name, color }] (id)}
 				<a
-					href="{base}/artist/{id}"
+					href={entityPath(base, 'artist', id, name)}
 					class="flex items-center gap-1.5 hover:underline"
 					onpointerenter={() => (active = { id })}
 					onpointerleave={() => (active = null)}
@@ -267,7 +267,7 @@
 							{#each y.artists as artist, rank (artist.id)}
 								<li>
 									<a
-										href="{base}/artist/{artist.id}"
+										href={entityPath(base, 'artist', artist.id, artist.name)}
 										class="flex h-6 items-center overflow-hidden rounded border bg-white text-xs transition-opacity {dimmed(
 											artist.id
 										)

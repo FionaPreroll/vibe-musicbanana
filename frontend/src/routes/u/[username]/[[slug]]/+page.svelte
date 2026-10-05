@@ -1,5 +1,6 @@
 <script lang="ts">
 	import {
+		entityPath,
 		getJson,
 		timeZone,
 		type ChartEntry,
@@ -32,7 +33,8 @@
 		}));
 	});
 
-	const link = (kind: EntityKind) => (entry: ChartEntry) => `${data.base}/${kind}/${entry.id}`;
+	const link = (kind: EntityKind) => (entry: ChartEntry) =>
+		entityPath(data.base, kind, entry.id, entry.name);
 
 	// The top artists of every year don't depend on the period, so they load once per
 	// profile and after the rest of the page. (`data` is new after every navigation,
@@ -182,15 +184,21 @@
 							datetime={listen.listened_at}>{formatDateTime(listen.listened_at)}</time
 						>
 						<span class="min-w-0 truncate">
-							<a class="font-medium hover:underline" href="{data.base}/track/{listen.recording_id}"
+							<a
+								class="font-medium hover:underline"
+								href={entityPath(data.base, 'track', listen.recording_id, listen.track)}
 								>{listen.track}</a
 							>
 							<span class="text-stone-500">
-								· <a class="hover:underline" href="{data.base}/artist/{listen.artist_id}"
+								· <a
+									class="hover:underline"
+									href={entityPath(data.base, 'artist', listen.artist_id, listen.artist)}
 									>{listen.artist}</a
 								>
 								{#if listen.album && listen.release_id}
-									· <a class="hover:underline" href="{data.base}/album/{listen.release_id}"
+									· <a
+										class="hover:underline"
+										href={entityPath(data.base, 'album', listen.release_id, listen.album)}
 										>{listen.album}</a
 									>
 								{/if}

@@ -1,0 +1,61 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH w AS (SELECT search_fold(x) AS w FROM unnest($2::text[]) x)\n           SELECT r.id, r.title AS name, a.name AS \"artist?\", count(*) AS \"listens!\"\n             FROM listen l\n             JOIN recording r ON r.id = l.recording_id\n             JOIN artist a ON a.id = r.artist_id\n            WHERE l.profile_id = $1\n              AND l.recording_id = ANY(ARRAY(\n                      SELECT r.id FROM recording r JOIN artist a ON a.id = r.artist_id\n                       WHERE NOT EXISTS (SELECT FROM w WHERE strpos(r.search_name, w) = 0\n                                                         AND strpos(a.search_name, w) = 0)))\n            GROUP BY r.id, a.id\n            ORDER BY count(*) DESC, r.title, r.id\n            LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "artist?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "TextArray",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "55736116c7fb9ff5f58e8a074518b03fcf8a74a73c6f92831582496239e03d34"
+}

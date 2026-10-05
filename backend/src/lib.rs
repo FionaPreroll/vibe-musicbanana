@@ -8,6 +8,7 @@ mod listenbrainz;
 pub mod merge;
 mod profiles;
 pub mod scrobble;
+pub mod search;
 pub mod tokens;
 pub mod yourspotify;
 
@@ -50,6 +51,7 @@ fn api() -> Router<AppState> {
         .merge(account::routes())
         .merge(profiles::routes())
         .merge(entities::routes())
+        .merge(search::routes())
         .nest("/listenbrainz/1", listenbrainz::routes())
         .fallback(|| async { StatusCode::NOT_FOUND })
 }

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ChartEntry, EntityKind } from '#lib/api.ts';
+	import { entityPath, type ChartEntry, type EntityKind } from '#lib/api.ts';
 	import Chart from '#lib/components/Chart.svelte';
 	import MonthCurve from '#lib/components/MonthCurve.svelte';
 	import {
@@ -30,8 +30,8 @@
 	const musicBrainz = (mbid: string) =>
 		`https://musicbrainz.org/${musicBrainzKinds[data.kind]}/${mbid}`;
 
-	const albumHref = (entry: ChartEntry) => `${data.base}/album/${entry.id}`;
-	const trackHref = (entry: ChartEntry) => `${data.base}/track/${entry.id}`;
+	const albumHref = (entry: ChartEntry) => entityPath(data.base, 'album', entry.id, entry.name);
+	const trackHref = (entry: ChartEntry) => entityPath(data.base, 'track', entry.id, entry.name);
 </script>
 
 <svelte:head>
@@ -65,7 +65,8 @@
 			<p class="mt-1 text-lg text-stone-600">
 				by <a
 					class="font-medium text-stone-900 hover:underline"
-					href="{data.base}/artist/{entity.artist.id}">{entity.artist.name}</a
+					href={entityPath(data.base, 'artist', entity.artist.id, entity.artist.name)}
+					>{entity.artist.name}</a
 				>
 			</p>
 		{/if}
