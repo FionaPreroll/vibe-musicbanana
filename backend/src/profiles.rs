@@ -31,6 +31,35 @@ pub fn routes() -> Router<AppState> {
         .route("/profiles/{username}/{slug}/listens", get(listens))
         .route("/profiles/{username}/{slug}/now-playing", get(now_playing))
         .route("/profiles/{username}/{slug}/sources", get(sources))
+        .route("/renamed/{username}/{slug}", get(renamed))
+}
+
+#[derive(Serialize)]
+struct Renamed {
+    username: String,
+}
+
+/// The current name of an account that was renamed from `username`, for the
+/// links with the old name; only when the viewer may see that profile of it.
+async fn renamed(
+    State(state): State<AppState>,
+    viewer: Viewer,
+    Path((username, slug)): Path<(String, String)>,
+) -> Result<Json<Renamed>, AppError> {
+    let current = sqlx::query_scalar!(
+        r#"SELECT a.username::text AS "username!"
+             FROM former_username f
+             JOIN account a ON a.id = f.account_id
+            WHERE f.username = $1::text::citext"#,
+        username,
+    )
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    let profile = find_profile(&state.db, viewer, &current, &slug).await?;
+    Ok(Json(Renamed {
+        username: profile.username,
+    }))
 }
 
 #[derive(Serialize)]

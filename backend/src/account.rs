@@ -41,6 +41,7 @@ pub fn routes() -> Router<AppState> {
         .route("/session", post(login).delete(logout))
         .route("/me", get(me))
         .route("/me/password", put(change_password))
+        .route("/me/username", put(change_username))
         .route("/me/profiles", post(create_profile))
         .route("/me/profiles/{slug}", patch(update_profile))
         .route("/me/tokens", get(list_tokens).post(create_token))
@@ -381,6 +382,109 @@ struct NewProfile {
     slug: String,
     name: String,
     visibility: Option<Visibility>,
+}
+
+#[derive(Deserialize)]
+struct UsernameChange {
+    username: String,
+}
+
+#[derive(Serialize)]
+struct Renamed {
+    username: String,
+}
+
+/// Renames the account; links with the old name lead to the new one.
+async fn change_username(
+    State(state): State<AppState>,
+    Account(id): Account,
+    Json(change): Json<UsernameChange>,
+) -> Result<Json<Renamed>, AppError> {
+    match rename(&state.db, id, &change.username).await? {
+        Ok((_, username)) => Ok(Json(Renamed { username })),
+        Err(refusal) => Err(AppError::BadRequest(refusal)),
+    }
+}
+
+/// Letters, digits, dashes, dots and underscores, as it goes into the address
+/// /u/<name>, starting with a letter or digit.
+pub fn check_username(name: &str) -> Result<(), String> {
+    let fine = (1..=32).contains(&name.chars().count())
+        && name
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '-' | '.' | '_'))
+        && name.chars().next().is_some_and(char::is_alphanumeric);
+    if fine {
+        Ok(())
+    } else {
+        Err(format!(
+            "\"{name}\" does not work as a user name: use up to 32 letters, digits, dashes, \
+             dots and underscores, starting with a letter or digit"
+        ))
+    }
+}
+
+/// Renames account `id` to `new`, returning the old and the new name, or why
+/// not. The old name is kept for the links that use it (see
+/// migrations/0010_former_usernames.sql); nobody else can take it, and neither
+/// the old names of others.
+pub async fn rename(
+    db: &PgPool,
+    id: i64,
+    new: &str,
+) -> anyhow::Result<Result<(String, String), String>> {
+    let new = new.trim();
+    if let Err(refusal) = check_username(new) {
+        return Ok(Err(refusal));
+    }
+    let mut tx = db.begin().await?;
+    // One rename at a time, so two can't swap names into each other's old ones.
+    sqlx::query!("LOCK TABLE former_username IN SHARE ROW EXCLUSIVE MODE")
+        .execute(&mut *tx)
+        .await?;
+    let old = sqlx::query_scalar!(
+        r#"SELECT username::text AS "username!" FROM account WHERE id = $1 FOR UPDATE"#,
+        id
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    let taken = sqlx::query_scalar!(
+        r#"SELECT EXISTS (SELECT FROM account WHERE username = $2::text::citext AND id <> $1)
+               OR EXISTS (SELECT FROM former_username
+                           WHERE username = $2::text::citext AND account_id <> $1)
+               AS "taken!""#,
+        id,
+        new,
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    if taken {
+        return Ok(Err(format!("the user name \"{new}\" is taken")));
+    }
+    if old == new {
+        return Ok(Ok((old, new.to_owned())));
+    }
+    sqlx::query!(
+        "DELETE FROM former_username WHERE username = $1::text::citext",
+        new
+    )
+    .execute(&mut *tx)
+    .await?;
+    // A change of case only keeps the name.
+    if old.to_lowercase() != new.to_lowercase() {
+        sqlx::query!(
+            "INSERT INTO former_username (username, account_id) VALUES ($1, $2)",
+            old,
+            id
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+    sqlx::query!("UPDATE account SET username = $2 WHERE id = $1", id, new)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(Ok((old, new.to_owned())))
 }
 
 /// Lower-case letters, digits and dashes, as it goes into the address. The names

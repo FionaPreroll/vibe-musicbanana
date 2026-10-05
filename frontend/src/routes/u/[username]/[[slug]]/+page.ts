@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import {
 	ApiError,
+	followRename,
 	getJson,
 	profileApi,
 	profilePath,
@@ -58,7 +59,10 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 			nowPlaying
 		};
 	} catch (e) {
-		if (e instanceof ApiError && e.status === 404) error(404, 'There is no such profile.');
+		if (e instanceof ApiError && e.status === 404) {
+			await followRename(fetch, params.username, params.slug ?? 'default', url);
+			error(404, 'There is no such profile.');
+		}
 		if (e instanceof ApiError && e.status === 400) error(400, e.message);
 		throw e;
 	}
