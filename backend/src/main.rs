@@ -9,7 +9,7 @@ use std::{
 use anyhow::{Context, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum, builder::NonEmptyStringValueParser};
 use musicbanana::{
-    AppState, account, auth, connections, edit, import_php,
+    AppState, account, auth, connections, delete, edit, import_php,
     merge::{self, Kind, Suggestion},
     router, tokens, yourspotify,
 };
@@ -152,6 +152,15 @@ enum ProfileCommand {
         #[arg(long, value_enum, default_value_t = Visibility::Public)]
         visibility: Visibility,
     },
+    /// Delete a profile with its listens, scrobble tokens, YourSpotify
+    /// connection and followers. Without --yes it only says what would go.
+    Delete {
+        #[arg(long, value_parser = NonEmptyStringValueParser::new())]
+        user: String,
+        slug: String,
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -193,6 +202,14 @@ enum AccountCommand {
     /// Give an account another user name. Links with the old one lead to the
     /// new one, and nobody else can take the old one.
     Rename { username: String, new: String },
+    /// Delete an account with all its profiles, listens, tokens, connections,
+    /// follows and logins; its user name is free again. Without --yes it only
+    /// says what would go.
+    Delete {
+        username: String,
+        #[arg(long)]
+        yes: bool,
+    },
     /// Give an account another email address, which logs in too.
     Email { username: String, address: String },
     /// Let an account see the status page at /status, or with --off no more.
@@ -428,13 +445,32 @@ async fn connection_command(db: &PgPool, command: ConnectionCommand) -> anyhow::
     Ok(())
 }
 
+fn report_removal(what: &str, removal: &delete::Removal, done: bool) {
+    if done {
+        println!("Deleted {what}. {removal}.");
+    } else {
+        println!("Would delete {what}. {removal}.\nNothing is deleted yet: add --yes to do it.");
+    }
+}
+
 async fn profile_command(db: &PgPool, command: ProfileCommand) -> anyhow::Result<()> {
-    let ProfileCommand::Create {
-        user,
-        slug,
-        name,
-        visibility,
-    } = command;
+    let (user, slug, name, visibility) = match command {
+        ProfileCommand::Create {
+            user,
+            slug,
+            name,
+            visibility,
+        } => (user, slug, name, visibility),
+        ProfileCommand::Delete { user, slug, yes } => {
+            let removal = delete::profile(db, &user, slug.trim(), yes).await?;
+            report_removal(
+                &format!("the profile {user}/{}", slug.trim()),
+                &removal,
+                yes,
+            );
+            return Ok(());
+        }
+    };
     let slug = slug.trim();
     account::check_slug(slug).map_err(anyhow::Error::msg)?;
     let name = name.as_deref().map_or(slug, str::trim);
@@ -569,6 +605,10 @@ async fn account_command(db: &PgPool, command: AccountCommand) -> anyhow::Result
                 .await?
                 .map_err(anyhow::Error::msg)?;
             eprintln!("Renamed {old} to {new}; links with {old} lead to {new}.");
+        }
+        AccountCommand::Delete { username, yes } => {
+            let removal = delete::account(db, &username, yes).await?;
+            report_removal(&format!("the account {username}"), &removal, yes);
         }
         AccountCommand::Email { username, address } => {
             let id = sqlx::query_scalar!(
