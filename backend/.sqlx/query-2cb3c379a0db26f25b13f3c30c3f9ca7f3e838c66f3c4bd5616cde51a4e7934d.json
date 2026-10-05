@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT username::text AS \"username!\", renamed_at FROM former_username\n            WHERE account_id = $1 ORDER BY renamed_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "username!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "renamed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "former_username",
+            "name": "renamed_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      false
+    ]
+  },
+  "hash": "2cb3c379a0db26f25b13f3c30c3f9ca7f3e838c66f3c4bd5616cde51a4e7934d"
+}

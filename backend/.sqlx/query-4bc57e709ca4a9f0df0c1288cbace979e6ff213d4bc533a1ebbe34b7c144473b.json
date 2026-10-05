@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.slug::text AS \"profile!\", c.api_url, c.created_at, c.finished_at, c.imported\n             FROM yourspotify_connection c JOIN profile p ON p.id = c.profile_id\n            WHERE p.account_id = $1\n            ORDER BY p.slug",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "profile!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "api_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "api_url"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "finished_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "finished_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "imported",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "imported"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "4bc57e709ca4a9f0df0c1288cbace979e6ff213d4bc533a1ebbe34b7c144473b"
+}

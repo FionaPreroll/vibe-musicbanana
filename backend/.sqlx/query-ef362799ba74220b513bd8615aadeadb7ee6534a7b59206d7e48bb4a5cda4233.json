@@ -1,0 +1,172 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.listened_at, l.artist_raw, l.track_raw, l.album_raw, l.album_artist_raw,\n                      l.track_number, l.duration_ms, l.client, l.extra, l.submitted_at,\n                      a.name AS \"catalog_artist?\", r.title AS \"catalog_track?\",\n                      rel.title AS \"catalog_album?\"\n                 FROM listen l\n                 JOIN artist a ON a.id = l.artist_id\n                 JOIN recording r ON r.id = l.recording_id\n                 LEFT JOIN release rel ON rel.id = l.release_id\n                WHERE l.profile_id = $1\n                ORDER BY l.listened_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "listened_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "listened_at"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "artist_raw",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "artist_raw"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "track_raw",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "track_raw"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "album_raw",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "album_raw"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "album_artist_raw",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "album_artist_raw"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "track_number",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "track_number"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "duration_ms",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "duration_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "client",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "client"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "extra",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "extra"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "submitted_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "submitted_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "catalog_artist?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "catalog_track?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "catalog_album?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "release",
+            "name": "title"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "ef362799ba74220b513bd8615aadeadb7ee6534a7b59206d7e48bb4a5cda4233"
+}

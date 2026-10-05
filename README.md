@@ -86,6 +86,8 @@ Logged-in accounts can follow a profile with the button next to its name; the st
 
 Wrong listens (a scrobbler that ran twice, a party on your account, a bad import) are taken out on the page "Edit listening history", linked from each profile in the settings. It lists the profile's listens, narrowed by words (artist, track or album, ignoring case and accents), a time span and a source, and moves the ones picked, or all that match, to the trash. Listens in the trash leave the charts and every page, and a player or an import sending them again doesn't bring them back. From the trash they can be restored, with an undo right after moving them, or deleted for good.
 
+Under "Your data" in the settings (`GET /api/me/export`), users download everything musicbanana keeps about their account as one JSON file: the account with its former user names, the profiles with all their listens and their trash, follows both ways, scrobble tokens, YourSpotify connections and current logins. Each listen is in ListenBrainz's import format (`listened_at`, `track_metadata` with the names as the player sent them) plus what musicbanana made of it, so the listens can move to another service. The password hash, the tokens themselves and login cookies stay out. The file is written while it downloads, so big histories need no extra memory.
+
 Users can't delete profiles or their account themselves; the settings page tells them to ask the admin, who runs
 
 ```sh

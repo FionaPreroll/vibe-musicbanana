@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.slug::text AS \"profile!\", t.label, t.created_at, t.last_used_at, t.revoked_at\n             FROM api_token t JOIN profile p ON p.id = t.profile_id\n            WHERE p.account_id = $1\n            ORDER BY t.created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "profile!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "label",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "api_token",
+            "name": "label"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "api_token",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "last_used_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "api_token",
+            "name": "last_used_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "revoked_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "api_token",
+            "name": "revoked_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "39394ce73c30c3b8b0b530c8c2c95d5cbfd6917ea734f5af8e6d00877da17505"
+}

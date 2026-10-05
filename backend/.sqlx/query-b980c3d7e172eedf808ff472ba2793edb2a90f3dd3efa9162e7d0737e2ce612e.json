@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.slug::text AS \"profile!\", a.username::text AS \"username!\", f.created_at,\n                  f.accepted_at\n             FROM follow f\n             JOIN profile p ON p.id = f.profile_id\n             JOIN account a ON a.id = f.follower_id\n            WHERE p.account_id = $1\n            ORDER BY p.slug, a.username",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "profile!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "username!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "follow",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "accepted_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "follow",
+            "name": "accepted_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      false,
+      true
+    ]
+  },
+  "hash": "b980c3d7e172eedf808ff472ba2793edb2a90f3dd3efa9162e7d0737e2ce612e"
+}

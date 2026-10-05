@@ -5,6 +5,7 @@ pub mod connections;
 pub mod delete;
 pub mod edit;
 mod entities;
+mod export;
 mod follows;
 mod history;
 pub mod import_php;
@@ -111,6 +112,7 @@ fn api() -> Router<AppState> {
         .merge(profiles::routes())
         .merge(follows::routes())
         .merge(history::routes())
+        .merge(export::routes())
         .merge(entities::routes())
         .merge(search::routes())
         .merge(status::routes())
