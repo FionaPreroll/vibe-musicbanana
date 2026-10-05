@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"n!\" FROM listen_trash\n            WHERE profile_id = $1 AND ($2::int8[] IS NULL OR id = ANY($2))\n              AND id <> ALL($3)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8Array",
+        "Int8Array"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8dfc0b358ae9bce40dc61f7f909f531da6d7c009d96cf29d476d2a0d3addd192"
+}

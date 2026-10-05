@@ -241,6 +241,23 @@ export interface Follower {
 	since: string;
 }
 
+/** A listen on the page "Edit listening history", or in the trash. */
+export interface HistoryListen {
+	id: number;
+	listened_at: string;
+	artist: string;
+	track: string;
+	album: string | null;
+	source: string;
+	trashed_at: string | null;
+}
+
+export interface HistoryPage {
+	listens: HistoryListen[];
+	next: string | null;
+	total: number;
+}
+
 export function profileApi(username: string, slug: string) {
 	return `/api/profiles/${encodeURIComponent(username)}/${encodeURIComponent(slug)}`;
 }

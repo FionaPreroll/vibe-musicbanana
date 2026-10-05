@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH gone AS (DELETE FROM listen WHERE profile_id = $1 AND id = ANY($2) RETURNING *)\n           INSERT INTO listen_trash (id, profile_id, listened_at, artist_raw, track_raw,\n                                     album_raw, album_artist_raw, track_number, duration_ms,\n                                     client, extra, artist_id, recording_id, release_id,\n                                     submitted_at)\n           SELECT id, profile_id, listened_at, artist_raw, track_raw, album_raw,\n                  album_artist_raw, track_number, duration_ms, client, extra, artist_id,\n                  recording_id, release_id, submitted_at\n             FROM gone\n           RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "listen_trash",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8Array"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fa5c5e65f8b2b0569fe365fd6cb5f376300af95886681e1c80e7ecac45775520"
+}

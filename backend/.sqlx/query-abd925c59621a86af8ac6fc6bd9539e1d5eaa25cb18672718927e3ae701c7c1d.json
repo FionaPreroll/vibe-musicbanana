@@ -1,0 +1,96 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH w AS (SELECT search_fold(x) AS w FROM unnest($6::text[]) x),\n                m AS (\n             SELECT l.id, l.listened_at, a.name AS artist, r.title AS track,\n                    rel.title AS album, listen_source(l.client) AS source\n               FROM listen l\n               JOIN artist a ON a.id = l.artist_id\n               JOIN recording r ON r.id = l.recording_id\n               LEFT JOIN release rel ON rel.id = l.release_id\n              WHERE l.profile_id = $1\n                AND l.listened_at >= coalesce($2::timestamptz, '-infinity')\n                AND l.listened_at <= coalesce($3::timestamptz, 'infinity')\n                AND ($4::text IS NULL OR listen_source(l.client) = $4)\n                AND NOT EXISTS (\n                      SELECT FROM w\n                       WHERE strpos(a.search_name || ' ' || r.search_name || ' '\n                                    || coalesce(rel.search_name, ''), w.w) = 0))\n           SELECT m.id AS \"id!\", m.listened_at AS \"listened_at!\", m.artist AS \"artist!\",\n                  m.track AS \"track!\", m.album AS \"album?\", m.source AS \"source!\",\n                  (SELECT count(*) FROM m) AS \"total!\"\n             FROM m\n            WHERE m.listened_at < coalesce($5::timestamptz, 'infinity')\n            ORDER BY m.listened_at DESC\n            LIMIT $7",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "listened_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "listened_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "artist!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "track!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "album?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "release",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "source!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "Timestamptz",
+        "TextArray",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "abd925c59621a86af8ac6fc6bd9539e1d5eaa25cb18672718927e3ae701c7c1d"
+}

@@ -20,12 +20,28 @@ async fn deleting_a_profile(db: PgPool) {
         .await
         .unwrap();
 
+    // One of them in the trash.
+    sqlx::query(
+        "WITH gone AS (DELETE FROM listen
+                        WHERE id = (SELECT min(id) FROM listen WHERE profile_id = 2) RETURNING *)
+         INSERT INTO listen_trash (id, profile_id, listened_at, artist_raw, track_raw,
+                                   artist_id, recording_id, submitted_at)
+         SELECT id, profile_id, listened_at, artist_raw, track_raw, artist_id, recording_id,
+                submitted_at FROM gone",
+    )
+    .execute(&db)
+    .await
+    .unwrap();
+    let arbeit = arbeit - 1;
+    let all = all - 1;
+
     // First only what would go.
     let would = delete::profile(&db, "fiona", "arbeit", false)
         .await
         .unwrap();
     assert_eq!(would.profiles, ["arbeit"]);
     assert_eq!(would.listens, arbeit);
+    assert_eq!(would.trashed, 1);
     assert_eq!(would.followers, 1);
     assert_eq!(count(&db, "SELECT count(*) FROM listen").await, all);
 
@@ -43,6 +59,7 @@ async fn deleting_a_profile(db: PgPool) {
         0
     );
     assert_eq!(count(&db, "SELECT count(*) FROM follow").await, 0);
+    assert_eq!(count(&db, "SELECT count(*) FROM listen_trash").await, 0);
     assert_eq!(
         count(&db, "SELECT count(*) FROM listen").await,
         all - arbeit

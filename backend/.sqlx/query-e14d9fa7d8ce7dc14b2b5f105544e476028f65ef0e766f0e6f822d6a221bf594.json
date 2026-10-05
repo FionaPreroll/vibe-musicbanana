@@ -1,0 +1,97 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id, t.listened_at, a.name AS artist, r.title AS track,\n                  rel.title AS \"album?\", listen_source(t.client) AS \"source!\",\n                  t.trashed_at AS \"trashed_at?\"\n             FROM listen_trash t\n             JOIN artist a ON a.id = t.artist_id\n             JOIN recording r ON r.id = t.recording_id\n             LEFT JOIN release rel ON rel.id = t.release_id\n            WHERE t.profile_id = $1 AND t.listened_at < coalesce($2::timestamptz, 'infinity')\n            ORDER BY t.listened_at DESC\n            LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "listen_trash",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "listened_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "listen_trash",
+            "name": "listened_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "artist",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "track",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "recording",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "album?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "release",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "source!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "trashed_at?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "listen_trash",
+            "name": "trashed_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      false
+    ]
+  },
+  "hash": "e14d9fa7d8ce7dc14b2b5f105544e476028f65ef0e766f0e6f822d6a221bf594"
+}

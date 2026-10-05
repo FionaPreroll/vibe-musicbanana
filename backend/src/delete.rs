@@ -1,7 +1,8 @@
 //! Deleting a profile or a whole account with everything that belongs to it,
 //! from the command line only: `musicbanana profile delete` and
 //! `musicbanana account delete`. Artists, albums and tracks stay in the shared
-//! catalog; the listens, tokens, connections, follows and logins go.
+//! catalog; the listens (also those in the trash), tokens, connections, follows
+//! and logins go.
 
 use std::fmt;
 
@@ -13,6 +14,8 @@ use sqlx::{PgPool, Postgres, Transaction};
 pub struct Removal {
     pub profiles: Vec<String>,
     pub listens: i64,
+    /// Listens in the trash of "Edit listening history".
+    pub trashed: i64,
     pub tokens: i64,
     pub connections: i64,
     pub followers: i64,
@@ -22,10 +25,11 @@ impl fmt::Display for Removal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "profiles: {}; listens: {}; scrobble tokens: {}; YourSpotify connections: {}; \
-             followers: {}",
+            "profiles: {}; listens: {}; in the trash: {}; scrobble tokens: {}; \
+             YourSpotify connections: {}; followers: {}",
             self.profiles.join(", "),
             self.listens,
+            self.trashed,
             self.tokens,
             self.connections,
             self.followers
@@ -51,6 +55,7 @@ async fn remove_profiles(
 ) -> anyhow::Result<Removal> {
     let counts = sqlx::query!(
         r#"SELECT (SELECT count(*) FROM listen WHERE profile_id = ANY($1)) AS "listens!",
+                  (SELECT count(*) FROM listen_trash WHERE profile_id = ANY($1)) AS "trashed!",
                   (SELECT count(*) FROM api_token
                     WHERE profile_id = ANY($1) AND revoked_at IS NULL) AS "tokens!",
                   (SELECT count(*) FROM yourspotify_connection
@@ -64,9 +69,11 @@ async fn remove_profiles(
     .await?;
     sqlx::query!(
         "DELETE FROM merge_change c
-          USING listen l
-          WHERE c.tbl = 'listen' AND (c.key ->> 'id')::bigint = l.id
-            AND l.profile_id = ANY($1)",
+          WHERE c.tbl = 'listen'
+            AND (c.key ->> 'id')::bigint IN (
+                  SELECT id FROM listen WHERE profile_id = ANY($1)
+                  UNION ALL
+                  SELECT id FROM listen_trash WHERE profile_id = ANY($1))",
         profiles,
     )
     .execute(&mut **tx)
@@ -77,6 +84,7 @@ async fn remove_profiles(
     Ok(Removal {
         profiles: counts.slugs,
         listens: counts.listens,
+        trashed: counts.trashed,
         tokens: counts.tokens,
         connections: counts.connections,
         followers: counts.followers,

@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH w AS (SELECT search_fold(x) AS w FROM unnest($5::text[]) x)\n                   SELECT l.id\n                     FROM listen l\n                     JOIN artist a ON a.id = l.artist_id\n                     JOIN recording r ON r.id = l.recording_id\n                     LEFT JOIN release rel ON rel.id = l.release_id\n                    WHERE l.profile_id = $1\n                      AND l.listened_at >= coalesce($2::timestamptz, '-infinity')\n                      AND l.listened_at <= coalesce($3::timestamptz, 'infinity')\n                      AND ($4::text IS NULL OR listen_source(l.client) = $4)\n                      AND NOT EXISTS (\n                            SELECT FROM w\n                             WHERE strpos(a.search_name || ' ' || r.search_name || ' '\n                                          || coalesce(rel.search_name, ''), w.w) = 0)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c69a7e8f01cb51a778006589a4076df1f35f1f5335e682f29020ad78820da0b3"
+}
