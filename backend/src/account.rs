@@ -531,7 +531,7 @@ pub fn check_slug(slug: &str) -> Result<(), String> {
              letters, digits and dashes"
         ));
     }
-    if matches!(slug, "artist" | "album" | "track" | "search") {
+    if matches!(slug, "artist" | "album" | "track" | "search" | "follow") {
         return Err(format!("\"{slug}\" is taken by the pages of a profile"));
     }
     Ok(())
