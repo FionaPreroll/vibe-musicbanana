@@ -207,12 +207,21 @@ async fn a_private_profile_is_there_for_its_owner_only(db: PgPool) {
         ["alex/default", "Fiona/arbeit", "Fiona/default"]
     );
 
-    // For followers: alex follows the profile, nobody else sees it.
+    // For followers: alex follows the profile, nobody else sees it; a request
+    // without Fiona's yes shows nothing.
     sqlx::query("UPDATE profile SET visibility = 'followers' WHERE id = 2")
         .execute(&db)
         .await
         .unwrap();
     sqlx::query("INSERT INTO follow (follower_id, profile_id) VALUES (2, 2)")
+        .execute(&db)
+        .await
+        .unwrap();
+    assert_eq!(
+        get(&app, arbeit, Some(&alex)).await.status,
+        StatusCode::NOT_FOUND
+    );
+    sqlx::query("UPDATE follow SET accepted_at = now()")
         .execute(&db)
         .await
         .unwrap();

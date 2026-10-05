@@ -631,7 +631,7 @@ pub fn check_slug(slug: &str) -> Result<(), String> {
              letters, digits and dashes"
         ));
     }
-    if matches!(slug, "artist" | "album" | "track" | "search") {
+    if matches!(slug, "artist" | "album" | "track" | "search" | "follow") {
         return Err(format!("\"{slug}\" is taken by the pages of a profile"));
     }
     Ok(())
@@ -715,6 +715,19 @@ async fn update_profile(
     }
     if let Some(visibility) = change.visibility {
         tracing::info!("{owner} made the profile {slug} {}", visibility.as_str());
+    }
+    // Everyone may see a public profile, so the open requests are answered.
+    if let Some(Visibility::Public) = change.visibility {
+        sqlx::query!(
+            "UPDATE follow f SET accepted_at = now()
+               FROM profile p
+              WHERE f.profile_id = p.id AND f.accepted_at IS NULL
+                AND p.account_id = $1 AND p.slug = $2::text::citext",
+            id,
+            slug,
+        )
+        .execute(&state.db)
+        .await?;
     }
     Ok(Json(own_profiles(&state.db, id).await?))
 }

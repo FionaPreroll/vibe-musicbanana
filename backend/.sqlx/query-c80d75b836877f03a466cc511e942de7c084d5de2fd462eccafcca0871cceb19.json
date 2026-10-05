@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.username::text AS \"username!\", p.slug::text AS \"slug!\", p.name,\n                  p.visibility::text AS \"visibility!\",\n                  (SELECT count(*) FROM listen l WHERE l.profile_id = p.id) AS \"listens!\"\n             FROM profile p\n             JOIN account a ON a.id = p.account_id\n            WHERE p.visibility = 'public' OR p.account_id = $1\n               OR (p.visibility = 'followers'\n                   AND EXISTS (SELECT FROM follow f\n                                WHERE f.profile_id = p.id AND f.follower_id = $1))\n            ORDER BY a.username, p.slug",
+  "query": "SELECT a.username::text AS \"username!\", p.slug::text AS \"slug!\", p.name,\n                  p.visibility::text AS \"visibility!\",\n                  CASE WHEN f.accepted_at IS NULL THEN 'requested' ELSE 'following' END\n                      AS \"state!\",\n                  coalesce(f.accepted_at, f.created_at) AS \"since!\"\n             FROM follow f\n             JOIN profile p ON p.id = f.profile_id\n             JOIN account a ON a.id = p.account_id\n            WHERE f.follower_id = $1 AND p.visibility <> 'private'\n            ORDER BY f.accepted_at IS NULL, a.username, p.slug",
   "describe": {
     "columns": [
       {
@@ -34,8 +34,14 @@
       },
       {
         "ordinal": 4,
-        "name": "listens!",
-        "type_info": "Int8",
+        "name": "state!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "since!",
+        "type_info": "Timestamptz",
         "origin": "Expression"
       }
     ],
@@ -49,8 +55,9 @@
       null,
       false,
       null,
+      null,
       null
     ]
   },
-  "hash": "ae97a0b059c530b49abe8ebb0c854a60647a994c5186e9dc7fb18463a970097c"
+  "hash": "c80d75b836877f03a466cc511e942de7c084d5de2fd462eccafcca0871cceb19"
 }
