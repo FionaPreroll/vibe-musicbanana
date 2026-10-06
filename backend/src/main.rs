@@ -9,7 +9,7 @@ use std::{
 use anyhow::{Context, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum, builder::NonEmptyStringValueParser};
 use musicbanana::{
-    AppState, account, auth, connections, delete, edit, import_php,
+    AppState, account, auth, connections, delete, edit, import_php, live,
     merge::{self, Kind, Suggestion},
     router, tokens, yourspotify,
 };
@@ -856,11 +856,14 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
 
     musicbanana::status::started();
     connections::spawn(db.clone());
+    let live = live::Hub::default();
+    live.spawn_listener(db.clone());
     let app = router(
         AppState {
             db,
             yourspotify_allowed: Arc::new(allowed),
             access_log,
+            live: live.clone(),
         },
         &static_dir,
     );
@@ -873,7 +876,11 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
+    .with_graceful_shutdown(async move {
+        shutdown_signal().await;
+        // Open profile pages hold a connection each; end those too.
+        live.close();
+    })
     .await?;
     Ok(())
 }
