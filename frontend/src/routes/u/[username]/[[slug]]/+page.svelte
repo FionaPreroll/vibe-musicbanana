@@ -13,6 +13,7 @@
 	import FollowButton from '#lib/components/FollowButton.svelte';
 	import ListeningClock from '#lib/components/ListeningClock.svelte';
 	import ListenTime from '#lib/components/ListenTime.svelte';
+	import LostAndFound from '#lib/components/LostAndFound.svelte';
 	import OnThisDay from '#lib/components/OnThisDay.svelte';
 	import PeriodPicker from '#lib/components/PeriodPicker.svelte';
 	import SourcePicker from '#lib/components/SourcePicker.svelte';
@@ -252,6 +253,16 @@
 		<div class="mt-12">
 			<ListeningClock clock={data.clock} />
 		</div>
+	{/if}
+
+	{#if data.lost && (data.lost.artists.length > 0 || data.lost.tracks.length > 0 || data.lost.hidden)}
+		<LostAndFound
+			lost={data.lost}
+			api={data.api}
+			own={overview.own ? overview.slug : null}
+			source={data.source}
+			href={entryHref}
+		/>
 	{/if}
 
 	{#if artistYears.length > 0}

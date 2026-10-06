@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.kind, d.entity_id AS id, coalesce(a.name, r.title) AS \"name!\",\n                  ra.name AS \"artist?\", d.dismissed_at AS hidden_at\n             FROM lost_found_dismissal d\n             LEFT JOIN artist a ON d.kind = 'artist' AND a.id = d.entity_id\n             LEFT JOIN recording r ON d.kind = 'recording' AND r.id = d.entity_id\n             LEFT JOIN artist ra ON ra.id = r.artist_id\n            WHERE d.profile_id = $1\n            ORDER BY d.dismissed_at DESC, d.kind, d.entity_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "lost_found_dismissal",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "lost_found_dismissal",
+            "name": "entity_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "artist?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "hidden_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "lost_found_dismissal",
+            "name": "dismissed_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "09fbcf8f36593eae439aaddf7feae30d4eba8767be0ecb56d2379b0ccfb80c61"
+}

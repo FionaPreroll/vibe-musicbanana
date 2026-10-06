@@ -10,6 +10,7 @@ import {
 	type ChartKind,
 	type Clock,
 	type ListensPage,
+	type LostAndFound,
 	type NowPlaying,
 	type OnThisDay,
 	type Overview,
@@ -25,7 +26,7 @@ import type { PageLoad } from './$types';
 // A period in the query (see period.ts) narrows the charts to it and starts the
 // listens at its end; a source (see source.ts) narrows everything to its listens.
 // Without a period the page starts with the current week at a glance and what
-// was heard on today's date in earlier years.
+// was heard on today's date in earlier years; "Lost & found" comes along too.
 export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const api = profileApi(params.username, params.slug ?? 'default');
 	const period = parsePeriod(url.searchParams);
@@ -49,7 +50,8 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 			nowPlaying,
 			sources,
 			week,
-			onThisDay
+			onThisDay,
+			lost
 		] = await Promise.all([
 			getJson<Overview>(fetch, api, { tz, source }),
 			chart('artists'),
@@ -72,6 +74,11 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 				: null,
 			period.kind === 'all'
 				? getJson<OnThisDay>(fetch, `${api}/on-this-day`, { tz, source }).catch(() => null)
+				: null,
+			period.kind === 'all'
+				? getJson<LostAndFound>(fetch, `${api}/lost-and-found`, { limit: 10, source }).catch(
+						() => null
+					)
 				: null
 		]);
 		const base = profilePath(params.username, params.slug);
@@ -92,7 +99,8 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 			recent,
 			nowPlaying,
 			week,
-			onThisDay
+			onThisDay,
+			lost
 		};
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) {
