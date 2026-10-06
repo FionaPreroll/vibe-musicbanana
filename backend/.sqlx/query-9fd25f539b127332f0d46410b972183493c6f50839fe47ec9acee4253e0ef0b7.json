@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT username::text AS \"username!\", email::text AS \"email!\", is_admin, created_at\n             FROM account WHERE id = $1",
+  "query": "SELECT username::text AS \"username!\", email::text AS \"email!\", is_admin, created_at,\n                  time_zone, week_start\n             FROM account WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -36,6 +36,28 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "time_zone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "time_zone"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "week_start",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "week_start"
+          }
+        }
       }
     ],
     "parameters": {
@@ -47,8 +69,10 @@
       null,
       null,
       false,
+      false,
+      true,
       false
     ]
   },
-  "hash": "749ae7546d367557368bf515eb3462d182a01f902a26b735b115919a0a23c725"
+  "hash": "9fd25f539b127332f0d46410b972183493c6f50839fe47ec9acee4253e0ef0b7"
 }

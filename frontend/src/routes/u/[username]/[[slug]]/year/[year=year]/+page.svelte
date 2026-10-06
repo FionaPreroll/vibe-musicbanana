@@ -11,6 +11,7 @@
 	} from '#lib/format.ts';
 	import { localDay, parseDay } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
+	import { wallClock, wallDay } from '#lib/zone.svelte.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -42,13 +43,15 @@
 	// The days of the year, or of it so far.
 	const daysInYear = $derived.by(() => {
 		const start = localDay(year, 1, 1);
-		const end = review.complete ? localDay(year + 1, 1, 1) : new Date();
+		const end = review.complete ? localDay(year + 1, 1, 1) : wallClock(new Date());
 		return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86_400_000));
 	});
 
-	// Days within the year go without it.
+	// Days within the year go without it. A string is an instant from the API, a
+	// Date a calendar day.
 	const dayMonth = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' });
-	const dayOfYear = (when: string | Date) => dayMonth.format(new Date(when));
+	const dayOfYear = (when: string | Date) =>
+		dayMonth.format(typeof when === 'string' ? wallDay(when) : when);
 
 	const monthName = new Intl.DateTimeFormat(undefined, { month: 'long' });
 	const monthShort = new Intl.DateTimeFormat(undefined, { month: 'narrow' });

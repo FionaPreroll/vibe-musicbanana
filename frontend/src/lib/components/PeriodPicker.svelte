@@ -12,6 +12,7 @@
 		type Period
 	} from '#lib/period.ts';
 	import { sourceOf, withSource } from '#lib/source.ts';
+	import { wallDay } from '#lib/zone.svelte.ts';
 
 	let {
 		period,
@@ -40,8 +41,8 @@
 	const days = $derived.by(() => {
 		const { from, to } = periodDays(period);
 		return {
-			from: from ?? (first && isoDay(new Date(first))),
-			to: to ?? (last && isoDay(new Date(last)))
+			from: from ?? (first && isoDay(wallDay(first))),
+			to: to ?? (last && isoDay(wallDay(last)))
 		};
 	});
 

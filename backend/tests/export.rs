@@ -142,6 +142,13 @@ async fn the_download_holds_everything_but_secrets(db: PgPool) {
 
     assert_eq!(data["account"]["username"], "Fiona");
     assert_eq!(data["account"]["email"], "fiona@example.org");
+    assert_eq!(
+        [
+            &data["account"]["time_zone"],
+            &data["account"]["week_start"]
+        ],
+        [&Value::Null, &json!(1)]
+    );
     assert_eq!(data["followers"][0]["username"], "alex");
     assert_eq!(data["scrobble_tokens"][0]["label"], "Navidrome");
     let profiles = data["profiles"].as_array().unwrap();

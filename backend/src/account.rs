@@ -53,6 +53,7 @@ pub fn routes() -> Router<AppState> {
         .route("/me/password", put(change_password))
         .route("/me/username", put(change_username))
         .route("/me/email", put(change_email_address))
+        .route("/me/time", put(change_time))
         .route("/me/profiles", post(create_profile))
         .route("/me/profiles/{slug}", patch(update_profile))
         .route("/me/tokens", get(list_tokens).post(create_token))
@@ -303,6 +304,10 @@ struct Me {
     email: String,
     /// Whether the account sees the status page.
     admin: bool,
+    /// The time zone dates are shown in; the browser's when null.
+    time_zone: Option<String>,
+    /// The first day of the week, 1 for Monday to 7 for Sunday.
+    week_start: i16,
     profiles: Vec<OwnProfile>,
 }
 
@@ -330,7 +335,8 @@ async fn own_profiles(db: &PgPool, account: i64) -> sqlx::Result<Vec<OwnProfile>
 
 async fn me(State(state): State<AppState>, Account(id): Account) -> Result<Json<Me>, AppError> {
     let account = sqlx::query!(
-        r#"SELECT username::text AS "username!", email::text AS "email!", is_admin
+        r#"SELECT username::text AS "username!", email::text AS "email!", is_admin,
+                  time_zone, week_start
              FROM account WHERE id = $1"#,
         id,
     )
@@ -340,6 +346,8 @@ async fn me(State(state): State<AppState>, Account(id): Account) -> Result<Json<
         username: account.username,
         email: account.email,
         admin: account.is_admin,
+        time_zone: account.time_zone,
+        week_start: account.week_start,
         profiles: own_profiles(&state.db, id).await?,
     }))
 }
@@ -456,6 +464,59 @@ async fn change_username(
         }
         Err(refusal) => Err(AppError::BadRequest(refusal)),
     }
+}
+
+#[derive(Deserialize, Serialize)]
+struct TimeSettings {
+    /// A name from the tz database like Europe/Berlin, or null for the browser's.
+    time_zone: Option<String>,
+    /// 1 for Monday to 7 for Sunday.
+    week_start: i16,
+}
+
+/// Sets the time zone and first weekday the account sees dates in.
+async fn change_time(
+    State(state): State<AppState>,
+    Account(id): Account,
+    Json(change): Json<TimeSettings>,
+) -> Result<Json<TimeSettings>, AppError> {
+    if !(1..=7).contains(&change.week_start) {
+        return Err(AppError::BadRequest(
+            "week_start must be 1 (Monday) to 7 (Sunday)".into(),
+        ));
+    }
+    let time_zone = change.time_zone.filter(|tz| !tz.is_empty());
+    // Only names, not the offsets and abbreviations PostgreSQL also takes, as the
+    // browser has to know it too.
+    if let Some(tz) = &time_zone {
+        let known = sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT FROM pg_timezone_names WHERE name = $1) AS "known!""#,
+            tz
+        )
+        .fetch_one(&state.db)
+        .await?;
+        if !known {
+            return Err(AppError::BadRequest(format!("unknown time zone: {tz}")));
+        }
+    }
+    sqlx::query!(
+        "UPDATE account SET time_zone = $2, week_start = $3 WHERE id = $1",
+        id,
+        time_zone,
+        change.week_start,
+    )
+    .execute(&state.db)
+    .await?;
+    tracing::info!(
+        "{} set the time zone to {} and the week start to {}",
+        name_of(&state.db, id).await?,
+        time_zone.as_deref().unwrap_or("the browser's"),
+        change.week_start
+    );
+    Ok(Json(TimeSettings {
+        time_zone,
+        week_start: change.week_start,
+    }))
 }
 
 #[derive(Deserialize)]

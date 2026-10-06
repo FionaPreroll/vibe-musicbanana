@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT username::text AS \"username!\", email::text AS \"email!\", is_admin,\n                  time_zone, week_start\n             FROM account WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "username!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "email!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "is_admin",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "is_admin"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "time_zone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "time_zone"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "week_start",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "week_start"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "6cbe05ed3b5fe58c74db33d5ad4dbc55480c954a6684813d5de4ca434267c2c6"
+}

@@ -10,6 +10,7 @@
 	} from '#lib/api.ts';
 	import { connectionState } from '#lib/connections.ts';
 	import { formatDateTime, listenCount } from '#lib/format.ts';
+	import { browserTimeZone, zoneNames } from '#lib/zone.svelte.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -140,6 +141,35 @@
 	function removeFollower(f: Follower) {
 		const what = f.state === 'requested' ? `Say no to ${f.username}?` : `Remove ${f.username}?`;
 		if (confirm(what)) answer(f, 'DELETE');
+	}
+
+	// Time zone and first weekday
+
+	const zoneName = (zone: string) => zone.replaceAll('_', ' ');
+	// The browser's list, with the saved zone in case this browser lacks it.
+	const knownZones = zoneNames();
+	const zones = $derived(
+		me.time_zone && !knownZones.includes(me.time_zone) ? [...knownZones, me.time_zone] : knownZones
+	);
+	// Monday 2024-01-01 and the days after it name the weekdays.
+	const weekdayName = new Intl.DateTimeFormat(undefined, { weekday: 'long' });
+	const weekStarts = [1, 7, 6].map((n) => ({
+		value: n,
+		label: weekdayName.format(new Date(2024, 0, n))
+	}));
+
+	let time: { zone: string; weekStart: number } | null = $state(null);
+	const shownTime = $derived(time ?? { zone: me.time_zone ?? '', weekStart: me.week_start });
+	let timeSaved = $state(false);
+
+	async function changeTime(event: SubmitEvent) {
+		event.preventDefault();
+		const body = { time_zone: shownTime.zone || null, week_start: shownTime.weekStart };
+		timeSaved = false;
+		if (await change('time', () => sendJson(fetch, 'PUT', '/api/me/time', body))) {
+			time = null;
+			timeSaved = true;
+		}
 	}
 
 	// User name
@@ -485,6 +515,50 @@
 			</ul>
 		{/if}
 		{@render error('followers')}
+	</section>
+
+	<section class="mt-12">
+		<h2 class={heading}>Time</h2>
+		<p class="mb-3 text-sm text-stone-600">
+			Days, weeks, years and the listening clock follow your time zone, on your profiles and on
+			everybody else's. Without one, they follow this browser's.
+		</p>
+		<form class="flex max-w-sm flex-col gap-3" onsubmit={changeTime}>
+			<label class="flex flex-col gap-1 text-sm">
+				<span>Time zone</span>
+				<select
+					class={select}
+					value={shownTime.zone}
+					onchange={(e) => (time = { ...shownTime, zone: e.currentTarget.value })}
+				>
+					<option value="">This browser's ({zoneName(browserTimeZone)})</option>
+					{#each zones as zone (zone)}
+						<option value={zone}>{zoneName(zone)}</option>
+					{/each}
+				</select>
+			</label>
+			<label class="flex flex-col gap-1 text-sm">
+				<span>Weeks start on</span>
+				<select
+					class={select}
+					value={shownTime.weekStart}
+					onchange={(e) => (time = { ...shownTime, weekStart: Number(e.currentTarget.value) })}
+				>
+					{#each weekStarts as day (day.value)}
+						<option value={day.value}>{day.label}</option>
+					{/each}
+				</select>
+			</label>
+			{@render error('time')}
+			{#if timeSaved}
+				<p class="text-sm text-green-800" role="status">Saved.</p>
+			{/if}
+			<button
+				class="{button} self-start"
+				disabled={time === null ||
+					(time.zone === (me.time_zone ?? '') && time.weekStart === me.week_start)}>Save</button
+			>
+		</form>
 	</section>
 
 	<section class="mt-12">
