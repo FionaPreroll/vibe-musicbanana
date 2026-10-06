@@ -87,11 +87,28 @@ export type Review = {
 	months: { month: number; listens: number; last_year: number }[];
 	top_day: { date: string; listens: number } | null;
 };
+/** Listens by weekday and hour in the viewer's time zone: Monday to Sunday, hours 0 to 23. */
+export type Clock = { listens: number; weekdays: number[][] };
 
 export type ChartKind = 'artists' | 'releases' | 'recordings';
 
 /** `artist` is set for releases and recordings. */
 export type ChartEntry = { id: number; name: string; artist?: string; listens: number };
+
+/**
+ * Today's date in earlier years, in the viewer's time zone: one entry per year
+ * with listens on it, the latest first. 29 February looks back to the 28th.
+ */
+export type OnThisDay = {
+	day: string;
+	years: {
+		date: string;
+		years_ago: number;
+		listens: number;
+		artists: ChartEntry[];
+		tracks: ChartEntry[];
+	}[];
+};
 
 /** The most heard artists of a year, best first; `listens` counts all of the year's listens. */
 export type YearTop = { year: number; listens: number; artists: ChartEntry[] };

@@ -1,6 +1,7 @@
 pub mod account;
 pub mod auth;
 pub mod catalog;
+mod clock;
 pub mod connections;
 pub mod delete;
 pub mod edit;
@@ -10,8 +11,10 @@ mod follows;
 mod history;
 pub mod import_php;
 mod listenbrainz;
+pub mod live;
 pub mod merge;
 mod merges;
+mod on_this_day;
 mod profiles;
 mod review;
 pub mod scrobble;
@@ -45,6 +48,8 @@ pub struct AppState {
     pub yourspotify_allowed: Arc<yourspotify::Allowlist>,
     /// Whether each request goes into the log, see [`log_request`].
     pub access_log: bool,
+    /// The live updates for open profile pages.
+    pub live: live::Hub,
 }
 
 impl AppState {
@@ -54,6 +59,7 @@ impl AppState {
             db,
             yourspotify_allowed: Arc::default(),
             access_log: false,
+            live: live::Hub::default(),
         }
     }
 }
@@ -122,6 +128,9 @@ fn api() -> Router<AppState> {
         .merge(merges::routes())
         .merge(week::routes())
         .merge(review::routes())
+        .merge(live::routes())
+        .merge(on_this_day::routes())
+        .merge(clock::routes())
         .nest("/listenbrainz/1", listenbrainz::routes())
         .route_layer(middleware::from_fn(status::measure))
         .fallback(|| async { StatusCode::NOT_FOUND })

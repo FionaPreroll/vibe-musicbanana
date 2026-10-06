@@ -4,7 +4,10 @@ use serde_json::Value;
 use sqlx::PgPool;
 use time::OffsetDateTime;
 
-use crate::catalog::{Mbids, Resolver};
+use crate::{
+    catalog::{Mbids, Resolver},
+    live::{self, Change},
+};
 
 /// One listen as a client sent it. The strings are stored unchanged as the raw
 /// data of the listen; the catalog gets the trimmed names.
@@ -118,6 +121,9 @@ pub async fn record(db: &PgPool, profile_id: i64, listens: &[Listen]) -> sqlx::R
     )
     .execute(db)
     .await?;
+    if inserted.rows_affected() > 0 {
+        live::notify(db, profile_id, Change::Listens).await?;
+    }
     Ok(inserted.rows_affected())
 }
 
@@ -160,5 +166,6 @@ pub async fn set_now_playing(
     )
     .execute(db)
     .await?;
+    live::notify(db, profile_id, Change::NowPlaying).await?;
     Ok(())
 }
