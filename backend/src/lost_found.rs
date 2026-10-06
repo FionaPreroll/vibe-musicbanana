@@ -1,5 +1,5 @@
 //! "Lost & found" on a profile page: artists and tracks the profile heard a lot
-//! and not for a long time, the most heard first. The owner can dismiss an
+//! and not for a long time. The owner can dismiss an
 //! entry they don't want back, and show it again later (see
 //! migrations/0015_lost_and_found.sql).
 //!
@@ -7,6 +7,12 @@
 //! profile nobody scrobbles to any more still has its own. A source narrows
 //! what was heard a lot, not the latest listen: an artist heard on Spotify in
 //! 2019 and in Navidrome last week is not lost, whichever source is picked.
+//!
+//! The order weighs both: listens times `1 - e^(-years gone / 2)`, so the
+//! weight is 39 % a year after the last listen, 63 % after two, 86 % after four
+//! and nearly all of it after eight. Between one and three years gone makes a
+//! big difference, ten or fifteen hardly any: once something is gone long
+//! enough, its listens decide.
 
 use axum::{
     Json, Router,
@@ -29,6 +35,9 @@ const GAP_DAYS: i32 = 365;
 /// What counts as heard a lot.
 const ARTIST_LISTENS: i64 = 20;
 const TRACK_LISTENS: i64 = 10;
+/// The years in `1 - e^(-years gone / FADE_YEARS)`, see above.
+const FADE_YEARS: f64 = 2.0;
+const YEAR_SECONDS: f64 = 365.25 * 86_400.0;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -104,6 +113,9 @@ async fn lost_and_found(
             hidden: profile.own.then_some(0),
         }));
     };
+    // The latest listen, which the years gone count up to.
+    let latest = since + time::Duration::days(GAP_DAYS.into());
+    let fade = FADE_YEARS * YEAR_SECONDS;
 
     // A dismissal counts for the entry it was merged into, too.
     let artists = sqlx::query_as!(
@@ -127,13 +139,16 @@ async fn lost_and_found(
                       JOIN artist x ON x.id = d.entity_id
                      WHERE d.profile_id = $1 AND d.kind = 'artist'
                        AND coalesce(x.merged_into, x.id) = a.id)
-            ORDER BY h.listens DESC, a.name
+            ORDER BY h.listens * (1 - exp(-extract(epoch FROM $6 - h.last)::float8 / $7)) DESC,
+                     h.listens DESC, a.name
             LIMIT $5"#,
         profile.id,
         since,
         params.source,
         ARTIST_LISTENS,
         limit,
+        latest,
+        fade,
     )
     .fetch_all(db)
     .await?;
@@ -166,13 +181,16 @@ async fn lost_and_found(
                       JOIN artist x ON x.id = d.entity_id
                      WHERE d.profile_id = $1 AND d.kind = 'artist'
                        AND coalesce(x.merged_into, x.id) = r.artist_id)
-            ORDER BY h.listens DESC, r.title
+            ORDER BY h.listens * (1 - exp(-extract(epoch FROM $6 - h.last)::float8 / $7)) DESC,
+                     h.listens DESC, r.title
             LIMIT $5"#,
         profile.id,
         since,
         params.source,
         TRACK_LISTENS,
         limit,
+        latest,
+        fade,
     )
     .fetch_all(db)
     .await?;
