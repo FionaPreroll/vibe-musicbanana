@@ -9,6 +9,7 @@ import {
 	timeZone,
 	type ChartEntry,
 	type ChartKind,
+	type Clock,
 	type ListensPage,
 	type NowPlaying,
 	type OnThisDay,
@@ -35,29 +36,41 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const chart = (kind: ChartKind) => getJson<ChartEntry[]>(fetch, `${api}/top/${kind}`, query);
 
 	try {
-		const [overview, artists, releases, recordings, recent, nowPlaying, sources, week, onThisDay] =
-			await Promise.all([
-				getJson<Overview>(fetch, api, { tz: timeZone, source }),
-				chart('artists'),
-				chart('releases'),
-				chart('recordings'),
-				getJson<ListensPage>(fetch, `${api}/listens`, {
-					before: periodEnd(period)?.toISOString(),
-					limit: 25,
-					source
-				}),
-				getJson<NowPlaying | null>(fetch, `${api}/now-playing`),
-				getJson<Source[]>(fetch, `${api}/sources`),
-				// The page works without it.
-				period.kind === 'all'
-					? getJson<Week>(fetch, `${api}/week`, { tz: timeZone, source }).catch(() => null)
-					: null,
-				period.kind === 'all'
-					? getJson<OnThisDay>(fetch, `${api}/on-this-day`, { tz: timeZone, source }).catch(
-							() => null
-						)
-					: null
-			]);
+		const [
+			overview,
+			artists,
+			releases,
+			recordings,
+			clock,
+			recent,
+			nowPlaying,
+			sources,
+			week,
+			onThisDay
+		] = await Promise.all([
+			getJson<Overview>(fetch, api, { tz: timeZone, source }),
+			chart('artists'),
+			chart('releases'),
+			chart('recordings'),
+			// The page works without it.
+			getJson<Clock>(fetch, `${api}/clock`, query).catch(() => null),
+			getJson<ListensPage>(fetch, `${api}/listens`, {
+				before: periodEnd(period)?.toISOString(),
+				limit: 25,
+				source
+			}),
+			getJson<NowPlaying | null>(fetch, `${api}/now-playing`),
+			getJson<Source[]>(fetch, `${api}/sources`),
+			// The page works without it.
+			period.kind === 'all'
+				? getJson<Week>(fetch, `${api}/week`, { tz: timeZone, source }).catch(() => null)
+				: null,
+			period.kind === 'all'
+				? getJson<OnThisDay>(fetch, `${api}/on-this-day`, { tz: timeZone, source }).catch(
+						() => null
+					)
+				: null
+		]);
 		const base = profilePath(params.username, params.slug);
 		// Whether the viewer follows it, for the button next to the name.
 		const { me } = await parent();
@@ -73,6 +86,7 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 			artists,
 			releases,
 			recordings,
+			clock,
 			recent,
 			nowPlaying,
 			week,
