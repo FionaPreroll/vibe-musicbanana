@@ -11,5 +11,7 @@ export const params = defineParams({
 	id: (param) => {
 		const id = /^([1-9][0-9]{0,14})(?:-.*)?$/s.exec(param)?.[1];
 		return id === undefined ? undefined : Number(id);
-	}
+	},
+	// Calendar years as the API takes them, 1 to 9999.
+	year: (param) => (/^[1-9][0-9]{0,3}$/.test(param) ? Number(param) : undefined)
 });

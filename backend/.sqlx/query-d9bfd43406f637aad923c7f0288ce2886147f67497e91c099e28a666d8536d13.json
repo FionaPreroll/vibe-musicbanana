@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT lo AS \"lo!\", cut AS \"cut!\", hi AS \"hi!\", prev_lo AS \"prev_lo!\",\n                  ((cut AT TIME ZONE $2) - interval '1 year') AT TIME ZONE $2 AS \"prev_cut!\"\n             FROM (SELECT make_date($1, 1, 1)::timestamp AT TIME ZONE $2 AS lo,\n                          (make_date($1, 1, 1) + interval '1 year') AT TIME ZONE $2 AS hi,\n                          (make_date($1, 1, 1) - interval '1 year') AT TIME ZONE $2 AS prev_lo) b,\n                  LATERAL (SELECT greatest(lo, least(now(), hi)) AS cut) c",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "lo!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "cut!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "hi!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "prev_lo!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "prev_cut!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "d9bfd43406f637aad923c7f0288ce2886147f67497e91c099e28a666d8536d13"
+}

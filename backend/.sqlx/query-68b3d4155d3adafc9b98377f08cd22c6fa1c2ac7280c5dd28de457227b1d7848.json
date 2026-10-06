@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH heard AS (\n               SELECT l.listened_at,\n                      l.listened_at + least(interval '3 hours',\n                          coalesce(l.duration_ms, r.length_ms, 0) * interval '1 millisecond')\n                          AS ended_at\n                 FROM listen l\n                 JOIN recording r ON r.id = l.recording_id\n                WHERE l.profile_id = $1 AND l.listened_at >= $2 AND l.listened_at < $3\n                  AND ($4::text IS NULL OR listen_source(l.client) = $4)\n           ), marked AS (\n               SELECT *, CASE WHEN listened_at > lag(ended_at) OVER (ORDER BY listened_at)\n                                                 + $5::text::interval\n                              THEN 1 ELSE 0 END AS starts\n                 FROM heard\n           ), numbered AS (\n               SELECT *, sum(starts) OVER (ORDER BY listened_at) AS session FROM marked\n           )\n           SELECT min(listened_at) AS \"started_at!\", max(listened_at) AS \"last_at!\",\n                  max(ended_at) AS \"ended_at!\", count(*) AS \"listens!\"\n             FROM numbered\n            GROUP BY session\n            ORDER BY max(ended_at) - min(listened_at) DESC, count(*) DESC, min(listened_at)\n            LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "started_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "last_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "ended_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "68b3d4155d3adafc9b98377f08cd22c6fa1c2ac7280c5dd28de457227b1d7848"
+}

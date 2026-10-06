@@ -50,6 +50,44 @@ export type Week = {
 	};
 };
 
+/** A year in review (backend/src/review.rs); a running year counts up to now. */
+export type Review = {
+	year: number;
+	/** False while the year is still running. */
+	complete: boolean;
+	listens: number;
+	/** The year before up to the same day and time; all of it for a past year. */
+	last_year_so_far: number;
+	last_year: number;
+	artists: number;
+	recordings: number;
+	/** Days with listens. */
+	days: number;
+	/** Artists of the year never heard before it. */
+	new_artists: number;
+	/** The most heard of them. */
+	discoveries: { id: number; name: string; listens: number; first_listened_at: string }[];
+	/** Artists heard before whose listens grew the most against the year before. */
+	risers: {
+		id: number;
+		name: string;
+		listens: number;
+		last_year: number;
+		rank: number;
+		/** `null` when not heard in the year before. */
+		last_rank: number | null;
+	}[];
+	longest_session: {
+		started_at: string;
+		ended_at: string;
+		listens: number;
+		artists: { id: number; name: string; listens: number }[];
+	} | null;
+	/** January (1) to December. */
+	months: { month: number; listens: number; last_year: number }[];
+	top_day: { date: string; listens: number } | null;
+};
+
 export type ChartKind = 'artists' | 'releases' | 'recordings';
 
 /** `artist` is set for releases and recordings. */

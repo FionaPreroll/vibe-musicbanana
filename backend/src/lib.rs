@@ -12,6 +12,7 @@ pub mod import_php;
 mod listenbrainz;
 pub mod merge;
 mod profiles;
+mod review;
 pub mod scrobble;
 pub mod search;
 pub mod status;
@@ -118,6 +119,7 @@ fn api() -> Router<AppState> {
         .merge(search::routes())
         .merge(status::routes())
         .merge(week::routes())
+        .merge(review::routes())
         .nest("/listenbrainz/1", listenbrainz::routes())
         .route_layer(middleware::from_fn(status::measure))
         .fallback(|| async { StatusCode::NOT_FOUND })
