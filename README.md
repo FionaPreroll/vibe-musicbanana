@@ -60,6 +60,8 @@ cd frontend && pnpm lint && pnpm check && pnpm build
 
 A profile is public, for followers (its owner and the accounts it let follow) or private (its owner only); to anybody else it does not exist (404), in the list and on every page and API route below it. Years and days start at midnight in `tz` (an IANA name such as `Europe/Berlin`, UTC by default); the frontend sends the browser's time zone. `from` and `to` are the first and last day of a period, both included, and either can be left out; `year=2012` is short for the whole year. `listens` pages backwards: pass a page's `next` as `before`. `now-playing` is `null` when nothing plays; the open page asks again every 30 seconds and adds new listens on top. Only the id in the address of an artist, album or track counts; the name after it is for the reader, and the page moves to the current one when it differs, as after a rename or for links with the id alone. The months of an artist, album or track run from the profile's first listen to its last, leaving out a year or more without any listens (shown as a break); an entry that was merged into another one answers with that one.
 
+Every page comes light or dark, the dark one in black and banana yellow. It follows the system setting until the moon or sun at the top picks the other one; the browser remembers that pick, and picking what the system shows follows the system again.
+
 ## Accounts and logging in
 
 The accounts of the old musicbanana log in with their old passwords; the first login replaces the old MD5 hash with a proper one. New accounts, and new passwords for forgotten ones, come from the command line (the binary is `musicbanana`, or `cargo run --release --` in `backend/`):

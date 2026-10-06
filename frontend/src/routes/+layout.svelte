@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { profilePath, sendJson } from '#lib/api.ts';
 	import BananaEgg from '#lib/components/BananaEgg.svelte';
+	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
 	import favicon from '#lib/assets/favicon.svg';
 
 	let { data, children } = $props();
@@ -75,6 +76,7 @@
 			{:else}
 				<a class="text-stone-600 hover:underline" href={loginHref}>Log in</a>
 			{/if}
+			<ThemeToggle />
 		</nav>
 	</div>
 </header>
