@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT username::text AS \"username!\", email::text AS \"email!\", is_admin, created_at,\n                  time_zone, week_start\n             FROM account WHERE id = $1",
+  "query": "SELECT username::text AS \"username!\", email::text AS \"email!\", is_admin, created_at,\n                  time_zone, week_start, show_streaks\n             FROM account WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -58,6 +58,17 @@
             "name": "week_start"
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "show_streaks",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "show_streaks"
+          }
+        }
       }
     ],
     "parameters": {
@@ -71,8 +82,9 @@
       false,
       false,
       true,
+      false,
       false
     ]
   },
-  "hash": "9fd25f539b127332f0d46410b972183493c6f50839fe47ec9acee4253e0ef0b7"
+  "hash": "ddb5f6d51a44040d5a6aec05beff53381c37ba137dce83ae3fb60138e2d0bac1"
 }

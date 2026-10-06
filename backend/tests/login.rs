@@ -605,3 +605,71 @@ async fn time_zone_and_week_start(db: PgPool) {
     .await;
     assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
 }
+
+#[sqlx::test(fixtures("profiles"))]
+async fn streaks_can_be_turned_off(db: PgPool) {
+    set_password(&db, 1, "banana-split").await;
+    set_password(&db, 2, "banana-split").await;
+    let app = app(db);
+    let fiona = log_in(&app, "fiona", "banana-split").await;
+    let alex = log_in(&app, "alex", "banana-split").await;
+    let streaks = |cookie: &'static str| {
+        let app = app.clone();
+        let cookie = match cookie {
+            "fiona" => Some(fiona.clone()),
+            "alex" => Some(alex.clone()),
+            _ => None,
+        };
+        async move {
+            let week = get(&app, "/api/profiles/fiona/default/week", cookie.as_deref()).await;
+            assert_eq!(week.status, StatusCode::OK, "{}", week.body);
+            !week.body["streak"].is_null()
+        }
+    };
+    let turn = |cookie: &str, show: bool| {
+        let app = app.clone();
+        let cookie = cookie.to_owned();
+        async move {
+            let body = json!({ "show_streaks": show });
+            let reply = call(
+                &app,
+                Method::PUT,
+                "/api/me/streaks",
+                Some(&cookie),
+                Some(body),
+            )
+            .await;
+            assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+        }
+    };
+
+    // On until the account turns them off.
+    assert_eq!(
+        get(&app, "/api/me", Some(&fiona)).await.body["show_streaks"],
+        true
+    );
+    assert!(streaks("fiona").await && streaks("alex").await && streaks("guest").await);
+
+    // Off for Fiona: nobody sees the streaks of her profiles.
+    turn(&fiona, false).await;
+    assert_eq!(
+        get(&app, "/api/me", Some(&fiona)).await.body["show_streaks"],
+        false
+    );
+    assert!(!streaks("fiona").await && !streaks("alex").await && !streaks("guest").await);
+
+    // Off for Alex: Alex no longer sees Fiona's streaks, everybody else still does.
+    turn(&fiona, true).await;
+    turn(&alex, false).await;
+    assert!(streaks("fiona").await && !streaks("alex").await && streaks("guest").await);
+
+    let reply = call(
+        &app,
+        Method::PUT,
+        "/api/me/streaks",
+        None,
+        Some(json!({ "show_streaks": false })),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+}
