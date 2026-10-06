@@ -12,6 +12,7 @@
 	import ArtistYears from '#lib/components/ArtistYears.svelte';
 	import Chart from '#lib/components/Chart.svelte';
 	import FollowButton from '#lib/components/FollowButton.svelte';
+	import ListeningClock from '#lib/components/ListeningClock.svelte';
 	import PeriodPicker from '#lib/components/PeriodPicker.svelte';
 	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import VisibilityBadge from '#lib/components/VisibilityBadge.svelte';
@@ -182,6 +183,12 @@
 		<Chart title="Top albums" entries={data.releases} href={link('album')} />
 		<Chart title="Top tracks" entries={data.recordings} href={link('track')} />
 	</div>
+
+	{#if data.clock && data.clock.listens > 0}
+		<div class="mt-12">
+			<ListeningClock clock={data.clock} />
+		</div>
+	{/if}
 
 	{#if artistYears.length > 0}
 		<div class="mt-12">

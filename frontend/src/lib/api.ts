@@ -50,6 +50,9 @@ export type Week = {
 	};
 };
 
+/** Listens by weekday and hour in the viewer's time zone: Monday to Sunday, hours 0 to 23. */
+export type Clock = { listens: number; weekdays: number[][] };
+
 export type ChartKind = 'artists' | 'releases' | 'recordings';
 
 /** `artist` is set for releases and recordings. */
