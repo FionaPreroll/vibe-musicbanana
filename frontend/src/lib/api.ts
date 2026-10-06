@@ -110,6 +110,40 @@ export type OnThisDay = {
 	}[];
 };
 
+/** An artist or track in "Lost & found"; `artist` is set for tracks. */
+export type LostEntry = {
+	id: number;
+	name: string;
+	artist?: string;
+	listens: number;
+	first_listened_at: string;
+	last_listened_at: string;
+};
+
+/**
+ * Artists and tracks heard a lot and not since `since` (a year before the
+ * profile's latest listen), the most heard first. A source narrows only what
+ * counts as a lot.
+ */
+export type LostAndFound = {
+	since: string | null;
+	artists: LostEntry[];
+	tracks: LostEntry[];
+	/** How many entries the owner dismissed; only for the owner. */
+	hidden?: number;
+};
+
+export type LostKind = 'artist' | 'recording';
+
+/** An artist or track the owner dismissed from "Lost & found", the latest first. */
+export type LostHidden = {
+	kind: LostKind;
+	id: number;
+	name: string;
+	artist?: string;
+	hidden_at: string;
+};
+
 /** The most heard artists of a year, best first; `listens` counts all of the year's listens. */
 export type YearTop = { year: number; listens: number; artists: ChartEntry[] };
 

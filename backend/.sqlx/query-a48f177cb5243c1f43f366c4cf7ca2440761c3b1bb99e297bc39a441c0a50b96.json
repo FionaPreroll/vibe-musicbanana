@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO lost_found_dismissal (profile_id, kind, entity_id)\n         SELECT $1::bigint, $2::text, coalesce(merged_into, id)\n           FROM artist WHERE $2 = 'artist' AND id = $3::bigint\n          UNION ALL\n         SELECT $1, $2, coalesce(merged_into, id)\n           FROM recording WHERE $2 = 'recording' AND id = $3\n         ON CONFLICT DO NOTHING\n         RETURNING entity_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entity_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "lost_found_dismissal",
+            "name": "entity_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a48f177cb5243c1f43f366c4cf7ca2440761c3b1bb99e297bc39a441c0a50b96"
+}

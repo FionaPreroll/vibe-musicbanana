@@ -83,7 +83,11 @@ struct Page {
 }
 
 /// The id of the viewer's profile `slug`.
-async fn own_profile(db: &PgPool, account: i64, slug: &str) -> Result<(i64, String), AppError> {
+pub(crate) async fn own_profile(
+    db: &PgPool,
+    account: i64,
+    slug: &str,
+) -> Result<(i64, String), AppError> {
     let profile = sqlx::query!(
         r#"SELECT p.id, a.username::text || '/' || p.slug::text AS "name!"
              FROM profile p JOIN account a ON a.id = p.account_id

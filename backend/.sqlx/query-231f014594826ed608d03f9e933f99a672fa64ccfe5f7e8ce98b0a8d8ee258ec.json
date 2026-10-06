@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT FROM artist WHERE $1::text = 'artist' AND id = $2::bigint)\n                   OR EXISTS (SELECT FROM recording WHERE $1 = 'recording' AND id = $2)\n                   AS \"exists!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "231f014594826ed608d03f9e933f99a672fa64ccfe5f7e8ce98b0a8d8ee258ec"
+}
