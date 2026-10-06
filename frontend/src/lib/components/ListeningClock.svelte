@@ -27,12 +27,14 @@
 	const busiestHour = $derived(busiest(hourTotals));
 
 	// Five shades of yellow; the square root keeps quiet hours from all looking empty.
+	// The dark theme turns 100 to 300 dark but keeps 400 and 500, so there the top two
+	// go on brightening up to banana.
 	const shades = [
 		'bg-yellow-100',
 		'bg-yellow-200',
 		'bg-yellow-300',
-		'bg-yellow-400',
-		'bg-yellow-500'
+		'bg-yellow-400 dark:bg-[oklch(70%_0.15_96)]',
+		'bg-yellow-500 dark:bg-banana'
 	];
 	const max = $derived(Math.max(1, ...clock.weekdays.flat()));
 	const shade = (n: number) =>
