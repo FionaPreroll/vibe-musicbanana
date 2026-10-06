@@ -1,8 +1,77 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 
+/* `dark:` follows the theme the header switch sets, not only the system setting. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@theme {
+	/* The yellow of the banana easter egg, and the ink of the dark theme. */
+	--color-banana: oklch(90.5% 0.182 98.111);
+}
+
+:root {
+	color-scheme: light;
+
+	/* Six hues for the artists of the bump chart, apart with normal color vision in
+	   every pair (checked with the dataviz palette validator against the page). */
+	--series-1: #2a78d6;
+	--series-2: #1baf7a;
+	--series-3: #eda100;
+	--series-4: #008300;
+	--series-5: #4a3aa7;
+	--series-6: #e34948;
+}
+
+/* Dark: black and banana yellow, like the easter egg. The pages keep their stone and
+   yellow classes; the theme repaints the colors behind them. Stone turns into a ramp
+   from black (50) to banana (900), white into black, and the light yellows used
+   behind text into dark ones. */
+:root[data-theme='dark'] {
+	color-scheme: dark;
+
+	--color-white: oklch(10% 0.012 95);
+	--color-stone-50: oklch(0% 0 0);
+	--color-stone-100: oklch(20% 0.03 95);
+	--color-stone-200: oklch(27% 0.04 95);
+	--color-stone-300: oklch(36% 0.055 95);
+	--color-stone-400: oklch(52% 0.08 95);
+	--color-stone-500: oklch(68% 0.11 96);
+	--color-stone-600: oklch(75% 0.13 96);
+	--color-stone-700: oklch(81% 0.15 97);
+	--color-stone-800: oklch(86% 0.165 97);
+	--color-stone-900: var(--color-banana);
+	--color-stone-950: oklch(95% 0.1 100);
+
+	--color-yellow-50: oklch(21% 0.04 95);
+	--color-yellow-100: oklch(25% 0.05 95);
+	--color-yellow-200: oklch(33% 0.07 95);
+	--color-yellow-300: oklch(50% 0.1 95);
+
+	--color-red-700: oklch(70.4% 0.191 22.216);
+	--color-red-800: oklch(80.8% 0.114 19.571);
+	--color-green-800: oklch(79.2% 0.209 151.711);
+
+	/* Same check against black; lighter steps than the light theme's. */
+	--series-1: #36aee4;
+	--series-2: #5fd9a3;
+	--series-3: #d6b11f;
+	--series-4: #4f9d6b;
+	--series-5: #9156bd;
+	--series-6: #fc4f31;
+}
+
 @layer base {
 	body {
 		@apply bg-stone-50 text-stone-900;
+	}
+
+	/* The forms plugin paints fields white with gray borders, not with the theme's
+	   colors. Utilities on a field still win; a ticked checkbox keeps its color. */
+	[data-theme='dark'] :where(input, select, textarea) {
+		background-color: var(--color-white);
+		border-color: var(--color-stone-400);
+	}
+	[data-theme='dark'] :where(input, select, textarea):focus {
+		--tw-ring-offset-color: var(--color-white);
 	}
 }

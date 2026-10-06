@@ -28,7 +28,7 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (open = false)} />
 
 {#if open}
-	<div id="banana" class="bg-black text-yellow-300" transition:slide={{ duration: 250 }}>
+	<div id="banana" class="bg-black text-banana" transition:slide={{ duration: 250 }}>
 		<!-- prettier-ignore -->
 		<pre class="mx-auto max-w-6xl overflow-x-auto px-4 py-4 font-mono text-xs leading-tight sm:px-8 sm:text-sm">
  _
