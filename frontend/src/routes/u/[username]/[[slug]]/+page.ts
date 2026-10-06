@@ -9,6 +9,7 @@ import {
 	timeZone,
 	type ChartEntry,
 	type ChartKind,
+	type Clock,
 	type ListensPage,
 	type NowPlaying,
 	type Overview,
@@ -33,12 +34,14 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const chart = (kind: ChartKind) => getJson<ChartEntry[]>(fetch, `${api}/top/${kind}`, query);
 
 	try {
-		const [overview, artists, releases, recordings, recent, nowPlaying, sources, week] =
+		const [overview, artists, releases, recordings, clock, recent, nowPlaying, sources, week] =
 			await Promise.all([
 				getJson<Overview>(fetch, api, { tz: timeZone, source }),
 				chart('artists'),
 				chart('releases'),
 				chart('recordings'),
+				// The page works without it.
+				getJson<Clock>(fetch, `${api}/clock`, query).catch(() => null),
 				getJson<ListensPage>(fetch, `${api}/listens`, {
 					before: periodEnd(period)?.toISOString(),
 					limit: 25,
@@ -66,6 +69,7 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 			artists,
 			releases,
 			recordings,
+			clock,
 			recent,
 			nowPlaying,
 			week

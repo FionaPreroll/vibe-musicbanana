@@ -216,7 +216,7 @@ async fn overview(
 }
 
 #[derive(Deserialize)]
-struct TopParams {
+pub(crate) struct TopParams {
     /// Calendar year in `tz`; short for from=<year>-01-01&to=<year>-12-31.
     year: Option<i32>,
     /// First day of the period in `tz`; open when missing.
@@ -225,16 +225,16 @@ struct TopParams {
     /// Last day of the period in `tz`, inclusive; open when missing.
     #[serde(default, with = "day::option")]
     to: Option<Date>,
-    tz: Option<String>,
+    pub(crate) tz: Option<String>,
     limit: Option<i64>,
     /// Only the listens of this source, see `listen_source` in the migrations.
-    source: Option<String>,
+    pub(crate) source: Option<String>,
 }
 
 impl TopParams {
     /// The first and last day of the period; `None` leaves that end open, so
     /// neither of them means all time.
-    fn days(&self) -> Result<(Option<Date>, Option<Date>), AppError> {
+    pub(crate) fn days(&self) -> Result<(Option<Date>, Option<Date>), AppError> {
         let bad = |message: &str| AppError::BadRequest(message.into());
         if let Some(year) = self.year {
             if self.from.is_some() || self.to.is_some() {
