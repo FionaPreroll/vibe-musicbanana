@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO merge_dismissal (kind, from_id, into_id, from_name, into_name)\n         VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a3f64a01b8ff1c2033feb1c571721d00fa25e7c95955924daec392a1467db185"
+}

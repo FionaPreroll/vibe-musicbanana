@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH w AS (SELECT search_fold(x) AS w FROM unnest($1::text[]) x)\n               SELECT r.id, r.title, a.name AS artist,\n                      (SELECT count(*) FROM listen l WHERE l.release_id = r.id) AS \"listens!\"\n                 FROM release r\n                 JOIN artist a ON a.id = r.artist_id\n                WHERE r.merged_into IS NULL\n                  AND (r.id = $2 OR NOT EXISTS (SELECT FROM w WHERE strpos(r.search_name, w) = 0\n                                                                AND strpos(a.search_name, w) = 0))\n                ORDER BY r.id = $2 DESC, 4 DESC, r.title, r.id\n                LIMIT 20",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "release",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "release",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "artist",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "504ece9bba87fbbe8d5cf7adcf2df74cb921a8bfeb2f66a5f291d7d7f8e710a4"
+}

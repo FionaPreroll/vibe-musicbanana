@@ -162,6 +162,16 @@ pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
         .collect(),
     };
 
+    let hidden: HashSet<(i64, i64)> = sqlx::query!(
+        "SELECT from_id, into_id FROM merge_dismissal WHERE kind = $1",
+        kind.to_string()
+    )
+    .fetch_all(db)
+    .await?
+    .into_iter()
+    .flat_map(|r| [(r.from_id, r.into_id), (r.into_id, r.from_id)])
+    .collect();
+
     let mut groups: HashMap<i64, Vec<usize>> = HashMap::new();
     for (i, (_, group, _)) in rows.iter().enumerate() {
         groups.entry(*group).or_default().push(i);
@@ -172,7 +182,7 @@ pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
         let listens: Vec<i64> = members.iter().map(|&i| rows[i].0.listens).collect();
         for (from, into, likeness) in look_alikes(&names, &listens, kind != Kind::Artist) {
             let (from, into) = (&rows[members[from]], &rows[members[into]]);
-            if from.2 && into.2 {
+            if (from.2 && into.2) || hidden.contains(&(from.0.id, into.0.id)) {
                 continue;
             }
             found.push(Suggestion {
@@ -191,6 +201,97 @@ pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
         )
     });
     Ok(found)
+}
+
+/// A suggestion an admin hid, see migrations/0013_merge_dismissal.sql.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hidden {
+    pub kind: String,
+    pub from: (i64, String),
+    pub into: (i64, String),
+    pub hidden_at: time::OffsetDateTime,
+}
+
+/// Leaves the pair `from` and `into` out of the suggestions from now on.
+pub async fn hide(db: &PgPool, kind: Kind, from: i64, into: i64) -> anyhow::Result<()> {
+    let ids = [from, into];
+    let names: Vec<(i64, String)> = match kind {
+        Kind::Artist => sqlx::query!("SELECT id, name FROM artist WHERE id = ANY($1)", &ids[..])
+            .fetch_all(db)
+            .await?
+            .into_iter()
+            .map(|r| (r.id, r.name))
+            .collect(),
+        Kind::Release => sqlx::query!("SELECT id, title FROM release WHERE id = ANY($1)", &ids[..])
+            .fetch_all(db)
+            .await?
+            .into_iter()
+            .map(|r| (r.id, r.title))
+            .collect(),
+        Kind::Recording => sqlx::query!(
+            "SELECT id, title FROM recording WHERE id = ANY($1)",
+            &ids[..]
+        )
+        .fetch_all(db)
+        .await?
+        .into_iter()
+        .map(|r| (r.id, r.title))
+        .collect(),
+    };
+    let name = |id: i64| {
+        names
+            .iter()
+            .find(|n| n.0 == id)
+            .map(|n| n.1.clone())
+            .with_context(|| format!("there is no {kind} {id}"))
+    };
+    let (from_name, into_name) = (name(from)?, name(into)?);
+    sqlx::query!(
+        "INSERT INTO merge_dismissal (kind, from_id, into_id, from_name, into_name)
+         VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+        kind.to_string(),
+        from,
+        into,
+        from_name,
+        into_name,
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Suggests the pair again, in either direction.
+pub async fn unhide(db: &PgPool, kind: Kind, from: i64, into: i64) -> sqlx::Result<bool> {
+    let done = sqlx::query!(
+        "DELETE FROM merge_dismissal
+          WHERE kind = $1 AND ((from_id, into_id) = ($2, $3) OR (from_id, into_id) = ($3, $2))",
+        kind.to_string(),
+        from,
+        into
+    )
+    .execute(db)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// The hidden suggestions of `kind`, the latest first.
+pub async fn hidden(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Hidden>> {
+    let rows = sqlx::query!(
+        "SELECT kind, from_id, from_name, into_id, into_name, hidden_at
+           FROM merge_dismissal WHERE kind = $1 ORDER BY hidden_at DESC, from_id",
+        kind.to_string()
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| Hidden {
+            kind: r.kind,
+            from: (r.from_id, r.from_name),
+            into: (r.into_id, r.into_name),
+            hidden_at: r.hidden_at,
+        })
+        .collect())
 }
 
 /// Look-alikes among `names` as `(from, into, likeness)` indices. `into` is the one
@@ -465,6 +566,9 @@ pub struct Merged {
     pub recordings_merged: u64,
     /// The number [`undo`] takes it back by; none in a dry run.
     pub op: Option<i64>,
+    /// Whether their MusicBrainz IDs tell the two apart, so that the merge
+    /// needed [`Options::force`].
+    pub told_apart: bool,
 }
 
 impl Merged {
@@ -481,6 +585,7 @@ impl Merged {
             recordings_moved: 0,
             recordings_merged: 0,
             op: None,
+            told_apart: told_apart(&from.mbids, &into.mbids),
         }
     }
 }
@@ -645,10 +750,20 @@ impl fmt::Display for MergeOp {
 
 /// The latest merges, newest first.
 pub async fn log(db: &PgPool, limit: i64) -> sqlx::Result<Vec<MergeOp>> {
+    log_before(db, None, limit).await
+}
+
+/// The latest merges before merge `before`, or the latest at all, newest first.
+pub async fn log_before(
+    db: &PgPool,
+    before: Option<i64>,
+    limit: i64,
+) -> sqlx::Result<Vec<MergeOp>> {
     let rows = sqlx::query!(
         "SELECT id, kind, from_id, from_name, into_id, into_name, merged_at, undone_at
-           FROM merge_op ORDER BY id DESC LIMIT $1",
-        limit
+           FROM merge_op WHERE $2::bigint IS NULL OR id < $2 ORDER BY id DESC LIMIT $1",
+        limit,
+        before
     )
     .fetch_all(db)
     .await?;

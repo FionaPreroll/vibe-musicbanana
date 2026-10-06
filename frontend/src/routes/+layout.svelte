@@ -68,6 +68,7 @@
 				>
 				{#if data.me.admin}
 					<a class="text-stone-600 hover:underline" href="/status">Status</a>
+					<a class="text-stone-600 hover:underline" href="/merges">Merges</a>
 				{/if}
 				<a class="text-stone-600 hover:underline" href="/settings">Settings</a>
 				<button class="text-stone-600 hover:underline" onclick={logOut}>Log out</button>
