@@ -212,7 +212,7 @@ enum AccountCommand {
     },
     /// Give an account another email address, which logs in too.
     Email { username: String, address: String },
-    /// Let an account see the status page at /status, or with --off no more.
+    /// Let an account see the admin pages /status and /merges, or with --off no more.
     Admin {
         username: String,
         #[arg(long)]
@@ -635,7 +635,7 @@ async fn account_command(db: &PgPool, command: AccountCommand) -> anyhow::Result
                 bail!("there is no account {username}");
             }
             eprintln!(
-                "{username} {} the status page now.",
+                "{username} {} the status and merges pages now.",
                 if off { "no longer sees" } else { "sees" }
             );
         }
