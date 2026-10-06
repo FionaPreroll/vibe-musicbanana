@@ -64,32 +64,33 @@
 				{daysHeard}<span class="text-base font-normal text-stone-500">{' '}of {daysSoFar}</span>
 			</dd>
 		</div>
-		<div>
-			<dt class={label}>Streak</dt>
-			<dd class="text-2xl font-semibold tabular-nums">{days(week.streak.current)}</dd>
-			<dd class="text-sm text-stone-500">
-				{#if week.streak.current_from}
-					in a row since {formatLongAgo(week.streak.current_from)}
-				{:else}
-					no listens yesterday or today
-				{/if}
-			</dd>
-		</div>
-		<div>
-			<dt class={label}>Longest streak</dt>
-			<dd class="text-2xl font-semibold tabular-nums">{days(week.streak.longest)}</dd>
-			{#if week.streak.longest_from && week.streak.longest_to}
+		{#if week.streak}
+			{@const streak = week.streak}
+			<div>
+				<dt class={label}>Streak</dt>
+				<dd class="text-2xl font-semibold tabular-nums">{days(streak.current)}</dd>
 				<dd class="text-sm text-stone-500">
-					{#if week.streak.longest === 1}
-						on {formatLongAgo(week.streak.longest_from)}
+					{#if streak.current_from}
+						in a row since {formatLongAgo(streak.current_from)}
 					{:else}
-						from {formatLongAgo(week.streak.longest_from)} to {formatLongAgo(
-							week.streak.longest_to
-						)}
+						no listens yesterday or today
 					{/if}
 				</dd>
-			{/if}
-		</div>
+			</div>
+			<div>
+				<dt class={label}>Longest streak</dt>
+				<dd class="text-2xl font-semibold tabular-nums">{days(streak.longest)}</dd>
+				{#if streak.longest_from && streak.longest_to}
+					<dd class="text-sm text-stone-500">
+						{#if streak.longest === 1}
+							on {formatLongAgo(streak.longest_from)}
+						{:else}
+							from {formatLongAgo(streak.longest_from)} to {formatLongAgo(streak.longest_to)}
+						{/if}
+					</dd>
+				{/if}
+			</div>
+		{/if}
 	</dl>
 
 	<div class="mt-6 grid gap-8 md:grid-cols-2">

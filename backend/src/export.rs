@@ -44,7 +44,7 @@ fn rfc3339_opt(t: Option<OffsetDateTime>) -> Value {
 async fn account_part(db: &PgPool, id: i64) -> Result<serde_json::Map<String, Value>, AppError> {
     let account = sqlx::query!(
         r#"SELECT username::text AS "username!", email::text AS "email!", is_admin, created_at,
-                  time_zone, week_start
+                  time_zone, week_start, show_streaks
              FROM account WHERE id = $1"#,
         id
     )
@@ -129,6 +129,7 @@ async fn account_part(db: &PgPool, id: i64) -> Result<serde_json::Map<String, Va
             "created_at": rfc3339(account.created_at),
             "time_zone": account.time_zone,
             "week_start": account.week_start,
+            "show_streaks": account.show_streaks,
             "former_usernames": former.iter().map(|f| json!({
                 "username": f.username,
                 "renamed_at": rfc3339(f.renamed_at),

@@ -145,9 +145,10 @@ async fn the_download_holds_everything_but_secrets(db: PgPool) {
     assert_eq!(
         [
             &data["account"]["time_zone"],
-            &data["account"]["week_start"]
+            &data["account"]["week_start"],
+            &data["account"]["show_streaks"]
         ],
-        [&Value::Null, &json!(1)]
+        [&Value::Null, &json!(1), &json!(true)]
     );
     assert_eq!(data["followers"][0]["username"], "alex");
     assert_eq!(data["scrobble_tokens"][0]["label"], "Navidrome");

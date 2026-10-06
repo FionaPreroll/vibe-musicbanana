@@ -41,13 +41,14 @@ export type Week = {
 	artists: { id: number; name: string; listens: number; last_week: number; new: boolean }[];
 	/** Artists of the week never heard before it. */
 	new_artists: number;
+	/** Null when the viewer or the profile's owner turned streaks off. */
 	streak: {
 		current: number;
 		current_from: string | null;
 		longest: number;
 		longest_from: string | null;
 		longest_to: string | null;
-	};
+	} | null;
 };
 
 /** A year in review (backend/src/review.rs); a running year counts up to now. */
@@ -211,6 +212,8 @@ export type Me = {
 	time_zone: string | null;
 	/** The first day of the week, 1 for Monday to 7 for Sunday. */
 	week_start: number;
+	/** Whether the account sees streaks, and others see the streaks of its profiles. */
+	show_streaks: boolean;
 	/** Without their listens; GET /api/me/profiles has those. */
 	profiles: Omit<OwnProfile, 'listens'>[];
 };

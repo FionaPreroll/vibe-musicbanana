@@ -172,6 +172,11 @@
 		}
 	}
 
+	// Streaks
+
+	const setStreaks = (show: boolean) =>
+		change('streaks', () => sendJson(fetch, 'PUT', '/api/me/streaks', { show_streaks: show }));
+
 	// User name
 
 	let username: string | null = $state(null);
@@ -559,6 +564,23 @@
 					(time.zone === (me.time_zone ?? '') && time.weekStart === me.week_start)}>Save</button
 			>
 		</form>
+	</section>
+
+	<section class="mt-12">
+		<h2 class={heading}>Streaks</h2>
+		<label class="flex items-start gap-2 text-sm">
+			<input
+				class="mt-0.5"
+				type="checkbox"
+				checked={me.show_streaks}
+				onchange={(e) => setStreaks(e.currentTarget.checked)}
+			/>
+			<span>
+				Show streaks, the days in a row with listens, under "This week" on profile pages. Turned
+				off, you don't see them on any profile, and nobody sees those of your profiles.
+			</span>
+		</label>
+		{@render error('streaks')}
 	</section>
 
 	<section class="mt-12">

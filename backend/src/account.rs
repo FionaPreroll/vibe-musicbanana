@@ -54,6 +54,7 @@ pub fn routes() -> Router<AppState> {
         .route("/me/username", put(change_username))
         .route("/me/email", put(change_email_address))
         .route("/me/time", put(change_time))
+        .route("/me/streaks", put(change_streaks))
         .route("/me/profiles", get(list_profiles).post(create_profile))
         .route("/me/profiles/{slug}", patch(update_profile))
         .route("/me/tokens", get(list_tokens).post(create_token))
@@ -313,6 +314,8 @@ struct Me {
     time_zone: Option<String>,
     /// The first day of the week, 1 for Monday to 7 for Sunday.
     week_start: i16,
+    /// Whether the account sees streaks, and others see the streaks of its profiles.
+    show_streaks: bool,
     /// Without their listens, which take a while to count: every page asks for
     /// this first. The settings get them from `GET /api/me/profiles`.
     profiles: Vec<MeProfile>,
@@ -350,7 +353,7 @@ async fn own_profiles(db: &PgPool, account: i64) -> sqlx::Result<Vec<OwnProfile>
 async fn me(State(state): State<AppState>, Account(id): Account) -> Result<Json<Me>, AppError> {
     let account = sqlx::query!(
         r#"SELECT username::text AS "username!", email::text AS "email!", is_admin,
-                  time_zone, week_start
+                  time_zone, week_start, show_streaks
              FROM account WHERE id = $1"#,
         id,
     )
@@ -362,6 +365,7 @@ async fn me(State(state): State<AppState>, Account(id): Account) -> Result<Json<
         admin: account.is_admin,
         time_zone: account.time_zone,
         week_start: account.week_start,
+        show_streaks: account.show_streaks,
         profiles: sqlx::query_as!(
             MeProfile,
             r#"SELECT slug::text AS "slug!", name, visibility::text AS "visibility!"
@@ -548,6 +552,33 @@ async fn change_time(
         time_zone,
         week_start: change.week_start,
     }))
+}
+
+#[derive(Deserialize, Serialize)]
+struct StreakSettings {
+    show_streaks: bool,
+}
+
+/// Turns streaks on or off: off, the account sees them nowhere and nobody sees
+/// those of its profiles.
+async fn change_streaks(
+    State(state): State<AppState>,
+    Account(id): Account,
+    Json(change): Json<StreakSettings>,
+) -> Result<Json<StreakSettings>, AppError> {
+    sqlx::query!(
+        "UPDATE account SET show_streaks = $2 WHERE id = $1",
+        id,
+        change.show_streaks,
+    )
+    .execute(&state.db)
+    .await?;
+    tracing::info!(
+        "{} turned streaks {}",
+        name_of(&state.db, id).await?,
+        if change.show_streaks { "on" } else { "off" }
+    );
+    Ok(Json(change))
 }
 
 #[derive(Deserialize)]

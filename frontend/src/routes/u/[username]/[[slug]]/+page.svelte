@@ -49,7 +49,7 @@
 
 	// A profile nobody listened to lately keeps its page as it was.
 	const week = $derived(
-		data.week && (data.week.listens || data.week.last_week || data.week.streak.current)
+		data.week && (data.week.listens || data.week.last_week || data.week.streak?.current)
 			? data.week
 			: null
 	);
