@@ -8,24 +8,26 @@ import {
 	getJson,
 	profileApi,
 	profilePath,
-	timeZone,
 	type EntityPage,
 	type Source
 } from '#lib/api.ts';
 import { sourceOf } from '#lib/source.ts';
+import { timeZone } from '#lib/zone.svelte.ts';
 import type { PageLoad } from './$types';
 
 // /u/<username>/artist/<id>-<name>, …/album/… and …/track/…, after the slug for other
 // profiles than the default one. Only the id counts; the name is for the reader.
-export const load: PageLoad = async ({ params, url, fetch }) => {
+export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const slug = params.slug ?? 'default';
 	const base = profilePath(params.username, slug);
+	// For the viewer's time zone (see zone.svelte.ts).
+	await parent();
 	try {
 		const api = profileApi(params.username, slug);
 		const source = sourceOf(url);
 		const [entity, sources] = await Promise.all([
 			getJson<EntityPage>(fetch, `${api}/${entityApiKinds[params.kind]}/${params.id}`, {
-				tz: timeZone,
+				tz: timeZone(),
 				source
 			}),
 			getJson<Source[]>(fetch, `${api}/sources`)

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Week } from '#lib/api.ts';
-	import { formatDate, formatNumber, listenCount } from '#lib/format.ts';
+	import { formatCalendarDay, formatNumber, listenCount } from '#lib/format.ts';
 	import { parseDay } from '#lib/period.ts';
 
 	let {
@@ -20,7 +20,7 @@
 	});
 	const formatDay = (day: string) => shortDay.format(parseDay(day));
 	// Streaks can reach back years.
-	const formatLongAgo = (day: string) => formatDate(parseDay(day));
+	const formatLongAgo = (day: string) => formatCalendarDay(parseDay(day));
 	const days = (n: number) => `${formatNumber(n)} ${n === 1 ? 'day' : 'days'}`;
 
 	// Days of this week so far, today included.

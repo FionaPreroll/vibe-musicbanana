@@ -191,6 +191,49 @@ async fn this_week_counts_up_to_now(db: PgPool) {
 }
 
 #[sqlx::test(fixtures("profiles"))]
+async fn weeks_from_sunday_or_saturday(db: PgPool) {
+    // Seen from Thursday 2016-03-03, a week from Sunday began on 2016-02-28;
+    // Friday's listen is still to come.
+    let week = get_ok(
+        &db,
+        "/api/profiles/fiona/default/week?day=2016-03-03&week_start=7",
+    )
+    .await;
+    assert_eq!([&week["from"], &week["to"]], ["2016-02-28", "2016-03-05"]);
+    let dates: Vec<_> = week["days"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| &d["date"])
+        .collect();
+    assert_eq!(dates.first().unwrap().as_str(), Some("2016-02-28"));
+    assert_eq!(dates.last().unwrap().as_str(), Some("2016-03-05"));
+    assert_eq!(
+        days(&week),
+        [
+            json!([0, 0]),
+            json!([0, 0]),
+            json!([1, 0]),
+            json!([1, 0]),
+            json!([1, 0]),
+            json!([0, 0]),
+            json!([0, 0])
+        ]
+    );
+
+    // A Saturday is the first day of its own week.
+    let week = get_ok(
+        &db,
+        "/api/profiles/fiona/default/week?day=2016-03-05&week_start=6",
+    )
+    .await;
+    assert_eq!([&week["from"], &week["to"]], ["2016-03-05", "2016-03-11"]);
+    // Monday is the default.
+    let week = get_ok(&db, "/api/profiles/fiona/default/week?day=2016-03-06").await;
+    assert_eq!([&week["from"], &week["to"]], ["2016-02-29", "2016-03-06"]);
+}
+
+#[sqlx::test(fixtures("profiles"))]
 async fn refuses_what_it_cannot_show(db: PgPool) {
     for uri in [
         "/api/profiles/fiona/arbeit/week",
@@ -202,6 +245,8 @@ async fn refuses_what_it_cannot_show(db: PgPool) {
         "/api/profiles/fiona/default/week?tz=Mars/Olympus",
         "/api/profiles/fiona/default/week?day=2016-02-30",
         "/api/profiles/fiona/default/week?day=yesterday",
+        "/api/profiles/fiona/default/week?week_start=0",
+        "/api/profiles/fiona/default/week?week_start=8",
     ] {
         assert_eq!(get(&db, uri).await.0, StatusCode::BAD_REQUEST, "{uri}");
     }

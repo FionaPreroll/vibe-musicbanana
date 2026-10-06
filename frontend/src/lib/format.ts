@@ -1,11 +1,16 @@
-// Numbers and dates in the viewer's locale.
+// Numbers and dates in the viewer's locale. Instants from the API (strings, or
+// Dates of them) are shown in the viewer's time zone, calendar days (local
+// midnight, see period.ts) as they are; see zone.svelte.ts.
+
+import { wallClock, wallDay, zoned } from '#lib/zone.svelte.ts';
 
 const number = new Intl.NumberFormat();
 const date = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
-const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const zonedDate = zoned({ dateStyle: 'medium' });
+const dateTime = zoned({ dateStyle: 'medium', timeStyle: 'short' });
 const monthOfYear = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' });
 const percent = new Intl.NumberFormat(undefined, { style: 'percent' });
-const time = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
+const time = zoned({ timeStyle: 'short' });
 const weekday = new Intl.DateTimeFormat(undefined, { weekday: 'long' });
 const dayThisYear = new Intl.DateTimeFormat(undefined, {
 	weekday: 'short',
@@ -21,12 +26,15 @@ const day = new Intl.DateTimeFormat(undefined, {
 const relative = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
 
 export const formatNumber = (n: number) => number.format(n);
-export const formatDate = (when: string | Date) => date.format(new Date(when));
+/** The day of an instant from the API, in the viewer's time zone. */
+export const formatDate = (iso: string) => zonedDate().format(new Date(iso));
+/** A calendar day (local midnight). */
+export const formatCalendarDay = (day: Date) => date.format(day);
 export const formatDateRange = (from: Date, to: Date) => date.formatRange(from, to);
-export const formatDateTime = (iso: string) => dateTime.format(new Date(iso));
+export const formatDateTime = (iso: string) => dateTime().format(new Date(iso));
 /** "1 Jul 2016, 20:00 – 23:56", with the day once when both are on the same one. */
 export const formatDateTimeRange = (from: string, to: string) =>
-	dateTime.formatRange(new Date(from), new Date(to));
+	dateTime().formatRange(new Date(from), new Date(to));
 export const formatPercent = (share: number) => percent.format(share);
 
 /** "2009-03" as e.g. "Mar 2009". */
@@ -47,20 +55,21 @@ export function formatDuration(ms: number) {
 		: `${formatNumber(hours)} h ${minutes % 60} min`;
 }
 
-/** The viewer's calendar day of `when`, like "2026-10-06". */
-export function dayKey(when: Date) {
+/** A calendar day (local midnight) like "2026-10-06". */
+function dayKey(when: Date) {
 	const pad = (n: number) => String(n).padStart(2, '0');
 	return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}`;
 }
 
 /**
- * Items in order, split into runs of the same calendar day. The lists are
- * newest first, so each day comes once.
+ * Items in order, split into runs of the same day in the viewer's time zone,
+ * each with that day as local midnight. The lists are newest first, so each
+ * day comes once.
  */
 export function byDay<T>(items: T[], when: (item: T) => string) {
 	const days: { key: string; date: Date; items: T[] }[] = [];
 	for (const item of items) {
-		const date = new Date(when(item));
+		const date = wallDay(when(item));
 		const key = dayKey(date);
 		if (days.at(-1)?.key === key) days.at(-1)!.items.push(item);
 		else days.push({ key, date, items: [item] });
@@ -70,9 +79,13 @@ export function byDay<T>(items: T[], when: (item: T) => string) {
 
 const capitalized = (s: string) => s.charAt(0).toLocaleUpperCase() + s.slice(1);
 
-/** A day as a heading: "Today", "Yesterday", the weekday within a week, else the date. */
+/**
+ * A calendar day (as from `byDay`) as a heading: "Today", "Yesterday", the
+ * weekday within a week, else the date. `now` is an instant.
+ */
 export function formatDay(when: Date, now: Date) {
 	const midnight = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+	now = wallClock(now);
 	const daysAgo = Math.round((midnight(now) - midnight(when)) / 86_400_000);
 	if (daysAgo === 0 || daysAgo === 1) return capitalized(relative.format(-daysAgo, 'day'));
 	if (daysAgo > 1 && daysAgo < 7) return weekday.format(when);
@@ -98,7 +111,7 @@ export function timeAgo(then: Date, now: Date) {
 
 /** When a listen happened, under its day's heading: how long ago for the last hours, else the time. */
 export function formatListenTime(then: Date, now: Date) {
-	return now.getTime() - then.getTime() < 6 * 3_600_000 ? timeAgo(then, now) : time.format(then);
+	return now.getTime() - then.getTime() < 6 * 3_600_000 ? timeAgo(then, now) : time().format(then);
 }
 
 export const listenCount = (n: number) => `${number.format(n)} ${n === 1 ? 'listen' : 'listens'}`;

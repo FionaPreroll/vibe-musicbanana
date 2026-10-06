@@ -2,7 +2,8 @@
 // ?days=30 (the last 30 days, today included) or ?from=2009-06-01&to=2009-08-31,
 // where either end may be left out; with none of them it is all time.
 
-import { formatDate, formatDateRange } from '#lib/format.ts';
+import { formatCalendarDay, formatDateRange } from '#lib/format.ts';
+import { fromWallClock, today as zoneToday } from '#lib/zone.svelte.ts';
 
 export type Period =
 	| { kind: 'all' }
@@ -56,7 +57,7 @@ export function periodSearch(period: Period) {
 export const samePeriod = (a: Period, b: Period) => periodSearch(a) === periodSearch(b);
 
 /** The first and last day of the period, `null` where it is open. */
-export function periodDays(period: Period, today = new Date()) {
+export function periodDays(period: Period, today = zoneToday()) {
 	switch (period.kind) {
 		case 'all':
 			return { from: null, to: null };
@@ -87,10 +88,12 @@ export function periodQuery(period: Period) {
 	}
 }
 
-/** Midnight after the last day of the period, or null when it runs up to now. */
+/** Midnight after the last day of the period in the viewer's time zone, or null when it runs up to now. */
 export function periodEnd(period: Period): Date | null {
-	if (period.kind === 'year') return localDay(period.year + 1, 1, 1);
-	if (period.kind === 'range' && period.to !== null) return addDays(parseDay(period.to), 1);
+	if (period.kind === 'year') return fromWallClock(localDay(period.year + 1, 1, 1));
+	if (period.kind === 'range' && period.to !== null) {
+		return fromWallClock(addDays(parseDay(period.to), 1));
+	}
 	return null;
 }
 
@@ -107,8 +110,8 @@ export function periodLabel(period: Period) {
 				return formatDateRange(parseDay(period.from), parseDay(period.to));
 			}
 			return period.from
-				? `Since ${formatDate(parseDay(period.from))}`
-				: `Until ${formatDate(parseDay(period.to ?? ''))}`;
+				? `Since ${formatCalendarDay(parseDay(period.from))}`
+				: `Until ${formatCalendarDay(parseDay(period.to ?? ''))}`;
 	}
 }
 
