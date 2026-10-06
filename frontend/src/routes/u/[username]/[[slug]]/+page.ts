@@ -6,7 +6,6 @@ import {
 	getJson,
 	profileApi,
 	profilePath,
-	timeZone,
 	type ChartEntry,
 	type ChartKind,
 	type Clock,
@@ -20,6 +19,7 @@ import {
 } from '#lib/api.ts';
 import { parsePeriod, periodEnd, periodQuery } from '#lib/period.ts';
 import { sourceOf } from '#lib/source.ts';
+import { timeZone, weekStart } from '#lib/zone.svelte.ts';
 import type { PageLoad } from './$types';
 
 // /u/<username> is the default profile, /u/<username>/<slug> any other one.
@@ -33,7 +33,10 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	if (!period) error(400, 'Invalid period');
 
 	const source = sourceOf(url);
-	const query = { ...periodQuery(period), tz: timeZone, limit: 10, source };
+	// The viewer's settings (see zone.svelte.ts) come with the login.
+	const { me } = await parent();
+	const tz = timeZone();
+	const query = { ...periodQuery(period), tz, limit: 10, source };
 	const chart = (kind: ChartKind) => getJson<ChartEntry[]>(fetch, `${api}/top/${kind}`, query);
 
 	try {
@@ -50,7 +53,7 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 			onThisDay,
 			lost
 		] = await Promise.all([
-			getJson<Overview>(fetch, api, { tz: timeZone, source }),
+			getJson<Overview>(fetch, api, { tz, source }),
 			chart('artists'),
 			chart('releases'),
 			chart('recordings'),
@@ -65,12 +68,12 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 			getJson<Source[]>(fetch, `${api}/sources`),
 			// The page works without it.
 			period.kind === 'all'
-				? getJson<Week>(fetch, `${api}/week`, { tz: timeZone, source }).catch(() => null)
-				: null,
-			period.kind === 'all'
-				? getJson<OnThisDay>(fetch, `${api}/on-this-day`, { tz: timeZone, source }).catch(
+				? getJson<Week>(fetch, `${api}/week`, { tz, week_start: weekStart(), source }).catch(
 						() => null
 					)
+				: null,
+			period.kind === 'all'
+				? getJson<OnThisDay>(fetch, `${api}/on-this-day`, { tz, source }).catch(() => null)
 				: null,
 			period.kind === 'all'
 				? getJson<LostAndFound>(fetch, `${api}/lost-and-found`, { limit: 10, source }).catch(
@@ -80,7 +83,6 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 		]);
 		const base = profilePath(params.username, params.slug);
 		// Whether the viewer follows it, for the button next to the name.
-		const { me } = await parent();
 		const follow = me && !overview.own ? await getJson<FollowInfo>(fetch, `${api}/follow`) : null;
 		return {
 			follow,
@@ -104,7 +106,6 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 		if (e instanceof ApiError && e.status === 404) {
 			await followRename(fetch, params.username, params.slug ?? 'default', url);
 			// A profile for followers that the viewer may ask to follow.
-			const { me } = await parent();
 			const follow = me
 				? await getJson<FollowInfo>(fetch, `${api}/follow`).catch(() => null)
 				: null;

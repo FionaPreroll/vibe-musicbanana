@@ -27,7 +27,7 @@ export type Overview = {
 	years: { year: number; listens: number }[];
 };
 
-/** The week at a glance, Monday to Sunday in the viewer's time zone (days as 2026-10-05). */
+/** The week at a glance from the viewer's first weekday on, in their time zone (days as 2026-10-05). */
 export type Week = {
 	from: string;
 	to: string;
@@ -203,7 +203,16 @@ export type NowPlaying = {
 };
 
 /** The logged-in account, with its profiles (the default one first). */
-export type Me = { username: string; email: string; admin: boolean; profiles: OwnProfile[] };
+export type Me = {
+	username: string;
+	email: string;
+	admin: boolean;
+	/** The time zone dates are shown in; the browser's when null. */
+	time_zone: string | null;
+	/** The first day of the week, 1 for Monday to 7 for Sunday. */
+	week_start: number;
+	profiles: OwnProfile[];
+};
 
 /** GET /api/admin/status, see backend/src/status.rs. */
 export type Status = {
@@ -495,6 +504,3 @@ export type SearchResult = {
 	releases: ChartEntry[];
 	recordings: ChartEntry[];
 };
-
-/** The viewer's time zone, so that a year starts at their midnight. */
-export const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;

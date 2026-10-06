@@ -548,3 +548,60 @@ async fn changing_the_email_address(db: PgPool) {
     .await;
     assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
 }
+
+#[sqlx::test(fixtures("profiles"))]
+async fn time_zone_and_week_start(db: PgPool) {
+    set_password(&db, 1, "banana-split").await;
+    let app = app(db);
+    let fiona = log_in(&app, "fiona", "banana-split").await;
+    let change = |body: Value| {
+        let app = app.clone();
+        let cookie = fiona.clone();
+        async move { call(&app, Method::PUT, "/api/me/time", Some(&cookie), Some(body)).await }
+    };
+
+    // The browser's time zone and Monday until the account picks others.
+    let me = get(&app, "/api/me", Some(&fiona)).await.body;
+    assert_eq!(
+        [&me["time_zone"], &me["week_start"]],
+        [&Value::Null, &json!(1)]
+    );
+
+    let reply = change(json!({ "time_zone": "America/New_York", "week_start": 7 })).await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+    let me = get(&app, "/api/me", Some(&fiona)).await.body;
+    assert_eq!(
+        [&me["time_zone"], &me["week_start"]],
+        [&json!("America/New_York"), &json!(7)]
+    );
+
+    // Only names of the tz database, no offsets or abbreviations; weekdays 1 to 7.
+    for body in [
+        json!({ "time_zone": "Mars/Olympus_Mons", "week_start": 1 }),
+        json!({ "time_zone": "UTC+3", "week_start": 1 }),
+        json!({ "time_zone": "Europe/Berlin", "week_start": 0 }),
+        json!({ "time_zone": "Europe/Berlin", "week_start": 8 }),
+    ] {
+        let reply = change(body.clone()).await;
+        assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{body}");
+    }
+
+    // Empty or null goes back to the browser's.
+    let reply = change(json!({ "time_zone": "", "week_start": 1 })).await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+    let me = get(&app, "/api/me", Some(&fiona)).await.body;
+    assert_eq!(
+        [&me["time_zone"], &me["week_start"]],
+        [&Value::Null, &json!(1)]
+    );
+
+    let reply = call(
+        &app,
+        Method::PUT,
+        "/api/me/time",
+        None,
+        Some(json!({ "time_zone": null, "week_start": 1 })),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+}

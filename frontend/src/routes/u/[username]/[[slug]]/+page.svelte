@@ -2,7 +2,6 @@
 	import {
 		entityPath,
 		getJson,
-		timeZone,
 		type ChartEntry,
 		type EntityKind,
 		type ListensPage,
@@ -20,7 +19,8 @@
 	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import VisibilityBadge from '#lib/components/VisibilityBadge.svelte';
 	import WeekGlance from '#lib/components/WeekGlance.svelte';
-	import { byDay, formatDate, formatDay, listenCount } from '#lib/format.ts';
+	import { byDay, formatCalendarDay, formatDate, formatDay, listenCount } from '#lib/format.ts';
+	import { timeZone } from '#lib/zone.svelte.ts';
 	import { now } from '#lib/now.svelte.ts';
 	import { parseDay, periodEnd, periodSearch, type Period } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
@@ -63,7 +63,7 @@
 	$effect(() => {
 		let current = true;
 		artistYears = [];
-		getJson<YearTop[]>(fetch, `${api}/top/artists/years`, { tz: timeZone, limit: 10, source })
+		getJson<YearTop[]>(fetch, `${api}/top/artists/years`, { tz: timeZone(), limit: 10, source })
 			.then((years) => {
 				if (current) artistYears = years;
 			})
@@ -76,7 +76,7 @@
 	function listensTitle(period: Period) {
 		if (period.kind === 'year') return `Last listens of ${period.year}`;
 		if (period.kind === 'range' && period.to) {
-			return `Last listens up to ${formatDate(parseDay(period.to))}`;
+			return `Last listens up to ${formatCalendarDay(parseDay(period.to))}`;
 		}
 		return 'Recent listens';
 	}

@@ -1,7 +1,7 @@
 //! "Lost & found" on a profile page: artists and tracks the profile heard a lot
 //! and not for a long time, the most heard first. The owner can dismiss an
 //! entry they don't want back, and show it again later (see
-//! migrations/0014_lost_and_found.sql).
+//! migrations/0015_lost_and_found.sql).
 //!
 //! "Not for a long time" counts back from the profile's latest listen, so a
 //! profile nobody scrobbles to any more still has its own. A source narrows

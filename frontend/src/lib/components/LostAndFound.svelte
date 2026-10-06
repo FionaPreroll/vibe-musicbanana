@@ -11,6 +11,7 @@
 	} from '#lib/api.ts';
 	import { formatDate, formatNumber, listenCount, timeAgo } from '#lib/format.ts';
 	import { now } from '#lib/now.svelte.ts';
+	import { wallDay } from '#lib/zone.svelte.ts';
 
 	let {
 		lost: loaded,
@@ -47,8 +48,8 @@
 	const me = $derived(own && `/api/me/profiles/${encodeURIComponent(own)}/lost-and-found/hidden`);
 
 	function years(entry: LostEntry) {
-		const first = new Date(entry.first_listened_at).getFullYear();
-		const last = new Date(entry.last_listened_at).getFullYear();
+		const first = wallDay(entry.first_listened_at).getFullYear();
+		const last = wallDay(entry.last_listened_at).getFullYear();
 		return first === last ? String(first) : `${first}–${last}`;
 	}
 

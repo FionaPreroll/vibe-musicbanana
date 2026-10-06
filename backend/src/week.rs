@@ -2,7 +2,8 @@
 //! the week before, the artists of the week and which of them are new, and the
 //! streak of days in a row with listens.
 //!
-//! Weeks run from Monday to Sunday in the viewer's time zone. The current week
+//! Weeks run from Monday to Sunday in the viewer's time zone, or from the day
+//! the viewer starts them on to the day before it. The current week
 //! is compared with the week before up to the same weekday and time of day, so
 //! a Wednesday morning isn't held against a whole week.
 
@@ -33,13 +34,15 @@ struct WeekParams {
     #[serde(default, with = "day::option")]
     day: Option<Date>,
     tz: Option<String>,
+    /// The first day of the week, 1 for Monday (the default) to 7 for Sunday.
+    week_start: Option<u8>,
     /// Only the listens of this source, see `listen_source` in the migrations.
     source: Option<String>,
 }
 
 #[derive(Serialize)]
 struct Week {
-    /// Monday and Sunday of the week.
+    /// The first and last day of the week.
     #[serde(with = "day")]
     from: Date,
     #[serde(with = "day")]
@@ -47,7 +50,7 @@ struct Week {
     /// The day looked from; the days after it have no listens yet.
     #[serde(with = "day")]
     day: Date,
-    /// Monday to Sunday, each with the listens on the same weekday of the week before.
+    /// The seven days of the week, each with the listens on the same weekday of the week before.
     days: Vec<DayCount>,
     /// The listens of the week so far.
     listens: i64,
@@ -107,6 +110,12 @@ async fn week(
             "day must be between the years 1 and 9999".into(),
         ));
     }
+    let week_start = params.week_start.unwrap_or(1);
+    if !(1..=7).contains(&week_start) {
+        return Err(AppError::BadRequest(
+            "week_start must be 1 (Monday) to 7 (Sunday)".into(),
+        ));
+    }
     let profile = find_profile(&state.db, viewer, &username, &slug).await?;
     let tz = time_zone(&state.db, params.tz).await?;
     let db = &state.db;
@@ -120,7 +129,8 @@ async fn week(
                 .await?
         }
     };
-    let monday = day - Duration::days(day.weekday().number_days_from_monday().into());
+    let first =
+        day - Duration::days(((day.weekday().number_from_monday() + 7 - week_start) % 7).into());
 
     // [lo, cut) is the week so far, [last_lo, lo) the week before and
     // [last_lo, last_cut) that one up to the same time. Days in the time zone
@@ -142,7 +152,7 @@ async fn week(
               AND ($5::text IS NULL OR listen_source(l.client) = $5)
             GROUP BY 1"#,
         profile.id,
-        monday,
+        first,
         tz,
         day,
         source,
@@ -158,7 +168,7 @@ async fn week(
     };
     let days: Vec<DayCount> = (0..7)
         .map(|i| {
-            let date = monday + Duration::days(i);
+            let date = first + Duration::days(i);
             DayCount {
                 date,
                 listens: count_on(date),
@@ -170,7 +180,7 @@ async fn week(
     let last_week = days.iter().map(|d| d.last_week).sum();
     let last_week_so_far = per_day
         .iter()
-        .filter(|row| row.date < monday)
+        .filter(|row| row.date < first)
         .map(|row| row.so_far)
         .sum();
 
@@ -202,7 +212,7 @@ async fn week(
             ORDER BY h.listens DESC, a.name
             LIMIT 5"#,
         profile.id,
-        monday,
+        first,
         tz,
         day,
         source,
@@ -224,7 +234,7 @@ async fn week(
                                  AND e.listened_at < b.lo
                                  AND ($5::text IS NULL OR listen_source(e.client) = $5))"#,
         profile.id,
-        monday,
+        first,
         tz,
         day,
         source,
@@ -276,8 +286,8 @@ async fn week(
     }
 
     Ok(Json(Week {
-        from: monday,
-        to: monday + Duration::days(6),
+        from: first,
+        to: first + Duration::days(6),
         day,
         days,
         listens,

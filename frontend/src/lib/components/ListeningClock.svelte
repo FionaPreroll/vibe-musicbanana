@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { timeZone, type Clock } from '#lib/api.ts';
+	import type { Clock } from '#lib/api.ts';
 	import { formatPercent, listenCount } from '#lib/format.ts';
+	import { timeZone, weekStart } from '#lib/zone.svelte.ts';
 
 	let { clock }: { clock: Clock } = $props();
 
-	// Monday 2024-01-01 and the days after it name the rows, Monday first like the API.
+	// Monday 2024-01-01 and the days after it name the weekdays, Monday first like the API.
 	const day = (i: number, hour = 0) => new Date(2024, 0, 1 + i, hour);
 	const shortWeekday = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
 	const longWeekday = new Intl.DateTimeFormat(undefined, { weekday: 'long' });
@@ -23,6 +24,8 @@
 		Array.from({ length: 24 }, (_, hour) => sum(clock.weekdays.map((hours) => hours[hour])))
 	);
 	const busiest = (ns: number[]) => ns.indexOf(Math.max(...ns));
+	// The rows start with the viewer's first weekday; `i` stays Monday-based.
+	const rows = $derived(Array.from({ length: 7 }, (_, n) => (weekStart() - 1 + n) % 7));
 	const busiestDay = $derived(busiest(dayTotals));
 	const busiestHour = $derived(busiest(hourTotals));
 
@@ -51,7 +54,7 @@
 
 <section class="max-w-3xl">
 	<h2 class="text-sm font-semibold tracking-wide text-stone-500 uppercase">Listening clock</h2>
-	<p class="text-sm text-stone-500">By weekday and hour, in {timeZone.replaceAll('_', ' ')}</p>
+	<p class="text-sm text-stone-500">By weekday and hour, in {timeZone().replaceAll('_', ' ')}</p>
 
 	<dl class="mt-3 grid grid-cols-2 gap-x-6 gap-y-4">
 		<div>
@@ -85,7 +88,8 @@
 			{/each}
 			<span class="hidden sm:block"></span>
 
-			{#each clock.weekdays as hours, i (i)}
+			{#each rows as i (i)}
+				{@const hours = clock.weekdays[i]}
 				<span class="pr-1.5 text-xs text-stone-500">{weekdays[i].short}</span>
 				{#each hours as n, hour (hour)}
 					<div
