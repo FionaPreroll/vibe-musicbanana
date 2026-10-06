@@ -8,7 +8,9 @@
 	const birthdays = {
 		musicbanana: new Date('2007-08-12T14:28:00Z'),
 		python: new Date('2010-03-27T17:05:00Z'),
-		symfony: new Date('2020-08-24T17:54:46+02:00')
+		symfony: new Date('2020-08-24T17:54:46+02:00'),
+		// The first commit of this repository.
+		rust: new Date('2026-10-03T12:20:16Z')
 	};
 
 	let now = $state(new Date());
@@ -44,6 +46,7 @@ V  \
              `-.__  `----"""    __.-'
                   `--..____..--'<span title={title('musicbanana')}>musicbanana already lives {since('musicbanana')}</span>
                                 <span title={title('python')}>has been a happy python for {since('python')}</span>
-                                <span title={title('symfony')}>has been a happy elephant for {since('symfony')}</span></pre>
+                                <span title={title('symfony')}>has been a happy elephant for {since('symfony')}</span>
+                                <span title={title('rust')}>has been a happy Rustacean for {since('rust')}</span></pre>
 	</div>
 {/if}
