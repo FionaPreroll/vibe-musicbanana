@@ -9,7 +9,9 @@
 		type HistoryListen,
 		type HistoryPage
 	} from '#lib/api.ts';
-	import { formatDateTime, formatNumber, listenCount } from '#lib/format.ts';
+	import ListenTime from '#lib/components/ListenTime.svelte';
+	import { byDay, formatDateTime, formatDay, formatNumber, listenCount } from '#lib/format.ts';
+	import { now } from '#lib/now.svelte.ts';
 	import { filterQuery } from '#lib/history.ts';
 	import { sourceLabel } from '#lib/source.ts';
 	import type { PageProps } from './$types';
@@ -20,6 +22,7 @@
 	// The pages loaded so far; "Show more" adds the next one.
 	let shown: HistoryListen[] = $derived([...page.listens]);
 	let next: string | null = $derived(page.next);
+	const days = $derived(byDay(shown, (l) => l.listened_at));
 	const selected = new SvelteSet<number>();
 	let busy = $state(false);
 	let error = $state('');
@@ -259,44 +262,55 @@
 								onchange={toggleAll}
 							/>
 						</th>
-						<th class="py-2 pr-4 font-normal">When</th>
+						<th class="py-2 pr-4 font-normal">Time</th>
 						<th class="py-2 pr-4 font-normal">Listen</th>
 						<th class="py-2 pr-4 font-normal">Source</th>
 						{#if data.trash}<th class="py-2 font-normal">Trashed</th>{/if}
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-stone-200">
-					{#each shown as l (l.id)}
-						<tr class={selected.has(l.id) ? 'bg-yellow-50' : ''}>
-							<td class="py-2 pr-2 align-top">
-								<input
-									type="checkbox"
-									aria-label="Select {l.artist} – {l.track}, {formatDateTime(l.listened_at)}"
-									checked={selected.has(l.id)}
-									onchange={(e) =>
-										e.currentTarget.checked ? selected.add(l.id) : selected.delete(l.id)}
-								/>
-							</td>
-							<td class="py-2 pr-4 align-top whitespace-nowrap text-stone-600 tabular-nums"
-								>{formatDateTime(l.listened_at)}</td
+				{#each days as day (day.key)}
+					<tbody class="divide-y divide-stone-200">
+						<tr>
+							<th
+								class="pt-5 pb-1 text-left font-semibold text-stone-700"
+								colspan={data.trash ? 5 : 4}
+								scope="rowgroup"
 							>
-							<td class="py-2 pr-4 align-top">
-								<span class="font-medium">{l.track}</span>
-								<span class="text-stone-500"
-									>· {[l.artist, l.album].filter(Boolean).join(' · ')}</span
-								>
-							</td>
-							<td class="py-2 pr-4 align-top whitespace-nowrap text-stone-500"
-								>{sourceLabel(l.source)}</td
-							>
-							{#if data.trash}
-								<td class="py-2 align-top whitespace-nowrap text-stone-500"
-									>{formatDateTime(l.trashed_at!)}</td
-								>
-							{/if}
+								<time datetime={day.key}>{formatDay(day.date, now())}</time>
+							</th>
 						</tr>
-					{/each}
-				</tbody>
+						{#each day.items as l (l.id)}
+							<tr class={selected.has(l.id) ? 'bg-yellow-50' : ''}>
+								<td class="py-2 pr-2 align-top">
+									<input
+										type="checkbox"
+										aria-label="Select {l.artist} – {l.track}, {formatDateTime(l.listened_at)}"
+										checked={selected.has(l.id)}
+										onchange={(e) =>
+											e.currentTarget.checked ? selected.add(l.id) : selected.delete(l.id)}
+									/>
+								</td>
+								<td class="py-2 pr-4 align-top whitespace-nowrap text-stone-600 tabular-nums">
+									<ListenTime at={l.listened_at} />
+								</td>
+								<td class="py-2 pr-4 align-top">
+									<span class="font-medium">{l.track}</span>
+									<span class="text-stone-500"
+										>· {[l.artist, l.album].filter(Boolean).join(' · ')}</span
+									>
+								</td>
+								<td class="py-2 pr-4 align-top whitespace-nowrap text-stone-500"
+									>{sourceLabel(l.source)}</td
+								>
+								{#if data.trash}
+									<td class="py-2 align-top whitespace-nowrap text-stone-500">
+										<ListenTime at={l.trashed_at!} ago />
+									</td>
+								{/if}
+							</tr>
+						{/each}
+					</tbody>
+				{/each}
 			</table>
 		</div>
 		{#if next}
