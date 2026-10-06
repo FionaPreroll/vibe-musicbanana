@@ -24,8 +24,8 @@
 
 /* Dark: black and banana yellow, like the easter egg. The pages keep their stone and
    yellow classes; the theme repaints the colors behind them. Stone turns into a ramp
-   from black (50) to banana (900), white into black, and the light yellows used
-   behind text into dark ones. */
+   from black (50) to banana (900), white into black, the light yellows used behind
+   text into dark ones and the dark yellow text into banana. */
 :root[data-theme='dark'] {
 	color-scheme: dark;
 
@@ -46,6 +46,7 @@
 	--color-yellow-100: oklch(25% 0.05 95);
 	--color-yellow-200: oklch(33% 0.07 95);
 	--color-yellow-300: oklch(50% 0.1 95);
+	--color-yellow-900: var(--color-banana);
 
 	--color-red-700: oklch(70.4% 0.191 22.216);
 	--color-red-800: oklch(80.8% 0.114 19.571);
