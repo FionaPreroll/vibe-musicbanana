@@ -12,12 +12,13 @@
 	import ArtistYears from '#lib/components/ArtistYears.svelte';
 	import Chart from '#lib/components/Chart.svelte';
 	import FollowButton from '#lib/components/FollowButton.svelte';
+	import OnThisDay from '#lib/components/OnThisDay.svelte';
 	import PeriodPicker from '#lib/components/PeriodPicker.svelte';
 	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import VisibilityBadge from '#lib/components/VisibilityBadge.svelte';
 	import WeekGlance from '#lib/components/WeekGlance.svelte';
 	import { formatDate, formatDateTime, listenCount } from '#lib/format.ts';
-	import { parseDay, periodEnd, type Period } from '#lib/period.ts';
+	import { parseDay, periodEnd, periodSearch, type Period } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
 	import type { PageProps } from './$types';
 
@@ -167,6 +168,15 @@
 
 	{#if week}
 		<WeekGlance {week} artistHref={(id, name) => entryHref('artist', id, name)} />
+	{/if}
+
+	{#if data.onThisDay && data.onThisDay.years.length > 0}
+		<OnThisDay
+			onThisDay={data.onThisDay}
+			href={entryHref}
+			dayHref={(day) =>
+				data.base + withSource(periodSearch({ kind: 'range', from: day, to: day }), data.source)}
+		/>
 	{/if}
 
 	<PeriodPicker
