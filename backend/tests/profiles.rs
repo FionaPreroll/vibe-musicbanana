@@ -135,6 +135,15 @@ async fn all_time_charts(db: PgPool) {
         chart(&get_ok(&db, &format!("{base}/artists?limit=1")).await),
         [json!(["Die Ärzte", 4])]
     );
+    // Of the tracks tied for the last place, the title decides.
+    assert_eq!(
+        chart(&get_ok(&db, &format!("{base}/recordings?limit=3")).await),
+        [
+            json!(["Unrockbar", "Die Ärzte", 3]),
+            json!(["Human Behaviour", "Björk", 2]),
+            json!(["Adagio for Strings", "Tiësto", 1]),
+        ]
+    );
 }
 
 #[sqlx::test(fixtures("profiles"))]

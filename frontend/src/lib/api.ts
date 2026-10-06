@@ -214,7 +214,8 @@ export type Me = {
 	week_start: number;
 	/** Whether the account sees streaks, and others see the streaks of its profiles. */
 	show_streaks: boolean;
-	profiles: OwnProfile[];
+	/** Without their listens; GET /api/me/profiles has those. */
+	profiles: Omit<OwnProfile, 'listens'>[];
 };
 
 /** GET /api/admin/status, see backend/src/status.rs. */

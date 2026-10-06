@@ -13,7 +13,10 @@ use musicbanana::{
     merge::{self, Kind, Suggestion},
     router, tokens, yourspotify,
 };
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{
+    PgPool,
+    postgres::{PgConnectOptions, PgPoolOptions},
+};
 use time::OffsetDateTime;
 use tokio::{
     net::TcpListener,
@@ -366,9 +369,17 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     let database_url = env::var("DATABASE_URL").context("DATABASE_URL is not set")?;
+    // Without JIT: PostgreSQL compiles a query to machine code once its estimated
+    // cost is high, which takes a good half second each time and only pays off for
+    // much larger scans than a profile's listens. Queries over a series of days
+    // ("On this day") are estimated far too high and paid that on every request.
+    let options = database_url
+        .parse::<PgConnectOptions>()
+        .context("reading DATABASE_URL")?
+        .options([("jit", "off")]);
     let db = PgPoolOptions::new()
         .max_connections(10)
-        .connect(&database_url)
+        .connect_with(options)
         .await
         .context("connecting to PostgreSQL")?;
     sqlx::migrate!()

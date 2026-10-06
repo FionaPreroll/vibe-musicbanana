@@ -136,6 +136,18 @@ async fn the_old_password_logs_in_and_gets_a_new_hash(db: PgPool) {
             .collect::<Vec<_>>(),
         [("default", "public"), ("arbeit", "private")]
     );
+    // The listens are counted only for the settings.
+    assert!(me.body["profiles"][0].get("listens").is_none());
+    let profiles = get(&app, "/api/me/profiles", Some(&cookie)).await.body;
+    assert_eq!(
+        profiles
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| (p["slug"].as_str().unwrap(), p["listens"].as_i64().unwrap()))
+            .collect::<Vec<_>>(),
+        [("default", 8), ("arbeit", 1)]
+    );
     let legacy: bool = sqlx::query_scalar("SELECT password_legacy_md5 FROM account WHERE id = 1")
         .fetch_one(&db)
         .await
@@ -604,6 +616,55 @@ async fn time_zone_and_week_start(db: PgPool) {
     )
     .await;
     assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn using_a_login_moves_its_end_on_at_most_once_an_hour(db: PgPool) {
+    set_password(&db, 1, "banana").await;
+    let app = app(db.clone());
+    let cookie = log_in(&app, "fiona", "banana").await;
+    let days_left = || async {
+        sqlx::query_scalar::<_, f64>(
+            "SELECT extract(epoch FROM expires_at - now())::float8 / 86400 FROM session",
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap()
+    };
+
+    // Used within the hour: left as it is, nothing written.
+    sqlx::query(
+        "UPDATE session SET expires_at = now() + interval '30 days' - interval '10 minutes'",
+    )
+    .execute(&db)
+    .await
+    .unwrap();
+    assert_eq!(
+        get(&app, "/api/me", Some(&cookie)).await.status,
+        StatusCode::OK
+    );
+    assert!(days_left().await < 29.995);
+
+    // Used a day later: 30 days from now again.
+    sqlx::query("UPDATE session SET expires_at = now() + interval '29 days'")
+        .execute(&db)
+        .await
+        .unwrap();
+    assert_eq!(
+        get(&app, "/api/me", Some(&cookie)).await.status,
+        StatusCode::OK
+    );
+    assert!(days_left().await > 29.999);
+
+    // An ended login stays ended.
+    sqlx::query("UPDATE session SET expires_at = now() - interval '1 second'")
+        .execute(&db)
+        .await
+        .unwrap();
+    assert_eq!(
+        get(&app, "/api/me", Some(&cookie)).await.status,
+        StatusCode::UNAUTHORIZED
+    );
 }
 
 #[sqlx::test(fixtures("profiles"))]

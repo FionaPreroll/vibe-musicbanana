@@ -39,14 +39,15 @@ async fn clock(
     let profile = find_profile(&state.db, viewer, &username, &slug).await?;
     let tz = time_zone(&state.db, params.tz).await?;
 
-    // Counts listens in [lo, hi) like the charts in profiles.rs.
+    // Counts listens in [lo, hi) like the charts in profiles.rs. date_part, not
+    // extract: extract computes a numeric, which takes much longer per listen.
     let cells = sqlx::query!(
         r#"WITH span AS (
                SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,
                       coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi
            )
-           SELECT extract(isodow FROM l.listened_at AT TIME ZONE $4)::int AS "weekday!",
-                  extract(hour FROM l.listened_at AT TIME ZONE $4)::int AS "hour!",
+           SELECT date_part('isodow', l.listened_at AT TIME ZONE $4)::int AS "weekday!",
+                  date_part('hour', l.listened_at AT TIME ZONE $4)::int AS "hour!",
                   count(*) AS "listens!"
              FROM span, listen l
             WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi

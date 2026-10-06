@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT slug::text AS \"slug!\", name, visibility::text AS \"visibility!\"\n                 FROM profile\n                WHERE account_id = $1\n                ORDER BY slug <> 'default', slug",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "slug!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "profile",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "visibility!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      null
+    ]
+  },
+  "hash": "12c7ab193c81a319c1bca321b60334c333fb8bcf54b002d0870b5ce5a80ff6e5"
+}

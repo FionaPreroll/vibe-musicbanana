@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT listen_source(client) AS \"source!\", count(*) AS \"listens!\",\n                  min(listened_at) AS \"first_listened_at!\", max(listened_at) AS \"last_listened_at!\"\n             FROM listen\n            WHERE profile_id = $1\n            GROUP BY 1\n            ORDER BY max(listened_at) DESC, 1",
+  "query": "SELECT listen_source(client) AS \"source!\", sum(listens)::bigint AS \"listens!\",\n                  min(first) AS \"first_listened_at!\", max(last) AS \"last_listened_at!\"\n             FROM (SELECT client, count(*) AS listens, min(listened_at) AS first,\n                          max(listened_at) AS last\n                     FROM listen\n                    WHERE profile_id = $1\n                    GROUP BY client) c\n            GROUP BY 1\n            ORDER BY max(last) DESC, 1",
   "describe": {
     "columns": [
       {
@@ -40,5 +40,5 @@
       null
     ]
   },
-  "hash": "ce0a34e1f55b9686f83932acb379234564a53044c85d595b3f1e7dde97312a9a"
+  "hash": "6547386947f1fd0a8a779170b054791749b469e0facae998287121be3558d239"
 }
