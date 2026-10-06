@@ -3,9 +3,12 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { profilePath, sendJson } from '#lib/api.ts';
+	import BananaEgg from '#lib/components/BananaEgg.svelte';
 	import favicon from '#lib/assets/favicon.svg';
 
 	let { data, children } = $props();
+
+	let bananaOpen = $state(false);
 
 	async function logOut() {
 		await sendJson(fetch, 'DELETE', '/api/session');
@@ -34,7 +37,16 @@
 	<div
 		class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-8"
 	>
-		<a href="/" class="shrink-0 text-lg font-bold">musicbanana 🍌</a>
+		<div class="shrink-0 text-lg font-bold">
+			<a href="/">musicbanana</a>
+			<button
+				type="button"
+				class="cursor-pointer"
+				aria-expanded={bananaOpen}
+				aria-controls="banana"
+				onclick={() => (bananaOpen = !bananaOpen)}>🍌</button
+			>
+		</div>
 		{#if profile && !onSearchPage}
 			<form class="min-w-0 flex-1 sm:max-w-xs" method="GET" action="{profile}/search" role="search">
 				<input
@@ -65,5 +77,6 @@
 		</nav>
 	</div>
 </header>
+<BananaEgg bind:open={bananaOpen} />
 
 {@render children()}
