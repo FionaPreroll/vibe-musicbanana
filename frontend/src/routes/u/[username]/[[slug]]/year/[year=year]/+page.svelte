@@ -254,7 +254,7 @@
 						{#each review.risers as artist (artist.id)}
 							<li class="relative overflow-hidden rounded">
 								<div
-									class="absolute inset-y-0 left-0 bg-stone-200"
+									class="absolute inset-y-0 left-0 bg-stone-300"
 									style:width="{(artist.last_year / riserMax) * 100}%"
 								></div>
 								<div
