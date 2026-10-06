@@ -56,6 +56,7 @@ cd frontend && pnpm lint && pnpm check && pnpm build
 | `?source=Navidrome` on any page of a profile (overview, artist, album, track, search), picked under the period: only the listens from that source; the sources are the clients without their version ("Navidrome 0.64.2 (…)" is "Navidrome"), "Spotify via YourSpotify" and the imports such as `import:php-2016` | every API route of a profile takes `source=`; `GET /api/profiles/<username>/<slug>/sources` lists them with their listens |
 | `/login` | `POST /api/session` (`{"login", "password"}`), `DELETE /api/session` logs out |
 | `/settings`: the account's profiles (create, rename, who sees them), scrobble tokens (create, revoke), YourSpotify connections (connect, remove), user name and password | `GET /api/me`, `POST /api/me/profiles`, `PATCH /api/me/profiles/<slug>`, `GET`/`POST /api/me/tokens`, `DELETE /api/me/tokens/<id>`, `GET`/`POST /api/me/yourspotify`, `DELETE /api/me/yourspotify/<id>`, `PUT /api/me/username`, `PUT /api/me/password`; `GET /api/renamed/<old name>/<slug>` gives the current name |
+| `/merges` (admins only): merge suggestions of artists, albums and tracks, merging with a dry run first, merging by hand, hidden suggestions and the merge log with undo, see [Merging duplicates](#in-the-browser) | `GET /api/admin/merges/suggestions/<artist\|release\|recording>?limit=`, `GET`/`POST /api/admin/merges/hidden/<kind>` (`{"from", "into"}`), `DELETE /api/admin/merges/hidden/<kind>/<from>/<into>`, `GET /api/admin/catalog/<kind>?q=`, `POST /api/admin/merges` (`{"kind", "from", "into", "dry_run", "force"}`), `GET /api/admin/merges?before=&limit=`, `POST /api/admin/merges/<n>/undo` (`{"dry_run"}`) |
 
 A profile is public, for followers (its owner and the accounts it let follow) or private (its owner only); to anybody else it does not exist (404), in the list and on every page and API route below it. Years and days start at midnight in `tz` (an IANA name such as `Europe/Berlin`, UTC by default); the frontend sends the browser's time zone. `from` and `to` are the first and last day of a period, both included, and either can be left out; `year=2012` is short for the whole year. `listens` pages backwards: pass a page's `next` as `before`. `now-playing` is `null` when nothing plays; the open page asks again every 30 seconds and adds new listens on top. Only the id in the address of an artist, album or track counts; the name after it is for the reader, and the page moves to the current one when it differs, as after a rename or for links with the id alone. The months of an artist, album or track run from the profile's first listen to its last, leaving out a year or more without any listens (shown as a break); an entry that was merged into another one answers with that one.
 
@@ -70,7 +71,7 @@ musicbanana account create <username> --email <address>   # asks for the passwor
 musicbanana account password <username>                     # asks for the new password
 musicbanana account rename <username> <new name>
 musicbanana account email <username> <address>
-musicbanana account admin <username> [--off]               # the status page, see below
+musicbanana account admin <username> [--off]               # the status and merges pages, see below
 ```
 
 Both read the password from standard input when that is not a terminal, e.g. `echo "$PASSWORD" | musicbanana account password fiona`. Passwords need at least 8 characters.
@@ -172,6 +173,10 @@ musicbanana merge undo 12
 ```
 
 Undoing puts back what the merge changed: the listens, spellings and MusicBrainz IDs go back to the merged entry, which stands on its own again, and an artist gets its albums and tracks back. What changed since stays as it is now, such as listens that came in under the merged spelling after the merge, and the command says how many such rows it left. A merge that a later one built on (merging the remaining entry on into a third one, say) can only be undone after that later one.
+
+### In the browser
+
+Admins (see [Status page](#status-page)) have a Merges link at the top that leads to `/merges`, which does the same as the commands: the suggestions of artists, albums and tracks, each with a preview of what merging would change (the dry run) before it merges, the other way round, or hidden for good; a merge by hand of any two entries, found by name or `#id`; and the log of all merges, also those from the command line, each with a preview before it is undone. A hidden suggestion (a live version that should stay apart, say) leaves `merge suggest` too; the page lists the hidden ones and can suggest them again. Merges and undos from the page go into the log under `musicbanana::merge`, with the account that made them.
 
 Two entries that both have a MusicBrainz ID are not suggested, as their IDs say they are different ones of the same name, and merging them takes `--force`: for an artist's other name that should count for the main one, or a recording MusicBrainz lists twice. Merging an artist moves its albums and tracks over instead of merging them with one of another ID. A merge takes the IDs along, so listens with the ID of the merged entry count for the remaining one.
 
@@ -314,12 +319,13 @@ The server logs to standard output (`docker compose logs -f musicbanana`). Besid
 
 - `musicbanana::access`: one line per request, with the client (the first `X-Forwarded-For` address behind a reverse proxy), method, path with query, status and milliseconds, e.g. `192.168.1.20 POST /api/me/profiles 201 12 ms`. Health checks and the frontend's files are left out. `ACCESS_LOG=off` switches it off.
 - `musicbanana::account`: logins (failed ones as warnings, with the name tried), logouts and every change in the settings: profiles, scrobble tokens, YourSpotify connections (never their token), user name and password.
+- `musicbanana::merge`: merges, undos and hidden suggestions from the page Merges, with the admin's account id.
 - `musicbanana::connections`: each round of a YourSpotify connection, when it starts and what it brought, or why it failed; the import's progress comes from `musicbanana::yourspotify`.
 
 `RUST_LOG` picks what is logged, by target and level (default `musicbanana=info,tower_http=info`): `RUST_LOG=musicbanana=info,musicbanana::account=warn` keeps only failed logins of the settings, `RUST_LOG=musicbanana=debug` logs more, and `musicbanana::access=off` is the same as `ACCESS_LOG=off`.
 
 ## Status page
 
-Admins have a Status link at the top that leads to `/status`: the build (version and commit), the server's CPU and memory, the machine's load and memory, the database (size, migration, connections, cache hits, rows and size per table, listens of the last 24 hours by source), the YourSpotify connections and how long each API route took since the server started (mean, median, 95th percentile, maximum and 5xx errors). It refreshes every 10 seconds. `musicbanana account admin <username>` makes an account an admin, `--off` takes that back; nobody else sees the page.
+Admins have a Status link at the top that leads to `/status`: the build (version and commit), the server's CPU and memory, the machine's load and memory, the database (size, migration, connections, cache hits, rows and size per table, listens of the last 24 hours by source), the YourSpotify connections and how long each API route took since the server started (mean, median, 95th percentile, maximum and 5xx errors). It refreshes every 10 seconds. `musicbanana account admin <username>` makes an account an admin, `--off` takes that back; nobody else sees the page, nor the page [Merges](#in-the-browser).
 
 The commit comes from the image build (`--build-arg GIT_COMMIT=…`, which CI sets); a local build shows none.
