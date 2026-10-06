@@ -82,17 +82,58 @@
 	let loadingMore = $state(false);
 	let nowPlaying = $derived(data.nowPlaying);
 
-	// While the page is open, keep "now playing" current and put new listens on top
-	// unless the period is over.
+	// While the page is open, the server says when "now playing" or the listens
+	// change (backend/src/live.rs), and new listens go on top unless the period is
+	// over. A hidden tab lets go of its connection and catches up when it shows again.
 	$effect(() => {
 		const api = data.api;
 		const source = data.source;
 		const live = periodEnd(data.period) === null;
-		const timer = setInterval(() => {
-			if (!document.hidden) refresh(api, source, live);
-		}, 30_000);
-		return () => clearInterval(timer);
+		let events: EventSource | null = null;
+
+		function connect(catchUp: boolean) {
+			events = new EventSource(`${api}/live`);
+			events.addEventListener('now-playing', () => refreshNowPlaying(api));
+			events.addEventListener('listens', () => refresh(api, source, live));
+			// After a reconnect, events in between may be lost.
+			events.onopen = () => {
+				if (catchUp) refresh(api, source, live);
+				catchUp = true;
+			};
+		}
+		function visibility() {
+			if (document.hidden) {
+				events?.close();
+				events = null;
+			} else if (!events) {
+				connect(true);
+			}
+		}
+
+		if (!document.hidden) connect(false);
+		document.addEventListener('visibilitychange', visibility);
+		return () => {
+			document.removeEventListener('visibilitychange', visibility);
+			events?.close();
+		};
 	});
+
+	// "Now playing" ends after the track's length, or ten minutes without one.
+	$effect(() => {
+		if (!nowPlaying) return;
+		const api = data.api;
+		const ends = Date.parse(nowPlaying.started_at) + (nowPlaying.duration_ms ?? 600_000);
+		const timer = setTimeout(() => refreshNowPlaying(api), Math.max(ends - Date.now(), 0) + 1000);
+		return () => clearTimeout(timer);
+	});
+
+	async function refreshNowPlaying(api: string) {
+		try {
+			nowPlaying = await getJson<NowPlaying | null>(fetch, `${api}/now-playing`);
+		} catch {
+			// Offline or a server restart; the next change tries again.
+		}
+	}
 
 	async function refresh(api: string, source: string | null, live: boolean) {
 		try {
@@ -103,7 +144,7 @@
 			const fresh = latest.listens.filter((l) => Date.parse(l.listened_at) > newest);
 			if (fresh.length > 0) listens = [...fresh, ...listens];
 		} catch {
-			// Offline or a server restart; the next round tries again.
+			// Offline or a server restart; the next change tries again.
 		}
 	}
 
