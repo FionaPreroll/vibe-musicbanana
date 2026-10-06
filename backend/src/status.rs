@@ -10,7 +10,6 @@ use std::{
 use axum::{
     Json, Router,
     extract::{MatchedPath, Request, State},
-    http::StatusCode,
     middleware::Next,
     response::Response,
     routing::get,
@@ -20,7 +19,7 @@ use time::OffsetDateTime;
 
 use crate::{
     AppError, AppState,
-    account::Account,
+    account::Admin,
     connections::{self, Connection},
 };
 
@@ -273,20 +272,8 @@ struct Status {
     routes: Vec<RouteTiming>,
 }
 
-async fn status(
-    State(state): State<AppState>,
-    Account(id): Account,
-) -> Result<Json<Status>, AppError> {
+async fn status(State(state): State<AppState>, _: Admin) -> Result<Json<Status>, AppError> {
     let db = &state.db;
-    let admin = sqlx::query_scalar!("SELECT is_admin FROM account WHERE id = $1", id)
-        .fetch_one(db)
-        .await?;
-    if !admin {
-        return Err(AppError::Status(
-            StatusCode::FORBIDDEN,
-            "the status is for admins".into(),
-        ));
-    }
 
     let overview = sqlx::query!(
         r#"SELECT version() AS "version!",

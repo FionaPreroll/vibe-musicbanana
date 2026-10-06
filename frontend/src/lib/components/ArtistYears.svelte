@@ -31,10 +31,10 @@
 		{ gutter: 14, gap: 28 }
 	];
 
-	// Six hues of the reference palette whose pairs all stay apart with normal color
-	// vision (checked with the dataviz palette validator against the page background).
-	// With color blindness some pairs come close; the names carry who is who.
-	const palette = ['#2a78d6', '#1baf7a', '#eda100', '#008300', '#4a3aa7', '#e34948'];
+	// Six hues whose pairs all stay apart with normal color vision, one set per theme
+	// (in layout.css). With color blindness some pairs come close; the names carry who
+	// is who.
+	const palette = [1, 2, 3, 4, 5, 6].map((n) => `var(--series-${n})`);
 
 	let width = $state(0);
 	let scroller: HTMLElement | undefined = $state();

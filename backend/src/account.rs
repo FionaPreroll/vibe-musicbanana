@@ -105,6 +105,27 @@ impl FromRequestParts<AppState> for Account {
     }
 }
 
+/// A logged-in admin; others get 401 without a login, 403 with one.
+pub struct Admin(pub i64);
+
+impl FromRequestParts<AppState> for Admin {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, AppError> {
+        let Account(id) = Account::from_request_parts(parts, state).await?;
+        let admin = sqlx::query_scalar!("SELECT is_admin FROM account WHERE id = $1", id)
+            .fetch_one(&state.db)
+            .await?;
+        if !admin {
+            return Err(AppError::Status(
+                StatusCode::FORBIDDEN,
+                "this is for admins".into(),
+            ));
+        }
+        Ok(Self(id))
+    }
+}
+
 fn session_cookie(headers: &HeaderMap) -> Option<String> {
     headers
         .get_all(header::COOKIE)

@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { profilePath, sendJson } from '#lib/api.ts';
 	import BananaEgg from '#lib/components/BananaEgg.svelte';
+	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
 	import favicon from '#lib/assets/favicon.svg';
 
 	let { data, children } = $props();
@@ -96,7 +97,7 @@
 				{/if}
 			</form>
 		{/if}
-		<nav class="relative shrink-0 text-sm" bind:this={menu}>
+		<nav class="relative flex shrink-0 items-center gap-3 text-sm sm:gap-4" bind:this={menu}>
 			{#if data.me}
 				<button
 					type="button"
@@ -123,6 +124,7 @@
 					>
 					{#if data.me.admin}
 						<a class="text-stone-600 hover:underline" href="/status">Status</a>
+						<a class="text-stone-600 hover:underline" href="/merges">Merges</a>
 					{/if}
 					<a class="text-stone-600 hover:underline" href="/settings">Settings</a>
 					<button class="cursor-pointer text-stone-600 hover:underline" onclick={logOut}
@@ -132,6 +134,8 @@
 			{:else}
 				<a class="text-stone-600 hover:underline" href={loginHref}>Log in</a>
 			{/if}
+			<!-- On phones before the menu button, elsewhere at the end. -->
+			<span class="flex max-sm:order-first"><ThemeToggle /></span>
 		</nav>
 	</div>
 </header>
