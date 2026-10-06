@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM merge_dismissal\n          WHERE kind = $1 AND ((from_id, into_id) = ($2, $3) OR (from_id, into_id) = ($3, $2))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "32cdf026391c3a45a5325be92665f70af9063056267788b0a91555d3550eedf6"
+}

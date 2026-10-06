@@ -11,6 +11,7 @@ mod history;
 pub mod import_php;
 mod listenbrainz;
 pub mod merge;
+mod merges;
 mod profiles;
 mod review;
 pub mod scrobble;
@@ -118,6 +119,7 @@ fn api() -> Router<AppState> {
         .merge(entities::routes())
         .merge(search::routes())
         .merge(status::routes())
+        .merge(merges::routes())
         .merge(week::routes())
         .merge(review::routes())
         .nest("/listenbrainz/1", listenbrainz::routes())

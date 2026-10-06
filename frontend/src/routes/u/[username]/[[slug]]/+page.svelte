@@ -12,11 +12,13 @@
 	import ArtistYears from '#lib/components/ArtistYears.svelte';
 	import Chart from '#lib/components/Chart.svelte';
 	import FollowButton from '#lib/components/FollowButton.svelte';
+	import ListenTime from '#lib/components/ListenTime.svelte';
 	import PeriodPicker from '#lib/components/PeriodPicker.svelte';
 	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import VisibilityBadge from '#lib/components/VisibilityBadge.svelte';
 	import WeekGlance from '#lib/components/WeekGlance.svelte';
-	import { formatDate, formatDateTime, listenCount } from '#lib/format.ts';
+	import { byDay, formatDate, formatDay, listenCount } from '#lib/format.ts';
+	import { now } from '#lib/now.svelte.ts';
 	import { parseDay, periodEnd, type Period } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
 	import type { PageProps } from './$types';
@@ -80,6 +82,7 @@
 	let listens = $derived(data.recent.listens);
 	let next = $derived(data.recent.next);
 	let loadingMore = $state(false);
+	const days = $derived(byDay(listens, (l) => l.listened_at));
 	let nowPlaying = $derived(data.nowPlaying);
 
 	// While the page is open, keep "now playing" current and put new listens on top
@@ -210,34 +213,39 @@
 		{#if listens.length === 0}
 			<p class="text-sm text-stone-500">No listens.</p>
 		{:else}
-			<ol class="divide-y divide-stone-200">
-				{#each listens as listen (listen.listened_at)}
-					<li class="flex flex-col py-1.5 sm:flex-row sm:items-baseline sm:gap-4">
-						<time
-							class="shrink-0 text-sm text-stone-500 tabular-nums sm:w-44"
-							datetime={listen.listened_at}>{formatDateTime(listen.listened_at)}</time
-						>
-						<span class="min-w-0 truncate">
-							<a
-								class="font-medium hover:underline"
-								href={entryHref('track', listen.recording_id, listen.track)}>{listen.track}</a
-							>
-							<span class="text-stone-500">
-								· <a
-									class="hover:underline"
-									href={entryHref('artist', listen.artist_id, listen.artist)}>{listen.artist}</a
+			{#each days as day (day.key)}
+				<h3 class="mt-4 border-b border-stone-200 pb-1 text-sm font-semibold text-stone-700">
+					<time datetime={day.key}>{formatDay(day.date, now())}</time>
+				</h3>
+				<ol class="divide-y divide-stone-200">
+					{#each day.items as listen (listen.listened_at)}
+						<li class="flex items-baseline gap-3 py-1.5 sm:gap-4">
+							<ListenTime
+								class="w-28 shrink-0 text-sm text-stone-500 tabular-nums sm:w-32"
+								at={listen.listened_at}
+							/>
+							<span class="min-w-0 truncate">
+								<a
+									class="font-medium hover:underline"
+									href={entryHref('track', listen.recording_id, listen.track)}>{listen.track}</a
 								>
-								{#if listen.album && listen.release_id}
+								<span class="text-stone-500">
 									· <a
 										class="hover:underline"
-										href={entryHref('album', listen.release_id, listen.album)}>{listen.album}</a
+										href={entryHref('artist', listen.artist_id, listen.artist)}>{listen.artist}</a
 									>
-								{/if}
+									{#if listen.album && listen.release_id}
+										· <a
+											class="hover:underline"
+											href={entryHref('album', listen.release_id, listen.album)}>{listen.album}</a
+										>
+									{/if}
+								</span>
 							</span>
-						</span>
-					</li>
-				{/each}
-			</ol>
+						</li>
+					{/each}
+				</ol>
+			{/each}
 			{#if next}
 				<button
 					class="mt-4 rounded border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-100 disabled:opacity-50"
