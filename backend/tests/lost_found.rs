@@ -171,6 +171,31 @@ async fn heard_a_lot_and_not_for_a_year(db: PgPool) {
 }
 
 #[sqlx::test(fixtures("profiles"))]
+async fn long_gone_weighs_against_many_listens(db: PgPool) {
+    history(&db).await;
+    // Tiësto 40 times more, until 2025-08-01: 53 listens, gone 13 months
+    // before the latest listen, so they weigh 42 %: 22 against Björk's 27
+    // (28 listens, gone seven and a half years).
+    listen(&db, "2025-06-23 12:00Z", 40, 3, 5, "").await;
+    let app = app(db.clone());
+    let lost = get_ok(&app, LOST, None).await;
+    assert_eq!(entries(&lost, "artists"), [json!([2, 28]), json!([3, 53])]);
+    assert_eq!(
+        entries(&lost, "tracks"),
+        [json!([1, 33]), json!([3, 27]), json!([5, 53])]
+    );
+
+    // 40 more before that: 93 listens weigh 39, more than Björk.
+    listen(&db, "2025-05-14 12:00Z", 40, 3, 5, "").await;
+    let lost = get_ok(&app, LOST, None).await;
+    assert_eq!(entries(&lost, "artists"), [json!([3, 93]), json!([2, 28])]);
+    assert_eq!(
+        entries(&lost, "tracks"),
+        [json!([5, 93]), json!([1, 33]), json!([3, 27])]
+    );
+}
+
+#[sqlx::test(fixtures("profiles"))]
 async fn an_empty_profile_has_nothing_lost(db: PgPool) {
     sqlx::query("DELETE FROM listen WHERE profile_id = 1")
         .execute(&db)
