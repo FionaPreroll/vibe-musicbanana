@@ -48,7 +48,7 @@ V  \
 
 <span title={title('musicbanana')}>musicbanana already lives {since('musicbanana')}</span>
 <span title={title('python')}>has been a happy python for {since('python')}</span>
-<span title={title('symfony')}>has been a happy elephant for {since('symfony')}</span>
+<span title={title('symfony')}>has been a happy ElePHPant for {since('symfony')}</span>
 <span title={title('rust')}>has been a happy Rustacean for {since('rust')}</span></pre>
 	</div>
 {/if}
