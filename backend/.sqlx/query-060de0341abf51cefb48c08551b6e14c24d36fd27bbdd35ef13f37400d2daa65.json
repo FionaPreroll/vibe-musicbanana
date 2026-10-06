@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH days AS (\n               SELECT n, ($2::date - make_interval(years => n))::date AS d\n                 FROM generate_series(1, extract(year FROM $2::date)::int - (\n                          SELECT extract(year FROM min(listened_at) AT TIME ZONE $3)::int\n                            FROM listen WHERE profile_id = $1)) n\n           ), heard AS MATERIALIZED (\n               SELECT d.n, d.d, l.artist_id, l.recording_id\n                 FROM days d\n                 JOIN listen l ON l.profile_id = $1\n                  AND l.listened_at >= d.d::timestamp AT TIME ZONE $3\n                  AND l.listened_at < (d.d + 1)::timestamp AT TIME ZONE $3\n                WHERE ($4::text IS NULL OR listen_source(l.client) = $4)\n           ), artists AS (\n               SELECT h.n, a.id, a.name, count(*) AS listens,\n                      row_number() OVER (PARTITION BY h.n ORDER BY count(*) DESC, a.name) AS rank\n                 FROM heard h JOIN artist a ON a.id = h.artist_id\n                GROUP BY h.n, a.id\n           ), tracks AS (\n               SELECT h.n, r.id, r.title AS name, a.name AS artist, count(*) AS listens,\n                      row_number() OVER (PARTITION BY h.n ORDER BY count(*) DESC, r.title) AS rank\n                 FROM heard h\n                 JOIN recording r ON r.id = h.recording_id\n                 JOIN artist a ON a.id = r.artist_id\n                GROUP BY h.n, r.id, a.id\n           )\n           SELECT 'year' AS \"kind!\", n AS \"n!\", d AS date, 0::bigint AS \"id!\", ''::text AS \"name!\",\n                  NULL::text AS artist, count(*) AS \"listens!\"\n             FROM heard GROUP BY n, d\n           UNION ALL\n           SELECT 'artist', n, NULL, id, name, NULL, listens FROM artists WHERE rank <= $5\n           UNION ALL\n           SELECT 'track', n, NULL, id, name, artist, listens FROM tracks WHERE rank <= $6\n           ORDER BY 2, 1 DESC, 7 DESC, 5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "n!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "date",
+        "type_info": "Date",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "id!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "artist",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Date",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "060de0341abf51cefb48c08551b6e14c24d36fd27bbdd35ef13f37400d2daa65"
+}

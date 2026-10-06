@@ -13,6 +13,7 @@ pub mod import_php;
 mod listenbrainz;
 pub mod merge;
 mod merges;
+mod on_this_day;
 mod profiles;
 pub mod scrobble;
 pub mod search;
@@ -121,6 +122,7 @@ fn api() -> Router<AppState> {
         .merge(status::routes())
         .merge(merges::routes())
         .merge(week::routes())
+        .merge(on_this_day::routes())
         .merge(clock::routes())
         .nest("/listenbrainz/1", listenbrainz::routes())
         .route_layer(middleware::from_fn(status::measure))
