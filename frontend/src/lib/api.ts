@@ -164,6 +164,62 @@ export type Status = {
 	}[];
 };
 
+/** The catalog's kinds as the merge API names them, see backend/src/merges.rs. */
+export type CatalogKind = 'artist' | 'release' | 'recording';
+
+/** An entry of the catalog; `artist` is set for releases and recordings, `listens` counts all profiles. */
+export type CatalogEntry = { id: number; name: string; artist: string | null; listens: number };
+
+/** GET /api/admin/merges/suggestions/<kind>: the first of `total`, and how many were hidden. */
+export type MergeSuggestions = {
+	total: number;
+	hidden: number;
+	suggestions: {
+		from: CatalogEntry;
+		into: CatalogEntry;
+		likeness: 'same_letters' | 'one_letter' | 'version';
+	}[];
+};
+
+/** A hidden suggestion; names as they were when it was hidden. */
+export type HiddenSuggestion = {
+	from: [number, string];
+	into: [number, string];
+	hidden_at: string;
+};
+
+/** What a merge changed, or would change in a dry run (`op` is null then). */
+export type MergeResult = {
+	kind: CatalogKind;
+	from: [number, string];
+	into: [number, string];
+	dry_run: boolean;
+	listens: number;
+	spellings: number;
+	releases_moved: number;
+	releases_merged: number;
+	recordings_moved: number;
+	recordings_merged: number;
+	/** Their MusicBrainz IDs tell them apart; merging needs `force`. */
+	told_apart: boolean;
+	op: number | null;
+};
+
+export type MergeOp = {
+	id: number;
+	kind: CatalogKind;
+	from: [number, string];
+	into: [number, string];
+	merged_at: string;
+	undone_at: string | null;
+};
+
+/** Pass `next` as `before` to get the following, older page. */
+export type MergeLog = { merges: MergeOp[]; next: number | null };
+
+/** Changed rows put back, and rows left as they are as they changed again since. */
+export type UndoResult = { merge: MergeOp; restored: number; kept: number; dry_run: boolean };
+
 export type OwnProfile = { slug: string; name: string; visibility: Visibility; listens: number };
 
 /** A scrobble token; the token itself is only shown once, when it is made. */

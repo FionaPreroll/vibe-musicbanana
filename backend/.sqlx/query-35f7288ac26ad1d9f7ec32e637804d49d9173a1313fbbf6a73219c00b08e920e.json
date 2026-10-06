@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH w AS (SELECT search_fold(x) AS w FROM unnest($1::text[]) x)\n               SELECT a.id, a.name, NULL::text AS artist,\n                      (SELECT count(*) FROM listen l WHERE l.artist_id = a.id) AS \"listens!\"\n                 FROM artist a\n                WHERE a.merged_into IS NULL\n                  AND (a.id = $2 OR NOT EXISTS (SELECT FROM w WHERE strpos(a.search_name, w) = 0))\n                ORDER BY a.id = $2 DESC, 4 DESC, a.name, a.id\n                LIMIT 20",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "artist",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "35f7288ac26ad1d9f7ec32e637804d49d9173a1313fbbf6a73219c00b08e920e"
+}
