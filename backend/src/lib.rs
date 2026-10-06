@@ -16,6 +16,7 @@ pub mod merge;
 mod merges;
 mod on_this_day;
 mod profiles;
+mod review;
 pub mod scrobble;
 pub mod search;
 pub mod status;
@@ -126,6 +127,7 @@ fn api() -> Router<AppState> {
         .merge(status::routes())
         .merge(merges::routes())
         .merge(week::routes())
+        .merge(review::routes())
         .merge(live::routes())
         .merge(on_this_day::routes())
         .merge(clock::routes())

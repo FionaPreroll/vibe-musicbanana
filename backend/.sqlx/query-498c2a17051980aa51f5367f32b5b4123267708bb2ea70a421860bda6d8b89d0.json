@@ -1,0 +1,73 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH this AS (\n               SELECT l.artist_id, count(*) AS listens,\n                      row_number() OVER (ORDER BY count(*) DESC, min(a.name)) AS rank\n                 FROM listen l\n                 JOIN artist a ON a.id = l.artist_id\n                WHERE l.profile_id = $1 AND l.listened_at >= $2 AND l.listened_at < $3\n                  AND ($6::text IS NULL OR listen_source(l.client) = $6)\n                GROUP BY 1\n           ), last AS (\n               SELECT l.artist_id, count(*) AS listens,\n                      row_number() OVER (ORDER BY count(*) DESC, min(a.name)) AS rank\n                 FROM listen l\n                 JOIN artist a ON a.id = l.artist_id\n                WHERE l.profile_id = $1 AND l.listened_at >= $4 AND l.listened_at < $5\n                  AND ($6::text IS NULL OR listen_source(l.client) = $6)\n                GROUP BY 1\n           )\n           SELECT a.id, a.name, t.listens AS \"listens!\", coalesce(p.listens, 0) AS \"last_year!\",\n                  t.rank AS \"rank!\", p.rank AS \"last_rank?\"\n             FROM this t\n             JOIN artist a ON a.id = t.artist_id\n             LEFT JOIN last p ON p.artist_id = t.artist_id\n            WHERE t.listens > coalesce(p.listens, 0)\n              AND EXISTS (SELECT FROM listen e\n                           WHERE e.profile_id = $1 AND e.artist_id = t.artist_id\n                             AND e.listened_at < $2\n                             AND ($6::text IS NULL OR listen_source(e.client) = $6))\n            ORDER BY t.listens - coalesce(p.listens, 0) DESC, t.rank\n            LIMIT 10",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_year!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "rank!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "last_rank?",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "498c2a17051980aa51f5367f32b5b4123267708bb2ea70a421860bda6d8b89d0"
+}

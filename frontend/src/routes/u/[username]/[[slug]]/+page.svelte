@@ -232,6 +232,16 @@
 	/>
 	<SourcePicker sources={data.sources} />
 
+	{#if data.period.kind === 'year'}
+		<p class="mt-4">
+			<a
+				class="inline-flex items-baseline gap-1.5 rounded bg-yellow-200/70 px-2.5 py-1 text-sm font-medium hover:bg-yellow-300/70"
+				href="{data.base}/year/{data.period.year}{withSource('', data.source)}"
+				>{data.period.year} in review →</a
+			>
+		</p>
+	{/if}
+
 	<div class="mt-8 grid gap-8 md:grid-cols-3">
 		<Chart title="Top artists" entries={data.artists} href={link('artist')} />
 		<Chart title="Top albums" entries={data.releases} href={link('album')} />

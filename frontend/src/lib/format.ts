@@ -24,6 +24,9 @@ export const formatNumber = (n: number) => number.format(n);
 export const formatDate = (when: string | Date) => date.format(new Date(when));
 export const formatDateRange = (from: Date, to: Date) => date.formatRange(from, to);
 export const formatDateTime = (iso: string) => dateTime.format(new Date(iso));
+/** "1 Jul 2016, 20:00 – 23:56", with the day once when both are on the same one. */
+export const formatDateTimeRange = (from: string, to: string) =>
+	dateTime.formatRange(new Date(from), new Date(to));
 export const formatPercent = (share: number) => percent.format(share);
 
 /** "2009-03" as e.g. "Mar 2009". */
@@ -32,6 +35,16 @@ export function formatMonth(month: string) {
 	const date = new Date(2000, m - 1, 1);
 	date.setFullYear(year);
 	return monthOfYear.format(date);
+}
+
+/** A stretch of time in hours and minutes, e.g. "3 h 12 min" or "45 min". */
+export function formatDuration(ms: number) {
+	const minutes = Math.round(ms / 60_000);
+	const hours = Math.floor(minutes / 60);
+	if (hours === 0) return `${minutes} min`;
+	return minutes % 60 === 0
+		? `${formatNumber(hours)} h`
+		: `${formatNumber(hours)} h ${minutes % 60} min`;
 }
 
 /** The viewer's calendar day of `when`, like "2026-10-06". */

@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) FILTER (WHERE listened_at >= $2) AS \"listens!\",\n                  count(*) FILTER (WHERE listened_at < $5) AS \"last_year_so_far!\",\n                  count(*) FILTER (WHERE listened_at < $2) AS \"last_year!\",\n                  count(DISTINCT artist_id) FILTER (WHERE listened_at >= $2) AS \"artists!\",\n                  count(DISTINCT recording_id) FILTER (WHERE listened_at >= $2) AS \"recordings!\",\n                  count(DISTINCT (listened_at AT TIME ZONE $6)::date)\n                      FILTER (WHERE listened_at >= $2) AS \"days!\"\n             FROM listen\n            WHERE profile_id = $1 AND listened_at >= $4 AND listened_at < $3\n              AND ($7::text IS NULL OR listen_source(client) = $7)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "last_year_so_far!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "last_year!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "artists!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "recordings!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "days!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "837584a08e05bea1c81c65885b9d0b77f2c0f993e9ff7af043b56116a9288576"
+}
