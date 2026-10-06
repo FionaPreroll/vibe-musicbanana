@@ -12,14 +12,16 @@
 	import ArtistYears from '#lib/components/ArtistYears.svelte';
 	import Chart from '#lib/components/Chart.svelte';
 	import FollowButton from '#lib/components/FollowButton.svelte';
+	import ListeningClock from '#lib/components/ListeningClock.svelte';
 	import ListenTime from '#lib/components/ListenTime.svelte';
+	import OnThisDay from '#lib/components/OnThisDay.svelte';
 	import PeriodPicker from '#lib/components/PeriodPicker.svelte';
 	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import VisibilityBadge from '#lib/components/VisibilityBadge.svelte';
 	import WeekGlance from '#lib/components/WeekGlance.svelte';
 	import { byDay, formatDate, formatDay, listenCount } from '#lib/format.ts';
 	import { now } from '#lib/now.svelte.ts';
-	import { parseDay, periodEnd, type Period } from '#lib/period.ts';
+	import { parseDay, periodEnd, periodSearch, type Period } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
 	import type { PageProps } from './$types';
 
@@ -213,6 +215,15 @@
 		<WeekGlance {week} artistHref={(id, name) => entryHref('artist', id, name)} />
 	{/if}
 
+	{#if data.onThisDay && data.onThisDay.years.length > 0}
+		<OnThisDay
+			onThisDay={data.onThisDay}
+			href={entryHref}
+			dayHref={(day) =>
+				data.base + withSource(periodSearch({ kind: 'range', from: day, to: day }), data.source)}
+		/>
+	{/if}
+
 	<PeriodPicker
 		period={data.period}
 		{years}
@@ -226,6 +237,12 @@
 		<Chart title="Top albums" entries={data.releases} href={link('album')} />
 		<Chart title="Top tracks" entries={data.recordings} href={link('track')} />
 	</div>
+
+	{#if data.clock && data.clock.listens > 0}
+		<div class="mt-12">
+			<ListeningClock clock={data.clock} />
+		</div>
+	{/if}
 
 	{#if artistYears.length > 0}
 		<div class="mt-12">

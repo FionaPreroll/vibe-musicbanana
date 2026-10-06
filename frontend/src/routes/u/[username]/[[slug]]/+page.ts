@@ -9,8 +9,10 @@ import {
 	timeZone,
 	type ChartEntry,
 	type ChartKind,
+	type Clock,
 	type ListensPage,
 	type NowPlaying,
+	type OnThisDay,
 	type Overview,
 	type Source,
 	type Week
@@ -22,7 +24,8 @@ import type { PageLoad } from './$types';
 // /u/<username> is the default profile, /u/<username>/<slug> any other one.
 // A period in the query (see period.ts) narrows the charts to it and starts the
 // listens at its end; a source (see source.ts) narrows everything to its listens.
-// Without a period the page starts with the current week at a glance.
+// Without a period the page starts with the current week at a glance and what
+// was heard on today's date in earlier years.
 export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const api = profileApi(params.username, params.slug ?? 'default');
 	const period = parsePeriod(url.searchParams);
@@ -33,24 +36,41 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const chart = (kind: ChartKind) => getJson<ChartEntry[]>(fetch, `${api}/top/${kind}`, query);
 
 	try {
-		const [overview, artists, releases, recordings, recent, nowPlaying, sources, week] =
-			await Promise.all([
-				getJson<Overview>(fetch, api, { tz: timeZone, source }),
-				chart('artists'),
-				chart('releases'),
-				chart('recordings'),
-				getJson<ListensPage>(fetch, `${api}/listens`, {
-					before: periodEnd(period)?.toISOString(),
-					limit: 25,
-					source
-				}),
-				getJson<NowPlaying | null>(fetch, `${api}/now-playing`),
-				getJson<Source[]>(fetch, `${api}/sources`),
-				// The page works without it.
-				period.kind === 'all'
-					? getJson<Week>(fetch, `${api}/week`, { tz: timeZone, source }).catch(() => null)
-					: null
-			]);
+		const [
+			overview,
+			artists,
+			releases,
+			recordings,
+			clock,
+			recent,
+			nowPlaying,
+			sources,
+			week,
+			onThisDay
+		] = await Promise.all([
+			getJson<Overview>(fetch, api, { tz: timeZone, source }),
+			chart('artists'),
+			chart('releases'),
+			chart('recordings'),
+			// The page works without it.
+			getJson<Clock>(fetch, `${api}/clock`, query).catch(() => null),
+			getJson<ListensPage>(fetch, `${api}/listens`, {
+				before: periodEnd(period)?.toISOString(),
+				limit: 25,
+				source
+			}),
+			getJson<NowPlaying | null>(fetch, `${api}/now-playing`),
+			getJson<Source[]>(fetch, `${api}/sources`),
+			// The page works without it.
+			period.kind === 'all'
+				? getJson<Week>(fetch, `${api}/week`, { tz: timeZone, source }).catch(() => null)
+				: null,
+			period.kind === 'all'
+				? getJson<OnThisDay>(fetch, `${api}/on-this-day`, { tz: timeZone, source }).catch(
+						() => null
+					)
+				: null
+		]);
 		const base = profilePath(params.username, params.slug);
 		// Whether the viewer follows it, for the button next to the name.
 		const { me } = await parent();
@@ -66,9 +86,11 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 			artists,
 			releases,
 			recordings,
+			clock,
 			recent,
 			nowPlaying,
-			week
+			week,
+			onThisDay
 		};
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) {
