@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH counts AS (\n               SELECT date_part('year', listened_at AT TIME ZONE $2)::int AS year,\n                      artist_id, count(*) AS listens\n                 FROM listen\n                WHERE profile_id = $1 AND ($4::text IS NULL OR listen_source(client) = $4)\n                GROUP BY 1, 2\n           ), candidates AS (\n               -- Names only for the artists that can make a year's chart.\n               SELECT year, artist_id, listens,\n                      sum(listens) OVER (PARTITION BY year)::bigint AS year_listens,\n                      rank() OVER (PARTITION BY year ORDER BY listens DESC) AS rank\n                 FROM counts\n           ), ranked AS (\n               SELECT c.year, a.id, a.name, c.listens, c.year_listens,\n                      row_number() OVER (PARTITION BY c.year ORDER BY c.listens DESC, a.name) AS rank\n                 FROM candidates c\n                 JOIN artist a ON a.id = c.artist_id\n                WHERE c.rank <= $3\n           )\n           SELECT year AS \"year!\", year_listens AS \"year_listens!\", id AS \"id!\", name AS \"name!\",\n                  listens AS \"listens!\"\n             FROM ranked\n            WHERE rank <= $3\n            ORDER BY year, rank",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "year!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "year_listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "id!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "c264197289da4cac99ecb616247caec98c028e5e99ed8906d54c1e53f3269868"
+}

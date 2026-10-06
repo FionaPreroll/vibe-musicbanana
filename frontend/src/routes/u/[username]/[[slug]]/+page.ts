@@ -27,6 +27,8 @@ import type { PageLoad } from './$types';
 // listens at its end; a source (see source.ts) narrows everything to its listens.
 // Without a period the page starts with the current week at a glance and what
 // was heard on today's date in earlier years; "Lost & found" comes along too.
+// The listening clock and "Lost & found" sit below the charts, take the longest
+// to count and come as promises: the page shows without waiting for them.
 export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const api = profileApi(params.username, params.slug ?? 'default');
 	const period = parsePeriod(url.searchParams);
@@ -39,48 +41,39 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const query = { ...periodQuery(period), tz, limit: 10, source };
 	const chart = (kind: ChartKind) => getJson<ChartEntry[]>(fetch, `${api}/top/${kind}`, query);
 
+	// Asked for together with the rest; the page works without them.
+	const clock = getJson<Clock>(fetch, `${api}/clock`, query).catch(() => null);
+	const lost =
+		period.kind === 'all'
+			? getJson<LostAndFound>(fetch, `${api}/lost-and-found`, { limit: 10, source }).catch(
+					() => null
+				)
+			: Promise.resolve(null);
+
 	try {
-		const [
-			overview,
-			artists,
-			releases,
-			recordings,
-			clock,
-			recent,
-			nowPlaying,
-			sources,
-			week,
-			onThisDay,
-			lost
-		] = await Promise.all([
-			getJson<Overview>(fetch, api, { tz, source }),
-			chart('artists'),
-			chart('releases'),
-			chart('recordings'),
-			// The page works without it.
-			getJson<Clock>(fetch, `${api}/clock`, query).catch(() => null),
-			getJson<ListensPage>(fetch, `${api}/listens`, {
-				before: periodEnd(period)?.toISOString(),
-				limit: 25,
-				source
-			}),
-			getJson<NowPlaying | null>(fetch, `${api}/now-playing`),
-			getJson<Source[]>(fetch, `${api}/sources`),
-			// The page works without it.
-			period.kind === 'all'
-				? getJson<Week>(fetch, `${api}/week`, { tz, week_start: weekStart(), source }).catch(
-						() => null
-					)
-				: null,
-			period.kind === 'all'
-				? getJson<OnThisDay>(fetch, `${api}/on-this-day`, { tz, source }).catch(() => null)
-				: null,
-			period.kind === 'all'
-				? getJson<LostAndFound>(fetch, `${api}/lost-and-found`, { limit: 10, source }).catch(
-						() => null
-					)
-				: null
-		]);
+		const [overview, artists, releases, recordings, recent, nowPlaying, sources, week, onThisDay] =
+			await Promise.all([
+				getJson<Overview>(fetch, api, { tz, source }),
+				chart('artists'),
+				chart('releases'),
+				chart('recordings'),
+				getJson<ListensPage>(fetch, `${api}/listens`, {
+					before: periodEnd(period)?.toISOString(),
+					limit: 25,
+					source
+				}),
+				getJson<NowPlaying | null>(fetch, `${api}/now-playing`),
+				getJson<Source[]>(fetch, `${api}/sources`),
+				// The page works without it.
+				period.kind === 'all'
+					? getJson<Week>(fetch, `${api}/week`, { tz, week_start: weekStart(), source }).catch(
+							() => null
+						)
+					: null,
+				period.kind === 'all'
+					? getJson<OnThisDay>(fetch, `${api}/on-this-day`, { tz, source }).catch(() => null)
+					: null
+			]);
 		const base = profilePath(params.username, params.slug);
 		// Whether the viewer follows it, for the button next to the name.
 		const follow = me && !overview.own ? await getJson<FollowInfo>(fetch, `${api}/follow`) : null;

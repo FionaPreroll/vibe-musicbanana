@@ -54,7 +54,7 @@ pub fn routes() -> Router<AppState> {
         .route("/me/username", put(change_username))
         .route("/me/email", put(change_email_address))
         .route("/me/time", put(change_time))
-        .route("/me/profiles", post(create_profile))
+        .route("/me/profiles", get(list_profiles).post(create_profile))
         .route("/me/profiles/{slug}", patch(update_profile))
         .route("/me/tokens", get(list_tokens).post(create_token))
         .route("/me/tokens/{id}", delete(revoke_token))
@@ -77,11 +77,16 @@ impl FromRequestParts<AppState> for Viewer {
         let Some(token) = session_cookie(&parts.headers) else {
             return Ok(Self(None));
         };
-        // Each request moves the end of the login on.
+        // Using the login moves its end on, at most once an hour: a page asks
+        // for a dozen things at once, and writing the session for each of them
+        // made them wait for one another and for the disk.
         let account = sqlx::query_scalar!(
-            "UPDATE session SET expires_at = now() + make_interval(days => $2)
-              WHERE token_hash = $1 AND expires_at > now()
-              RETURNING account_id",
+            r#"WITH extended AS (
+                   UPDATE session SET expires_at = now() + make_interval(days => $2)
+                    WHERE token_hash = $1 AND expires_at > now()
+                      AND expires_at < now() + make_interval(days => $2) - interval '1 hour'
+               )
+               SELECT account_id FROM session WHERE token_hash = $1 AND expires_at > now()"#,
             tokens::hash(&token),
             LIFETIME_DAYS,
         )
@@ -308,7 +313,16 @@ struct Me {
     time_zone: Option<String>,
     /// The first day of the week, 1 for Monday to 7 for Sunday.
     week_start: i16,
-    profiles: Vec<OwnProfile>,
+    /// Without their listens, which take a while to count: every page asks for
+    /// this first. The settings get them from `GET /api/me/profiles`.
+    profiles: Vec<MeProfile>,
+}
+
+#[derive(Serialize)]
+struct MeProfile {
+    slug: String,
+    name: String,
+    visibility: String,
 }
 
 #[derive(Serialize)]
@@ -348,8 +362,25 @@ async fn me(State(state): State<AppState>, Account(id): Account) -> Result<Json<
         admin: account.is_admin,
         time_zone: account.time_zone,
         week_start: account.week_start,
-        profiles: own_profiles(&state.db, id).await?,
+        profiles: sqlx::query_as!(
+            MeProfile,
+            r#"SELECT slug::text AS "slug!", name, visibility::text AS "visibility!"
+                 FROM profile
+                WHERE account_id = $1
+                ORDER BY slug <> 'default', slug"#,
+            id,
+        )
+        .fetch_all(&state.db)
+        .await?,
     }))
+}
+
+/// The account's profiles with their listens.
+async fn list_profiles(
+    State(state): State<AppState>,
+    Account(id): Account,
+) -> Result<Json<Vec<OwnProfile>>, AppError> {
+    Ok(Json(own_profiles(&state.db, id).await?))
 }
 
 #[derive(Deserialize)]

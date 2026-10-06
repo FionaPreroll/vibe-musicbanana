@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH extended AS (\n                   UPDATE session SET expires_at = now() + make_interval(days => $2)\n                    WHERE token_hash = $1 AND expires_at > now()\n                      AND expires_at < now() + make_interval(days => $2) - interval '1 hour'\n               )\n               SELECT account_id FROM session WHERE token_hash = $1 AND expires_at > now()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "session",
+            "name": "account_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a65d04df1f0c509f48fcfb9f541b1f5483b913e58b72df97d0b5ed193291037c"
+}

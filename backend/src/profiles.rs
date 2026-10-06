@@ -274,7 +274,9 @@ pub(crate) struct ChartEntry {
 
 // All three charts count listens in [lo, hi): from midnight at the start of the
 // first day to midnight after the last one in the given time zone, without a
-// bound where the period is open.
+// bound where the period is open. They count by id first and look up names only
+// for the entries that can make the chart: those with at least as many listens
+// as the one in the last place.
 async fn top(
     State(state): State<AppState>,
     viewer: Viewer,
@@ -293,14 +295,22 @@ async fn top(
                 r#"WITH span AS (
                        SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,
                               coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi
+                   ), counted AS MATERIALIZED (
+                       SELECT l.artist_id AS id, count(*) AS listens
+                         FROM span, listen l
+                        WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi
+                          AND ($6::text IS NULL OR listen_source(l.client) = $6)
+                        GROUP BY 1
+                   ), top AS (
+                       SELECT * FROM counted
+                        WHERE listens >= coalesce(
+                                  (SELECT listens FROM counted ORDER BY listens DESC
+                                   OFFSET $5::bigint - 1 LIMIT 1), 0)
                    )
-                   SELECT a.id, a.name, NULL::text AS artist, count(*) AS "listens!"
-                     FROM span, listen l
-                     JOIN artist a ON a.id = l.artist_id
-                    WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi
-                      AND ($6::text IS NULL OR listen_source(l.client) = $6)
-                    GROUP BY a.id
-                    ORDER BY count(*) DESC, a.name
+                   SELECT a.id, a.name, NULL::text AS artist, t.listens AS "listens!"
+                     FROM top t
+                     JOIN artist a ON a.id = t.id
+                    ORDER BY t.listens DESC, a.name
                     LIMIT $5"#,
                 profile.id,
                 from,
@@ -318,15 +328,24 @@ async fn top(
                 r#"WITH span AS (
                        SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,
                               coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi
+                   ), counted AS MATERIALIZED (
+                       SELECT l.release_id AS id, count(*) AS listens
+                         FROM span, listen l
+                        WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi
+                          AND ($6::text IS NULL OR listen_source(l.client) = $6)
+                          AND l.release_id IS NOT NULL
+                        GROUP BY 1
+                   ), top AS (
+                       SELECT * FROM counted
+                        WHERE listens >= coalesce(
+                                  (SELECT listens FROM counted ORDER BY listens DESC
+                                   OFFSET $5::bigint - 1 LIMIT 1), 0)
                    )
-                   SELECT r.id, r.title AS name, a.name AS "artist?", count(*) AS "listens!"
-                     FROM span, listen l
-                     JOIN release r ON r.id = l.release_id
+                   SELECT r.id, r.title AS name, a.name AS "artist?", t.listens AS "listens!"
+                     FROM top t
+                     JOIN release r ON r.id = t.id
                      JOIN artist a ON a.id = r.artist_id
-                    WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi
-                      AND ($6::text IS NULL OR listen_source(l.client) = $6)
-                    GROUP BY r.id, a.id
-                    ORDER BY count(*) DESC, r.title
+                    ORDER BY t.listens DESC, r.title
                     LIMIT $5"#,
                 profile.id,
                 from,
@@ -344,15 +363,23 @@ async fn top(
                 r#"WITH span AS (
                        SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,
                               coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi
+                   ), counted AS MATERIALIZED (
+                       SELECT l.recording_id AS id, count(*) AS listens
+                         FROM span, listen l
+                        WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi
+                          AND ($6::text IS NULL OR listen_source(l.client) = $6)
+                        GROUP BY 1
+                   ), top AS (
+                       SELECT * FROM counted
+                        WHERE listens >= coalesce(
+                                  (SELECT listens FROM counted ORDER BY listens DESC
+                                   OFFSET $5::bigint - 1 LIMIT 1), 0)
                    )
-                   SELECT r.id, r.title AS name, a.name AS "artist?", count(*) AS "listens!"
-                     FROM span, listen l
-                     JOIN recording r ON r.id = l.recording_id
+                   SELECT r.id, r.title AS name, a.name AS "artist?", t.listens AS "listens!"
+                     FROM top t
+                     JOIN recording r ON r.id = t.id
                      JOIN artist a ON a.id = r.artist_id
-                    WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi
-                      AND ($6::text IS NULL OR listen_source(l.client) = $6)
-                    GROUP BY r.id, a.id
-                    ORDER BY count(*) DESC, r.title
+                    ORDER BY t.listens DESC, r.title
                     LIMIT $5"#,
                 profile.id,
                 from,
@@ -405,12 +432,18 @@ async fn top_artists_per_year(
                  FROM listen
                 WHERE profile_id = $1 AND ($4::text IS NULL OR listen_source(client) = $4)
                 GROUP BY 1, 2
+           ), candidates AS (
+               -- Names only for the artists that can make a year's chart.
+               SELECT year, artist_id, listens,
+                      sum(listens) OVER (PARTITION BY year)::bigint AS year_listens,
+                      rank() OVER (PARTITION BY year ORDER BY listens DESC) AS rank
+                 FROM counts
            ), ranked AS (
-               SELECT c.year, a.id, a.name, c.listens,
-                      sum(c.listens) OVER (PARTITION BY c.year)::bigint AS year_listens,
+               SELECT c.year, a.id, a.name, c.listens, c.year_listens,
                       row_number() OVER (PARTITION BY c.year ORDER BY c.listens DESC, a.name) AS rank
-                 FROM counts c
+                 FROM candidates c
                  JOIN artist a ON a.id = c.artist_id
+                WHERE c.rank <= $3
            )
            SELECT year AS "year!", year_listens AS "year_listens!", id AS "id!", name AS "name!",
                   listens AS "listens!"
@@ -534,12 +567,17 @@ async fn sources(
     let profile = find_profile(&state.db, viewer, &username, &slug).await?;
     let sources = sqlx::query_as!(
         Source,
-        r#"SELECT listen_source(client) AS "source!", count(*) AS "listens!",
-                  min(listened_at) AS "first_listened_at!", max(listened_at) AS "last_listened_at!"
-             FROM listen
-            WHERE profile_id = $1
+        // By client first: there are only a few, and each source is worked out
+        // once per client rather than once per listen.
+        r#"SELECT listen_source(client) AS "source!", sum(listens)::bigint AS "listens!",
+                  min(first) AS "first_listened_at!", max(last) AS "last_listened_at!"
+             FROM (SELECT client, count(*) AS listens, min(listened_at) AS first,
+                          max(listened_at) AS last
+                     FROM listen
+                    WHERE profile_id = $1
+                    GROUP BY client) c
             GROUP BY 1
-            ORDER BY max(listened_at) DESC, 1"#,
+            ORDER BY max(last) DESC, 1"#,
         profile.id,
     )
     .fetch_all(&state.db)

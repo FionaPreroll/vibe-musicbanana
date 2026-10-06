@@ -249,7 +249,7 @@
 			Each profile has its own listens and charts, for example one per player or per person.
 		</p>
 		<ul class="divide-y divide-stone-200">
-			{#each me.profiles as profile (profile.slug)}
+			{#each data.profiles as profile (profile.slug)}
 				<li class="py-3">
 					<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
 						<a class="font-medium hover:underline" href={profilePath(me.username, profile.slug)}

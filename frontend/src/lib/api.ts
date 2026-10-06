@@ -211,7 +211,8 @@ export type Me = {
 	time_zone: string | null;
 	/** The first day of the week, 1 for Monday to 7 for Sunday. */
 	week_start: number;
-	profiles: OwnProfile[];
+	/** Without their listens; GET /api/me/profiles has those. */
+	profiles: Omit<OwnProfile, 'listens'>[];
 };
 
 /** GET /api/admin/status, see backend/src/status.rs. */

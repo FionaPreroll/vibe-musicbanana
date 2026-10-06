@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH span AS (\n               SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,\n                      coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi\n           )\n           SELECT date_part('isodow', l.listened_at AT TIME ZONE $4)::int AS \"weekday!\",\n                  date_part('hour', l.listened_at AT TIME ZONE $4)::int AS \"hour!\",\n                  count(*) AS \"listens!\"\n             FROM span, listen l\n            WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi\n              AND ($5::text IS NULL OR listen_source(l.client) = $5)\n            GROUP BY 1, 2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "weekday!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "hour!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Date",
+        "Date",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "1cd52dd49e3ffa4533b5ad0c4b2177af62ac54e8b0dcd54329b1ada99feabbf9"
+}

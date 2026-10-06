@@ -249,21 +249,25 @@
 		<Chart title="Top tracks" entries={data.recordings} href={link('track')} />
 	</div>
 
-	{#if data.clock && data.clock.listens > 0}
-		<div class="mt-12">
-			<ListeningClock clock={data.clock} />
-		</div>
-	{/if}
+	{#await data.clock then clock}
+		{#if clock && clock.listens > 0}
+			<div class="mt-12">
+				<ListeningClock {clock} />
+			</div>
+		{/if}
+	{/await}
 
-	{#if data.lost && (data.lost.artists.length > 0 || data.lost.tracks.length > 0 || data.lost.hidden)}
-		<LostAndFound
-			lost={data.lost}
-			api={data.api}
-			own={overview.own ? overview.slug : null}
-			source={data.source}
-			href={entryHref}
-		/>
-	{/if}
+	{#await data.lost then lost}
+		{#if lost && (lost.artists.length > 0 || lost.tracks.length > 0 || lost.hidden)}
+			<LostAndFound
+				{lost}
+				api={data.api}
+				own={overview.own ? overview.slug : null}
+				source={data.source}
+				href={entryHref}
+			/>
+		{/if}
+	{/await}
 
 	{#if artistYears.length > 0}
 		<div class="mt-12">
