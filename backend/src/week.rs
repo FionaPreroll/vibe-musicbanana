@@ -1,6 +1,7 @@
 //! The week at a glance for the top of a profile page: listens per day against
 //! the week before, the artists of the week and which of them are new, and the
-//! streak of days in a row with listens.
+//! streak of days in a row with listens. Streaks are left out when the viewer
+//! or the profile's owner turned them off.
 //!
 //! Weeks run from Monday to Sunday in the viewer's time zone, or from the day
 //! the viewer starts them on to the day before it. The current week
@@ -13,6 +14,7 @@ use axum::{
     routing::get,
 };
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use time::{Date, Duration};
 
 use crate::{
@@ -62,7 +64,8 @@ struct Week {
     artists: Vec<WeekArtist>,
     /// How many artists of the week the profile had never heard before it.
     new_artists: i64,
-    streak: Streak,
+    /// Null when the viewer or the profile's owner turned streaks off.
+    streak: Option<Streak>,
 }
 
 #[derive(Serialize)]
@@ -242,6 +245,44 @@ async fn week(
     .fetch_one(db)
     .await?;
 
+    let shown = sqlx::query_scalar!(
+        r#"SELECT a.show_streaks
+                  AND coalesce((SELECT show_streaks FROM account WHERE id = $2), true) AS "shown!"
+             FROM profile p JOIN account a ON a.id = p.account_id
+            WHERE p.id = $1"#,
+        profile.id,
+        viewer.0,
+    )
+    .fetch_one(db)
+    .await?;
+    let streak = if shown {
+        Some(streak(db, profile.id, &tz, day, source.as_deref()).await?)
+    } else {
+        None
+    };
+
+    Ok(Json(Week {
+        from: first,
+        to: first + Duration::days(6),
+        day,
+        days,
+        listens,
+        last_week_so_far,
+        last_week,
+        artists,
+        new_artists,
+        streak,
+    }))
+}
+
+/// The streaks of profile `id` up to `day`, in time zone `tz`.
+async fn streak(
+    db: &PgPool,
+    id: i64,
+    tz: &str,
+    day: Date,
+    source: Option<&str>,
+) -> Result<Streak, AppError> {
     // Runs of days in a row: a day minus its rank is the same for every day of a run.
     let runs = sqlx::query!(
         r#"WITH days AS (
@@ -259,7 +300,7 @@ async fn week(
               FROM runs ORDER BY days DESC, last DESC LIMIT 1)
            UNION ALL
            (SELECT 'latest', first, last, days FROM runs ORDER BY last DESC LIMIT 1)"#,
-        profile.id,
+        id,
         tz,
         day,
         source,
@@ -285,16 +326,5 @@ async fn week(
         }
     }
 
-    Ok(Json(Week {
-        from: first,
-        to: first + Duration::days(6),
-        day,
-        days,
-        listens,
-        last_week_so_far,
-        last_week,
-        artists,
-        new_artists,
-        streak,
-    }))
+    Ok(streak)
 }
