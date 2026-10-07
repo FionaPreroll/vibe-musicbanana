@@ -90,15 +90,14 @@ pub struct Suggestion {
 /// the original.
 pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
     // Every entry with the group it is compared within, and whether it has an ID
-    // that tells it apart.
+    // that tells it apart. Listens are counted by id before the names join in.
     let rows: Vec<(Entry, i64, bool)> = match kind {
         Kind::Artist => sqlx::query!(
-            r#"SELECT a.id, a.name, count(*) AS "listens!",
+            r#"SELECT a.id, a.name, c.listens AS "listens!",
                       EXISTS (SELECT FROM artist_mbid m WHERE m.artist_id = a.id) AS "tagged!"
-                 FROM listen l
-                 JOIN artist a ON a.id = l.artist_id
+                 FROM (SELECT artist_id, count(*) AS listens FROM listen GROUP BY 1) c
+                 JOIN artist a ON a.id = c.artist_id
                 WHERE a.merged_into IS NULL
-                GROUP BY a.id
                 ORDER BY a.id"#
         )
         .fetch_all(db)
@@ -115,13 +114,13 @@ pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
         })
         .collect(),
         Kind::Release => sqlx::query!(
-            r#"SELECT r.id, r.title, a.id AS artist_id, a.name AS artist, count(*) AS "listens!",
+            r#"SELECT r.id, r.title, a.id AS artist_id, a.name AS artist, c.listens AS "listens!",
                       EXISTS (SELECT FROM release_mbid m WHERE m.release_id = r.id) AS "tagged!"
-                 FROM listen l
-                 JOIN release r ON r.id = l.release_id
+                 FROM (SELECT release_id, count(*) AS listens FROM listen
+                        WHERE release_id IS NOT NULL GROUP BY 1) c
+                 JOIN release r ON r.id = c.release_id
                  JOIN artist a ON a.id = r.artist_id
                 WHERE r.merged_into IS NULL
-                GROUP BY r.id, a.id
                 ORDER BY r.id"#
         )
         .fetch_all(db)
@@ -138,13 +137,12 @@ pub async fn suggest(db: &PgPool, kind: Kind) -> sqlx::Result<Vec<Suggestion>> {
         })
         .collect(),
         Kind::Recording => sqlx::query!(
-            r#"SELECT r.id, r.title, a.id AS artist_id, a.name AS artist, count(*) AS "listens!",
+            r#"SELECT r.id, r.title, a.id AS artist_id, a.name AS artist, c.listens AS "listens!",
                       EXISTS (SELECT FROM recording_mbid m WHERE m.recording_id = r.id) AS "tagged!"
-                 FROM listen l
-                 JOIN recording r ON r.id = l.recording_id
+                 FROM (SELECT recording_id, count(*) AS listens FROM listen GROUP BY 1) c
+                 JOIN recording r ON r.id = c.recording_id
                  JOIN artist a ON a.id = r.artist_id
                 WHERE r.merged_into IS NULL
-                GROUP BY r.id, a.id
                 ORDER BY r.id"#
         )
         .fetch_all(db)
@@ -493,18 +491,23 @@ fn strip_featuring(title: &str) -> Option<&str> {
 fn one_edit_pairs(keys: &[&str]) -> Vec<(usize, usize)> {
     let chars: Vec<Vec<char>> = keys.iter().map(|k| k.chars().collect()).collect();
     // Keys one edit apart have a form in common with at most one letter left out.
-    let mut forms: HashMap<Vec<char>, Vec<usize>> = HashMap::new();
+    // The forms are strings: hashing a Vec<char> hashes each letter on its own,
+    // which made this take seconds for tens of thousands of tracks.
+    let mut forms: HashMap<String, Vec<usize>> =
+        HashMap::with_capacity(chars.iter().map(|key| key.len() + 1).sum());
     for (i, key) in chars.iter().enumerate() {
         if key.len() < 5 {
             continue;
         }
-        let mut own = HashSet::from([key.clone()]);
+        forms.entry(keys[i].to_owned()).or_default().push(i);
         for skip in 0..key.len() {
-            let mut form = key.clone();
-            form.remove(skip);
-            own.insert(form);
-        }
-        for form in own {
+            // Leaving out either of two equal letters in a row gives the same form.
+            if skip > 0 && key[skip] == key[skip - 1] {
+                continue;
+            }
+            let mut form = String::with_capacity(keys[i].len());
+            form.extend(&key[..skip]);
+            form.extend(&key[skip + 1..]);
             forms.entry(form).or_default().push(i);
         }
     }

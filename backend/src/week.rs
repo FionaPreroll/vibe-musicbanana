@@ -135,6 +135,17 @@ async fn week(
     let first =
         day - Duration::days(((day.weekday().number_from_monday() + 7 - week_start) % 7).into());
 
+    let shown = sqlx::query_scalar!(
+        r#"SELECT a.show_streaks
+                  AND coalesce((SELECT show_streaks FROM account WHERE id = $2), true) AS "shown!"
+             FROM profile p JOIN account a ON a.id = p.account_id
+            WHERE p.id = $1"#,
+        profile.id,
+        viewer.0,
+    )
+    .fetch_one(db)
+    .await?;
+
     // [lo, cut) is the week so far, [last_lo, lo) the week before and
     // [last_lo, last_cut) that one up to the same time. Days in the time zone
     // start at local midnight, also across a change to or from summer time.
@@ -160,32 +171,7 @@ async fn week(
         day,
         source,
     )
-    .fetch_all(db)
-    .await?;
-
-    let count_on = |date: Date| {
-        per_day
-            .iter()
-            .find(|row| row.date == date)
-            .map_or(0, |row| row.listens)
-    };
-    let days: Vec<DayCount> = (0..7)
-        .map(|i| {
-            let date = first + Duration::days(i);
-            DayCount {
-                date,
-                listens: count_on(date),
-                last_week: count_on(date - Duration::days(7)),
-            }
-        })
-        .collect();
-    let listens = days.iter().map(|d| d.listens).sum();
-    let last_week = days.iter().map(|d| d.last_week).sum();
-    let last_week_so_far = per_day
-        .iter()
-        .filter(|row| row.date < first)
-        .map(|row| row.so_far)
-        .sum();
+    .fetch_all(db);
 
     let artists = sqlx::query_as!(
         WeekArtist,
@@ -220,8 +206,7 @@ async fn week(
         day,
         source,
     )
-    .fetch_all(db)
-    .await?;
+    .fetch_all(db);
 
     let new_artists = sqlx::query_scalar!(
         r#"WITH bounds AS (
@@ -242,24 +227,47 @@ async fn week(
         day,
         source,
     )
-    .fetch_one(db)
-    .await?;
+    .fetch_one(db);
 
-    let shown = sqlx::query_scalar!(
-        r#"SELECT a.show_streaks
-                  AND coalesce((SELECT show_streaks FROM account WHERE id = $2), true) AS "shown!"
-             FROM profile p JOIN account a ON a.id = p.account_id
-            WHERE p.id = $1"#,
-        profile.id,
-        viewer.0,
-    )
-    .fetch_one(db)
-    .await?;
-    let streak = if shown {
-        Some(streak(db, profile.id, &tz, day, source.as_deref()).await?)
-    } else {
-        None
+    let streak = async {
+        Ok::<_, AppError>(if shown {
+            Some(streak(db, profile.id, &tz, day, source.as_deref()).await?)
+        } else {
+            None
+        })
     };
+
+    // The parts of the week don't depend on each other, so they are asked for at once.
+    let (per_day, artists, new_artists, streak) = tokio::try_join!(
+        async { Ok::<_, AppError>(per_day.await?) },
+        async { Ok::<_, AppError>(artists.await?) },
+        async { Ok::<_, AppError>(new_artists.await?) },
+        streak,
+    )?;
+
+    let count_on = |date: Date| {
+        per_day
+            .iter()
+            .find(|row| row.date == date)
+            .map_or(0, |row| row.listens)
+    };
+    let days: Vec<DayCount> = (0..7)
+        .map(|i| {
+            let date = first + Duration::days(i);
+            DayCount {
+                date,
+                listens: count_on(date),
+                last_week: count_on(date - Duration::days(7)),
+            }
+        })
+        .collect();
+    let listens = days.iter().map(|d| d.listens).sum();
+    let last_week = days.iter().map(|d| d.last_week).sum();
+    let last_week_so_far = per_day
+        .iter()
+        .filter(|row| row.date < first)
+        .map(|row| row.so_far)
+        .sum();
 
     Ok(Json(Week {
         from: first,

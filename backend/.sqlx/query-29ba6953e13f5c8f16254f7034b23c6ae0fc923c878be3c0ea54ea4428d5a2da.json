@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.id, a.name, count(*) AS \"listens!\",\n                      EXISTS (SELECT FROM artist_mbid m WHERE m.artist_id = a.id) AS \"tagged!\"\n                 FROM listen l\n                 JOIN artist a ON a.id = l.artist_id\n                WHERE a.merged_into IS NULL\n                GROUP BY a.id\n                ORDER BY a.id",
+  "query": "SELECT a.id, a.name, c.listens AS \"listens!\",\n                      EXISTS (SELECT FROM artist_mbid m WHERE m.artist_id = a.id) AS \"tagged!\"\n                 FROM (SELECT artist_id, count(*) AS listens FROM listen GROUP BY 1) c\n                 JOIN artist a ON a.id = c.artist_id\n                WHERE a.merged_into IS NULL\n                ORDER BY a.id",
   "describe": {
     "columns": [
       {
@@ -48,5 +48,5 @@
       null
     ]
   },
-  "hash": "53c4eccb49be3e2be00b228eb34959d3c1f0b9810fd433ec937cc3b4ee4e23a4"
+  "hash": "29ba6953e13f5c8f16254f7034b23c6ae0fc923c878be3c0ea54ea4428d5a2da"
 }
