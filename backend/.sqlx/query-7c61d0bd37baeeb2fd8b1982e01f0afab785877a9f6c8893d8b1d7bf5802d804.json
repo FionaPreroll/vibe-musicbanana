@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE yourspotify_connection c\n              SET refetch_requested_at = COALESCE(c.refetch_requested_at, now()),\n                  refetch_at = CASE WHEN c.refetch_requested_at IS NULL THEN NULL\n                                    ELSE c.refetch_at END,\n                  refetch_plays = CASE WHEN c.refetch_requested_at IS NULL THEN 0\n                                       ELSE c.refetch_plays END,\n                  refetch_new = CASE WHEN c.refetch_requested_at IS NULL THEN 0\n                                     ELSE c.refetch_new END,\n                  refetch_left_out = CASE WHEN c.refetch_requested_at IS NULL THEN 0\n                                          ELSE c.refetch_left_out END\n             FROM profile p\n            WHERE p.id = c.profile_id AND c.id = $1\n              AND ($2::bigint IS NULL OR p.account_id = $2)\n        RETURNING c.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7c61d0bd37baeeb2fd8b1982e01f0afab785877a9f6c8893d8b1d7bf5802d804"
+}

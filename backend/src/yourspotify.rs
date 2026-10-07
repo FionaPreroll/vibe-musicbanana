@@ -220,16 +220,16 @@ impl Source {
         Ok(Some(oldest_first(plays)))
     }
 
-    /// The plays after `since`, or all, oldest first, fetched newest first
+    /// The plays from `from` on, or all, oldest first, fetched newest first
     /// without a time range.
-    async fn newest_first(&self, since: Option<OffsetDateTime>) -> anyhow::Result<Vec<Play>> {
+    async fn newest_first(&self, from: Option<OffsetDateTime>) -> anyhow::Result<Vec<Play>> {
         let mut plays = Vec::new();
         for offset in (0..).step_by(PAGE) {
             let page = self.page(offset, None).await?;
             let full = page.len() == PAGE;
             let mut reached_since = false;
             for play in page {
-                if since.is_some_and(|since| play.played_at <= since) {
+                if from.is_some_and(|from| play.played_at < from) {
                     reached_since = true;
                 } else {
                     plays.push(play);
@@ -364,7 +364,7 @@ pub async fn profile_id(db: &PgPool, username: &str, slug: &str) -> anyhow::Resu
 }
 
 /// What an import brought.
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Report {
     /// The latest listen imported before, where this import started.
     pub since: Option<OffsetDateTime>,
@@ -378,30 +378,64 @@ pub struct Report {
     pub last: Option<OffsetDateTime>,
 }
 
+/// Where an import starts.
+#[derive(Clone, Copy, Debug)]
+pub enum Start {
+    /// After the latest play imported before, or at the beginning.
+    Latest,
+    /// At the beginning of the history.
+    Beginning,
+    /// At this time.
+    At(OffsetDateTime),
+}
+
 /// Imports the plays from YourSpotify into a profile: the whole history the first
 /// time, then those newer than the latest one imported, or the whole history
 /// again with `all`. Plays the profile has already are skipped either way, as
 /// are those that look like a second scrobble of a listen (see [`scrobble::record`]).
-///
-/// The plays are stored oldest first, a window of time at once, so they show up
-/// in the profile while the import runs, and one that stops halfway leaves no gap
-/// behind the latest listen: the next one goes on from there.
 pub async fn import(
     db: &PgPool,
     source: &Source,
     profile_id: i64,
     all: bool,
 ) -> anyhow::Result<Report> {
-    let since = if all {
-        None
-    } else {
-        sqlx::query_scalar!(
-            "SELECT max(listened_at) FROM listen WHERE profile_id = $1 AND client = $2",
-            profile_id,
-            CLIENT,
-        )
-        .fetch_one(db)
-        .await?
+    let start = if all { Start::Beginning } else { Start::Latest };
+    import_from(db, source, profile_id, start, |_, _| async { Ok(()) }).await
+}
+
+/// Imports the plays from `start` on into a profile, skipping those it has
+/// already (see [`import`]).
+///
+/// The plays are stored oldest first, a window of time at once, so they show up
+/// in the profile while the import runs, and one that stops halfway leaves no gap
+/// behind the latest listen: the next one goes on from there. After each window
+/// with plays, and at the end, `progress` hears the time up to which the plays
+/// are done, and the report so far.
+pub async fn import_from<F>(
+    db: &PgPool,
+    source: &Source,
+    profile_id: i64,
+    start: Start,
+    mut progress: impl FnMut(OffsetDateTime, Report) -> F,
+) -> anyhow::Result<Report>
+where
+    F: Future<Output = anyhow::Result<()>>,
+{
+    let since = match start {
+        Start::Latest => {
+            sqlx::query_scalar!(
+                "SELECT max(listened_at) FROM listen WHERE profile_id = $1 AND client = $2",
+                profile_id,
+                CLIENT,
+            )
+            .fetch_one(db)
+            .await?
+        }
+        Start::Beginning | Start::At(_) => None,
+    };
+    let start = match start {
+        Start::At(at) => Some(at),
+        _ => since.map(|since| since + Duration::milliseconds(1)),
     };
     let mut report = Report {
         since,
@@ -409,9 +443,7 @@ pub async fn import(
     };
     // Whatever YourSpotify has, even with a clock ahead of ours.
     let until = OffsetDateTime::now_utc() + Duration::days(1);
-    let mut from = since.map_or(OffsetDateTime::UNIX_EPOCH, |since| {
-        since + Duration::milliseconds(1)
-    });
+    let mut from = start.unwrap_or(OffsetDateTime::UNIX_EPOCH);
     let mut length = WINDOW;
     let mut logged = 0;
     while from < until {
@@ -425,8 +457,9 @@ pub async fn import(
                 "this YourSpotify takes no time range, so its history comes all at once, \
                  newest first"
             );
-            let plays = source.newest_first(since).await?;
+            let plays = source.newest_first(start).await?;
             store(db, profile_id, plays, &mut report).await?;
+            progress(until, report.clone()).await?;
             return Ok(report);
         };
         length = if plays.is_empty() {
@@ -434,7 +467,11 @@ pub async fn import(
         } else {
             WINDOW
         };
+        let found = !plays.is_empty();
         store(db, profile_id, plays, &mut report).await?;
+        if found {
+            progress(to, report.clone()).await?;
+        }
         if let Some(last) = report.last.filter(|_| report.plays / 2000 > logged) {
             logged = report.plays / 2000;
             tracing::info!(
@@ -445,6 +482,7 @@ pub async fn import(
         }
         from = to;
     }
+    progress(until, report.clone()).await?;
     Ok(report)
 }
 

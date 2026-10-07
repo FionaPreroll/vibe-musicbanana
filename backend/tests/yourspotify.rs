@@ -584,6 +584,136 @@ async fn a_failed_import_is_noted_without_the_token(db: PgPool) {
     assert_eq!(imported(&db).await, 0);
 }
 
+/// Plays of an older Spotify export, which YourSpotify imported after the
+/// newer ones: `n` plays, `days` apart from 2015-03-01 18:00, newest first.
+fn older_export(n: i64, days: i64) -> Vec<Value> {
+    (0..n)
+        .rev()
+        .map(|i| {
+            play(
+                datetime!(2015-03-01 18:00 UTC) + Duration::days(i * days),
+                &format!("Old song {i}"),
+                &["Die Ärzte"],
+                Some("Planet Punk"),
+            )
+        })
+        .collect()
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn a_connection_fetches_everything_again_on_request(db: PgPool) {
+    let server = Arc::new(YourSpotify::default());
+    *server.plays.lock().unwrap() = plays(5);
+    let api = serve(&server).await;
+    let id = connections::add(&db, 1, &api, TOKEN).await.unwrap();
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 1);
+    assert_eq!(imported(&db).await, 5);
+
+    // YourSpotify imports an older export, which a round of new plays misses.
+    let mut old = older_export(80, 1);
+    // A play YourSpotify has twice, a second later, as one more scrobbler
+    // would: one listen.
+    let mut twice = old[0].clone();
+    twice["played_at"] = json!("2015-05-19T18:00:01Z");
+    // One whose artists YourSpotify does not know.
+    let mut unknown = play(
+        datetime!(2015-02-01 12:00 UTC),
+        "Mystery",
+        &["Nobody"],
+        None,
+    );
+    unknown["track"]["full_artists"] = json!([]);
+    old.extend([twice, unknown]);
+    server.plays.lock().unwrap().extend(old);
+    later(&db).await;
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 1);
+    assert_eq!(imported(&db).await, 5);
+
+    // Only for the account's own connection; then right away, not 15 minutes on.
+    assert!(!connections::refetch(&db, id, Some(2)).await.unwrap());
+    assert!(connections::refetch(&db, id, Some(1)).await.unwrap());
+    let listed = &connections::list(&db, None).await.unwrap()[0];
+    assert!(listed.refetch_requested_at.is_some());
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 1);
+    assert_eq!(imported(&db).await, 85);
+    let listed = &connections::list(&db, None).await.unwrap()[0];
+    assert_eq!(
+        (
+            listed.refetch_plays,
+            listed.refetch_new,
+            listed.refetch_left_out,
+            listed.imported
+        ),
+        (87, 80, 1, 85)
+    );
+    assert_eq!(
+        (listed.refetch_requested_at, listed.refetch_at),
+        (None, None)
+    );
+    assert!(listed.refetched_at.is_some());
+    assert_eq!(listed.error, None);
+
+    // Then on as before: the next round asks for new plays only.
+    asked(&server);
+    later(&db).await;
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 1);
+    assert!(
+        asked(&server)
+            .iter()
+            .all(|(_, start)| start.is_some_and(|start| start >= at(4))),
+    );
+    let listed = &connections::list(&db, None).await.unwrap()[0];
+    assert_eq!((listed.refetch_new, listed.imported), (80, 85));
+    assert!(listed.refetch_requested_at.is_none());
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn fetching_everything_again_goes_on_where_it_stopped(db: PgPool) {
+    let server = Arc::new(YourSpotify::default());
+    *server.plays.lock().unwrap() = plays(3);
+    let api = serve(&server).await;
+    let id = connections::add(&db, 1, &api, TOKEN).await.unwrap();
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 1);
+    // Over more than a year, so that it takes several windows of time.
+    server.plays.lock().unwrap().extend(older_export(100, 5));
+    connections::refetch(&db, id, None).await.unwrap();
+
+    // YourSpotify goes down halfway through the older export.
+    *server.down_from.lock().unwrap() = Some(datetime!(2016-04-01 0:00 UTC));
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 1);
+    let listed = &connections::list(&db, None).await.unwrap()[0];
+    assert!(listed.error.as_deref().unwrap().contains("answered 500"));
+    assert!(listed.refetch_requested_at.is_some());
+    let stopped = listed.refetch_at.unwrap();
+    let so_far = listed.refetch_new;
+    assert!(so_far > 0 && so_far < 100, "{so_far}");
+    assert_eq!(imported(&db).await, 3 + so_far);
+    // It keeps trying with the others, every 15 minutes.
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 0);
+
+    *server.down_from.lock().unwrap() = None;
+    asked(&server);
+    later(&db).await;
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 1);
+    let first = asked(&server)[0].1.unwrap();
+    assert!(
+        first >= stopped - Duration::milliseconds(1),
+        "{first} {stopped}"
+    );
+    let listed = &connections::list(&db, None).await.unwrap()[0];
+    assert_eq!(
+        (
+            listed.refetch_plays,
+            listed.refetch_new,
+            listed.imported,
+            &listed.error
+        ),
+        (103, 100, 103, &None)
+    );
+    assert!(listed.refetch_requested_at.is_none());
+    assert_eq!(imported(&db).await, 103);
+}
+
 #[sqlx::test(fixtures("profiles"))]
 async fn connections_in_the_settings(db: PgPool) {
     use axum::{
@@ -701,6 +831,23 @@ async fn connections_in_the_settings(db: PgPool) {
 
     let (status, body, _) = call(Method::GET, "/api/me/yourspotify", None, None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+    // Fetching everything again, of one's own connections only.
+    let refetch = format!("/api/me/yourspotify/{id}/refetch");
+    let (status, _, _) = call(Method::POST, &refetch, None, None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let (status, _, _) = call(
+        Method::POST,
+        &format!("/api/me/yourspotify/{}/refetch", id + 1),
+        Some(me.clone()),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, body, _) = call(Method::POST, &refetch, Some(me.clone()), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body[0]["refetch_requested_at"].is_string(), "{body}");
+    assert_eq!(body[0]["refetch_new"], 0);
+
     let uri = format!("/api/me/yourspotify/{id}");
     let (status, _, _) = call(Method::DELETE, &uri, Some(me.clone()), None).await;
     assert_eq!(status, StatusCode::NO_CONTENT);

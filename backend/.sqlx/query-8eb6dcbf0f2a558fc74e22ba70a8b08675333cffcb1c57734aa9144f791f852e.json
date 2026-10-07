@@ -1,0 +1,186 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.id, a.username::text AS \"username!\", p.slug::text AS \"profile!\",\n                  c.api_url AS url, c.created_at, c.started_at, c.finished_at, c.imported, c.error,\n                  c.refetch_requested_at, c.refetch_at, c.refetch_plays, c.refetch_new,\n                  c.refetch_left_out, c.refetched_at\n             FROM yourspotify_connection c\n             JOIN profile p ON p.id = c.profile_id\n             JOIN account a ON a.id = p.account_id\n            WHERE $1::bigint IS NULL OR a.id = $1\n            ORDER BY a.username, p.slug",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "username!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "profile!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "api_url"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "started_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "started_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "finished_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "finished_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "imported",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "imported"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "error"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "refetch_requested_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "refetch_requested_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "refetch_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "refetch_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "refetch_plays",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "refetch_plays"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "refetch_new",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "refetch_new"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "refetch_left_out",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "refetch_left_out"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "refetched_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "refetched_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "8eb6dcbf0f2a558fc74e22ba70a8b08675333cffcb1c57734aa9144f791f852e"
+}

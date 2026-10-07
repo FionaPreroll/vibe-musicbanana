@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE yourspotify_connection\n                            SET imported = $2, refetch_at = $3, refetch_plays = $4,\n                                refetch_new = $5, refetch_left_out = $6\n                          WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Timestamptz",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "11d8648226d00c386181fa7da25e32a98b9bd8467a64f9ad96009f445c81b4fb"
+}

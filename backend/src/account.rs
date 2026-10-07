@@ -64,6 +64,7 @@ pub fn routes() -> Router<AppState> {
             get(list_connections).post(add_connection),
         )
         .route("/me/yourspotify/{id}", delete(remove_connection))
+        .route("/me/yourspotify/{id}/refetch", post(refetch_connection))
         .route("/me/yourspotify/allowed", get(allowed_addresses))
 }
 
@@ -1056,6 +1057,24 @@ async fn remove_connection(
     } else {
         Err(AppError::NotFound)
     }
+}
+
+/// Has the server fetch the connection's whole history again, for plays
+/// YourSpotify has added from before the latest one; those the profile has
+/// already are skipped.
+async fn refetch_connection(
+    State(state): State<AppState>,
+    Account(account): Account,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<Connection>>, AppError> {
+    if !connections::refetch(&state.db, id, Some(account)).await? {
+        return Err(AppError::NotFound);
+    }
+    tracing::info!(
+        "{} asked YourSpotify connection {id} to fetch everything again",
+        name_of(&state.db, account).await?
+    );
+    Ok(Json(connections::list(&state.db, Some(account)).await?))
 }
 
 /// The YourSpotify addresses the settings take, see [`crate::yourspotify::Allowlist`].

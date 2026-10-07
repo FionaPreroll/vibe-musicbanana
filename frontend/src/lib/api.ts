@@ -343,6 +343,17 @@ export type Connection = {
 	imported: number;
 	/** Why the latest import failed. */
 	error: string | null;
+	/** When fetching the whole history again was asked for, while it is not done. */
+	refetch_requested_at: string | null;
+	/** How far that has got: the plays before this time are done. */
+	refetch_at: string | null;
+	/** What it found so far, or the last time: plays, those new to the profile,
+	 * and those left out as YourSpotify knows none of their artists. */
+	refetch_plays: number;
+	refetch_new: number;
+	refetch_left_out: number;
+	/** When the whole history was last fetched again. */
+	refetched_at: string | null;
 };
 
 export class ApiError extends Error {
