@@ -1,5 +1,7 @@
 # musicbanana
 
+[![codecov](https://codecov.io/gh/FionaPreroll/vibe-musicbanana/graph/badge.svg)](https://codecov.io/gh/FionaPreroll/vibe-musicbanana)
+
 A free place for your listening history: scrobbling and listening charts, running in one form or another since 2007.
 
 Design notes and decisions: [docs/design.md](docs/design.md) (German).
@@ -43,6 +45,8 @@ Checks (the same ones CI runs):
 cd backend && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 cd frontend && pnpm lint && pnpm check && pnpm build
 ```
+
+CI runs the backend tests through [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) and uploads the coverage to [Codecov](https://codecov.io/gh/FionaPreroll/vibe-musicbanana) (secret `CODECOV_TOKEN`). The same report locally: `cargo install cargo-llvm-cov && cd backend && cargo llvm-cov --html`, then open `target/llvm-cov/html/index.html`. Coverage never fails a check (`codecov.yml`).
 
 ## Pages and API
 
