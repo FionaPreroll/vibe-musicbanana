@@ -136,6 +136,10 @@ enum ConnectionCommand {
     },
     /// List the connections and how their latest import went.
     List,
+    /// Have the server fetch a connection's whole history again, e.g. after
+    /// YourSpotify has imported an older Spotify export. Plays already in the
+    /// profile are skipped.
+    Refetch { id: i64 },
     /// Remove a connection; the listens it brought stay.
     Remove { id: i64 },
 }
@@ -444,7 +448,33 @@ async fn connection_command(db: &PgPool, command: ConnectionCommand) -> anyhow::
                     "{:>4}  {}/{}  {}  {} listens so far, {state}",
                     c.id, c.username, c.profile, c.url, c.imported
                 );
+                if c.refetch_requested_at.is_some() {
+                    println!(
+                        "      fetching everything again: {} plays so far, {} new{}",
+                        c.refetch_plays,
+                        c.refetch_new,
+                        c.refetch_at
+                            .map(|at| format!(", up to {}", at.date()))
+                            .unwrap_or_default()
+                    );
+                } else if let Some(at) = c.refetched_at {
+                    println!(
+                        "      fetched everything again at {}: {} plays, {} new",
+                        minutes(at),
+                        c.refetch_plays,
+                        c.refetch_new
+                    );
+                }
             }
+        }
+        ConnectionCommand::Refetch { id } => {
+            if !connections::refetch(db, id, None).await? {
+                bail!("there is no connection {id}");
+            }
+            println!(
+                "The running server fetches the whole history of connection {id} again within \
+                 a minute, or once its current import is done."
+            );
         }
         ConnectionCommand::Remove { id } => {
             if !connections::remove(db, id, None).await? {

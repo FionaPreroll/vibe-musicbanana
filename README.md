@@ -245,10 +245,13 @@ Instead of running the importer yourself, a profile can be connected to a YourSp
 export YOURSPOTIFY_TOKEN=…
 musicbanana yourspotify add --from http://192.168.1.10:8080 --user <username> --profile <slug>
 musicbanana yourspotify list                 # all connections with their state
+musicbanana yourspotify refetch <id>         # fetch the whole history again
 musicbanana yourspotify remove <id>
 ```
 
 The token is tried before the connection is kept. From then on `musicbanana serve` imports the whole history once and afterwards the new plays every 15 minutes, as the importer above would; the settings page shows when it last finished, how many plays it brought in so far and the last error. Each profile takes one connection, so two Spotify accounts go to two profiles, of the same account or of different ones. The token is stored in the database and never shown again, logged or sent to the browser; removing the connection deletes it. The settings page only takes the addresses in `YOURSPOTIFY_ALLOWED_URLS` (separated by commas, e.g. `http://192.168.1.10:8080`; an address also allows the paths below it, with the same scheme, host and port), so that nobody can make the server fetch from elsewhere in your network; without it the page takes none, and the command line takes any address. The server does not follow redirects from YourSpotify. Connections made before an address left the list keep running; `yourspotify list` shows them and `yourspotify remove` stops them.
+
+When YourSpotify has imported an older Spotify export after the connection was made, its plays are older than the latest one imported, so the rounds every 15 minutes miss them. **Fetch all again** on the settings page (or `yourspotify refetch <id>`) has the server fetch the whole history once more, within a minute or once the import that runs is done, oldest first as the first time; plays the profile has already are skipped, as with scrobbles. The settings page shows how far it has got, and when it is done how many plays it found, how many were new and how many were there already. One that stops (YourSpotify down, the server restarted) goes on from where it stopped in the next round; afterwards the connection fetches the new plays every 15 minutes as before.
 
 YourSpotify has no documented API; the importer uses the route its web interface reads the history from (`GET /spotify/gethistory`), which a new YourSpotify version could change. A YourSpotify that takes no time range there gets the old way: everything fetched newest first, then stored at once.
 

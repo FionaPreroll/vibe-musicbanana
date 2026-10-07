@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE yourspotify_connection\n            SET finished_at = now(), error = $2,\n                refetch_requested_at = CASE WHEN $3 THEN NULL ELSE refetch_requested_at END,\n                refetch_at = CASE WHEN $3 THEN NULL ELSE refetch_at END,\n                refetched_at = CASE WHEN $3 THEN now() ELSE refetched_at END\n          WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0316cd0477f515dca489d49d3a058f687abf21695574828026a1b3e8571f8c2c"
+}

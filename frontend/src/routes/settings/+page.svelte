@@ -8,7 +8,7 @@
 		type Follower,
 		type Visibility
 	} from '#lib/api.ts';
-	import { connectionState } from '#lib/connections.ts';
+	import { connectionState, importing, refetchState } from '#lib/connections.ts';
 	import { formatDateTime, listenCount } from '#lib/format.ts';
 	import { browserTimeZone, zoneNames } from '#lib/zone.svelte.ts';
 	import type { PageProps } from './$types';
@@ -119,9 +119,19 @@
 		change('connections', () => sendJson(fetch, 'DELETE', `/api/me/yourspotify/${c.id}`));
 	};
 
-	// While an import runs, ask again now and then.
+	const refetch = (c: Connection) => {
+		if (
+			!confirm(
+				`Fetch the whole history from YourSpotify into ${c.profile} again? Plays it has already are skipped.`
+			)
+		)
+			return;
+		change('connections', () => sendJson(fetch, 'POST', `/api/me/yourspotify/${c.id}/refetch`));
+	};
+
+	// While an import runs or is asked for, ask again now and then.
 	$effect(() => {
-		if (!data.connections.some((c) => !c.finished_at || (c.started_at ?? '') > c.finished_at))
+		if (!data.connections.some((c) => !c.started_at || importing(c) || c.refetch_requested_at))
 			return;
 		const timer = setInterval(() => invalidateAll(), 10_000);
 		return () => clearInterval(timer);
@@ -410,9 +420,11 @@
 	<section class="mt-12">
 		<h2 class={heading}>Spotify via YourSpotify</h2>
 		<p class="mb-3 text-sm text-stone-600">
-			<a class="underline" href="https://github.com/Yooooomi/your_spotify">YourSpotify</a> keeps the history
-			of a Spotify account. Connected to a profile, musicbanana imports its whole history, then the new
-			plays every 15 minutes. One Spotify account per profile.
+			<a class="underline" href="https://github.com/Yooooomi/your_spotify">YourSpotify</a> keeps the
+			history of a Spotify account. Connected to a profile, musicbanana imports its whole history,
+			then the new plays every 15 minutes. One Spotify account per profile. When YourSpotify has
+			imported an older Spotify export since, <em>Fetch all again</em> brings its plays; those already
+			here are skipped.
 		</p>
 		{#if data.connections.length > 0}
 			<ul class="divide-y divide-stone-200">
@@ -423,8 +435,19 @@
 						>
 						<span class="min-w-0 truncate text-stone-500">{c.url}</span>
 						<span class="text-stone-500 tabular-nums">{listenCount(c.imported)} so far</span>
-						<button class="{button} ml-auto" onclick={() => disconnect(c)}>Remove</button>
+						<span class="ml-auto flex gap-2">
+							<button
+								class={button}
+								disabled={!!c.refetch_requested_at}
+								title="Fetch the whole history again, for plays YourSpotify has added from before"
+								onclick={() => refetch(c)}>Fetch all again</button
+							>
+							<button class={button} onclick={() => disconnect(c)}>Remove</button>
+						</span>
 						<p class="w-full {c.error ? 'text-red-700' : 'text-stone-500'}">{connectionState(c)}</p>
+						{#if refetchState(c)}
+							<p class="w-full text-stone-500">{refetchState(c)}</p>
+						{/if}
 					</li>
 				{/each}
 			</ul>

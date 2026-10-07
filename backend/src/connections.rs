@@ -1,13 +1,15 @@
 //! YourSpotify accounts connected to profiles, which the server keeps importing
 //! from: a new connection's whole history right away, then the new plays every
-//! 15 minutes (see [`crate::yourspotify`]).
+//! 15 minutes (see [`crate::yourspotify`]). On request, it fetches the whole
+//! history once more, for plays YourSpotify has added from before the latest
+//! one, such as those of an older Spotify export.
 
 use anyhow::Context;
 use serde::Serialize;
 use sqlx::PgPool;
 use time::OffsetDateTime;
 
-use crate::yourspotify::{self, Source};
+use crate::yourspotify::{self, Source, Start};
 
 /// How often the new plays are fetched.
 pub const EVERY: std::time::Duration = std::time::Duration::from_secs(15 * 60);
@@ -32,6 +34,21 @@ pub struct Connection {
     pub imported: i64,
     /// Why the latest import failed.
     pub error: Option<String>,
+    /// When fetching the whole history again was asked for, while it is not done.
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub refetch_requested_at: Option<OffsetDateTime>,
+    /// How far that has got: the plays before this time are done.
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub refetch_at: Option<OffsetDateTime>,
+    /// The plays it found so far (or the last time), those new to the profile,
+    /// and those left out as YourSpotify knows none of their artists; the
+    /// others were in the profile already.
+    pub refetch_plays: i64,
+    pub refetch_new: i64,
+    pub refetch_left_out: i64,
+    /// When the history was last fetched again in full.
+    #[serde(with = "time::serde::rfc3339::option")]
+    pub refetched_at: Option<OffsetDateTime>,
 }
 
 /// Connects a YourSpotify account to a profile, once YourSpotify has taken the
@@ -68,7 +85,9 @@ pub async fn list(db: &PgPool, account: Option<i64>) -> sqlx::Result<Vec<Connect
     sqlx::query_as!(
         Connection,
         r#"SELECT c.id, a.username::text AS "username!", p.slug::text AS "profile!",
-                  c.api_url AS url, c.created_at, c.started_at, c.finished_at, c.imported, c.error
+                  c.api_url AS url, c.created_at, c.started_at, c.finished_at, c.imported, c.error,
+                  c.refetch_requested_at, c.refetch_at, c.refetch_plays, c.refetch_new,
+                  c.refetch_left_out, c.refetched_at
              FROM yourspotify_connection c
              JOIN profile p ON p.id = c.profile_id
              JOIN account a ON a.id = p.account_id
@@ -94,8 +113,37 @@ pub async fn remove(db: &PgPool, id: i64, account: Option<i64>) -> sqlx::Result<
     Ok(removed.rows_affected() > 0)
 }
 
-/// Imports from every connection that is due: new ones, and the others
-/// [`EVERY`] after their latest import. Returns how many it imported from.
+/// Has the server fetch a connection's whole history again (of the account, if
+/// given), within a minute, or once the import that runs is done. Plays the
+/// profile has are skipped. Asked again before it is done, it changes nothing.
+/// Returns whether there is such a connection.
+pub async fn refetch(db: &PgPool, id: i64, account: Option<i64>) -> sqlx::Result<bool> {
+    let found = sqlx::query_scalar!(
+        r#"UPDATE yourspotify_connection c
+              SET refetch_requested_at = COALESCE(c.refetch_requested_at, now()),
+                  refetch_at = CASE WHEN c.refetch_requested_at IS NULL THEN NULL
+                                    ELSE c.refetch_at END,
+                  refetch_plays = CASE WHEN c.refetch_requested_at IS NULL THEN 0
+                                       ELSE c.refetch_plays END,
+                  refetch_new = CASE WHEN c.refetch_requested_at IS NULL THEN 0
+                                     ELSE c.refetch_new END,
+                  refetch_left_out = CASE WHEN c.refetch_requested_at IS NULL THEN 0
+                                          ELSE c.refetch_left_out END
+             FROM profile p
+            WHERE p.id = c.profile_id AND c.id = $1
+              AND ($2::bigint IS NULL OR p.account_id = $2)
+        RETURNING c.id"#,
+        id,
+        account,
+    )
+    .fetch_optional(db)
+    .await?;
+    Ok(found.is_some())
+}
+
+/// Imports from every connection that is due: new ones, those asked to fetch
+/// everything again, and the others [`EVERY`] after their latest import.
+/// Returns how many it imported from.
 ///
 /// Taking a connection sets its start, which keeps it from being due again
 /// while the import runs, so no two imports of one overlap, also not across
@@ -109,11 +157,14 @@ pub async fn sync_due(db: &PgPool) -> anyhow::Result<usize> {
             WHERE p.id = c.profile_id
               AND (c.started_at IS NULL
                    OR (c.finished_at >= c.started_at
-                       AND c.finished_at < now() - make_interval(secs => $1))
+                       AND (c.finished_at < now() - make_interval(secs => $1)
+                            OR c.refetch_requested_at > c.started_at))
                    -- An import that died with its server.
                    OR (c.finished_at IS NULL OR c.finished_at < c.started_at)
                       AND c.started_at < now() - interval '1 day')
-           RETURNING c.id, c.profile_id, c.api_url, c.token, c.finished_at,
+           RETURNING c.id, c.profile_id, c.api_url, c.token, c.finished_at, c.imported,
+                     c.refetch_requested_at IS NOT NULL AS "refetch!", c.refetch_at,
+                     c.refetch_plays, c.refetch_new, c.refetch_left_out,
                      a.username::text AS "username!", p.slug::text AS "slug!""#,
         EVERY.as_secs_f64(),
     )
@@ -128,17 +179,30 @@ pub async fn sync_due(db: &PgPool) -> anyhow::Result<usize> {
             "YourSpotify connection {} ({}/{})",
             c.id, c.username, c.slug
         );
+        let refetch = c.refetch.then_some(Refetch {
+            at: c.refetch_at,
+            plays: c.refetch_plays,
+            new: c.refetch_new,
+            left_out: c.refetch_left_out,
+        });
         tracing::info!(
             "{what}: fetching {} from {}",
-            if c.finished_at.is_none() {
-                "the history"
-            } else {
-                "new plays"
+            match (&refetch, c.finished_at) {
+                (Some(Refetch { at: Some(at), .. }), _) =>
+                    format!("the whole history again, on from {}", at.date()),
+                (Some(_), _) => "the whole history again".to_owned(),
+                (None, None) => "the history".to_owned(),
+                (None, Some(_)) => "new plays".to_owned(),
             },
             c.api_url
         );
-        imports
-            .spawn(async move { sync(&db, c.id, &what, c.profile_id, &c.api_url, &c.token).await });
+        let job = Job {
+            id: c.id,
+            profile_id: c.profile_id,
+            imported: c.imported,
+            refetch,
+        };
+        imports.spawn(async move { sync(&db, job, &what, &c.api_url, &c.token).await });
     }
     let mut count = 0;
     while let Some(done) = imports.join_next().await {
@@ -148,35 +212,99 @@ pub async fn sync_due(db: &PgPool) -> anyhow::Result<usize> {
     Ok(count)
 }
 
-async fn sync(
-    db: &PgPool,
+/// An import of one connection, with what it brought before.
+struct Job {
     id: i64,
-    what: &str,
     profile_id: i64,
-    url: &str,
-    token: &str,
-) -> sqlx::Result<()> {
+    imported: i64,
+    refetch: Option<Refetch>,
+}
+
+/// Fetching the whole history again: how far it got before, and what it found.
+struct Refetch {
+    at: Option<OffsetDateTime>,
+    plays: i64,
+    new: i64,
+    left_out: i64,
+}
+
+async fn sync(db: &PgPool, job: Job, what: &str, url: &str, token: &str) -> sqlx::Result<()> {
+    let Job {
+        id,
+        profile_id,
+        imported,
+        refetch,
+    } = job;
+    // What it brought is noted after each window of time, so that the counts
+    // hold when an import stops halfway, and fetching everything again goes on
+    // from where it stopped.
+    let before = refetch.as_ref().map(|r| (r.plays, r.new, r.left_out));
+    let progress = |at: OffsetDateTime, report: yourspotify::Report| {
+        let db = db.clone();
+        async move {
+            let recorded = report.recorded as i64;
+            match before {
+                None => {
+                    sqlx::query!(
+                        "UPDATE yourspotify_connection SET imported = $2 WHERE id = $1",
+                        id,
+                        imported + recorded,
+                    )
+                    .execute(&db)
+                    .await?;
+                }
+                Some((plays, new, left_out)) => {
+                    sqlx::query!(
+                        "UPDATE yourspotify_connection
+                            SET imported = $2, refetch_at = $3, refetch_plays = $4,
+                                refetch_new = $5, refetch_left_out = $6
+                          WHERE id = $1",
+                        id,
+                        imported + recorded,
+                        at,
+                        plays + report.plays as i64,
+                        new + recorded,
+                        left_out + report.without_artist as i64,
+                    )
+                    .execute(&db)
+                    .await?;
+                }
+            }
+            Ok(())
+        }
+    };
     let result = match Source::new(url, token) {
-        Ok(source) => yourspotify::import(db, &source, profile_id, false).await,
+        Ok(source) => {
+            let start = match &refetch {
+                None => Start::Latest,
+                Some(Refetch { at: None, .. }) => Start::Beginning,
+                Some(Refetch { at: Some(at), .. }) => Start::At(*at),
+            };
+            yourspotify::import_from(db, &source, profile_id, start, progress).await
+        }
         Err(e) => Err(e),
     };
-    let (imported, error) = match &result {
+    let error = match &result {
         Ok(report) => {
             tracing::info!("{what}: {report}");
-            (report.recorded as i64, None)
+            None
         }
         Err(e) => {
             tracing::warn!("{what}: {e:#}");
-            (0, Some(format!("{e:#}")))
+            Some(format!("{e:#}"))
         }
     };
+    let refetched = refetch.is_some() && result.is_ok();
     sqlx::query!(
         "UPDATE yourspotify_connection
-            SET finished_at = now(), imported = imported + $2, error = $3
+            SET finished_at = now(), error = $2,
+                refetch_requested_at = CASE WHEN $3 THEN NULL ELSE refetch_requested_at END,
+                refetch_at = CASE WHEN $3 THEN NULL ELSE refetch_at END,
+                refetched_at = CASE WHEN $3 THEN now() ELSE refetched_at END
           WHERE id = $1",
         id,
-        imported,
         error,
+        refetched,
     )
     .execute(db)
     .await?;

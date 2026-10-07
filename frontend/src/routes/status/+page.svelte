@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
 	import { profilePath } from '#lib/api.ts';
-	import { connectionState } from '#lib/connections.ts';
+	import { connectionState, refetchState } from '#lib/connections.ts';
 	import { formatDateTime, formatNumber, listenCount } from '#lib/format.ts';
 	import { sourceLabel } from '#lib/source.ts';
 	import type { PageProps } from './$types';
@@ -145,6 +145,9 @@
 						<span class="ml-2 text-stone-500">{c.url}</span>
 						<span class="ml-2 text-stone-500 tabular-nums">{listenCount(c.imported)}</span>
 						<p class={c.error ? 'text-red-700' : 'text-stone-500'}>{connectionState(c)}</p>
+						{#if refetchState(c)}
+							<p class="text-stone-500">{refetchState(c)}</p>
+						{/if}
 					</li>
 				{/each}
 			</ul>
