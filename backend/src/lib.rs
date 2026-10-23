@@ -2,6 +2,7 @@ pub mod account;
 pub mod auth;
 pub mod catalog;
 mod clock;
+mod compare;
 pub mod connections;
 pub mod delete;
 pub mod edit;
@@ -133,6 +134,7 @@ fn api() -> Router<AppState> {
         .merge(on_this_day::routes())
         .merge(lost_found::routes())
         .merge(clock::routes())
+        .merge(compare::routes())
         .nest("/listenbrainz/1", listenbrainz::routes())
         .route_layer(middleware::from_fn(status::measure))
         .fallback(|| async { StatusCode::NOT_FOUND })

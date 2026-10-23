@@ -226,7 +226,7 @@ pub(crate) struct TopParams {
     #[serde(default, with = "day::option")]
     to: Option<Date>,
     pub(crate) tz: Option<String>,
-    limit: Option<i64>,
+    pub(crate) limit: Option<i64>,
     /// Only the listens of this source, see `listen_source` in the migrations.
     pub(crate) source: Option<String>,
 }

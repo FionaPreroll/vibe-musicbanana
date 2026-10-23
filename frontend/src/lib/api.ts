@@ -519,3 +519,30 @@ export type SearchResult = {
 	releases: ChartEntry[];
 	recordings: ChartEntry[];
 };
+
+/** An artist, album or track both profiles of a comparison heard; `artist` is set for albums and tracks. */
+export type SharedEntry = { id: number; name: string; artist?: string; a: number; b: number };
+
+/** One side of a comparison: its listens and artists in the period. */
+export type CompareSide = {
+	username: string;
+	slug: string;
+	name: string;
+	listens: number;
+	artists: number;
+	/** Artists of the period the other profile never heard at all, and the most heard of them. */
+	only_count: number;
+	only: { id: number; name: string; listens: number }[];
+};
+
+/** GET /api/compare/<username>/<slug>/<other>/<other slug>, see backend/src/compare.rs. */
+export type Comparison = {
+	a: CompareSide;
+	b: CompareSide;
+	/** How much of their listening is on the same artists, from 0 to 1. */
+	score: number;
+	shared: { artists: number; releases: number; recordings: number };
+	artists: SharedEntry[];
+	releases: SharedEntry[];
+	recordings: SharedEntry[];
+};
