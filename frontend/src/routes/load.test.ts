@@ -224,7 +224,7 @@ describe('profile page', () => {
 			period: { kind: 'all' },
 			source: null,
 			follow: null,
-			artists: { search: '?tz=Europe%2FBerlin&limit=10' },
+			artists: { search: '?tz=Europe%2FBerlin&limit=10&compare=true' },
 			recent: { search: '?limit=25' },
 			nowPlaying: null,
 			week: { listens: 1 },
@@ -243,7 +243,7 @@ describe('profile page', () => {
 			period: { kind: 'year', year: 2012 },
 			source: 'Navidrome',
 			follow: { state: 'none' },
-			artists: { search: '?year=2012&tz=Europe%2FBerlin&limit=10&source=Navidrome' },
+			artists: { search: '?year=2012&tz=Europe%2FBerlin&limit=10&source=Navidrome&compare=true' },
 			recent: { search: '?before=2012-12-31T23%3A00%3A00.000Z&limit=25&source=Navidrome' },
 			week: null,
 			onThisDay: null
@@ -417,7 +417,7 @@ describe('year in review', () => {
 			base: '/u/fiona/work',
 			source: 'Navidrome',
 			review: { year: 2010 },
-			artists: { search: '?year=2010&tz=Europe%2FBerlin&limit=10&source=Navidrome' }
+			artists: { search: '?year=2010&tz=Europe%2FBerlin&source=Navidrome&compare=true&limit=10' }
 		});
 	});
 
