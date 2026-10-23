@@ -55,7 +55,7 @@ YOURSPOTIFY_TOKEN=<public token>
 YOURSPOTIFY_USER=<username>
 ```
 
-**Album covers** (see [Album covers](covers.md)): `COVER_ART=on` in `.env`, and `COVER_ART_LOOKUP=on` for the searches by name. The covers are kept in the volume `covers` (`/var/cache/musicbanana` in the container), so they survive updates; `docker compose down -v` or `docker volume rm musicbanana_covers` empties it, and it needs no backup.
+**Album covers** (see [Album covers](covers.md)): `COVER_ART=on` in `.env`, `COVER_ART_LOOKUP=on` for the searches by name and `COVER_ART_CACHE_MAX` for another limit than 1G. The covers are kept in the volume `covers` (`/var/cache/musicbanana` in the container), so they survive updates; `docker compose down -v` or `docker volume rm musicbanana_covers` empties it, and it needs no backup.
 
 ## Moving existing data in
 
@@ -99,6 +99,7 @@ The server reads its settings from the environment; with Docker they go into `de
 | `COVER_ART` | `off` | `on` shows album covers, see [Album covers](covers.md). |
 | `COVER_ART_LOOKUP` | `off` | `on` also searches MusicBrainz by name for albums without an ID; needs `COVER_ART=on`. |
 | `COVER_ART_CACHE` | `cache/covers` (`/var/cache/musicbanana/covers` in the image) | Where covers are kept. |
+| `COVER_ART_CACHE_MAX` | `1G` | The most the cover cache may hold, at least `10M`; the covers seen longest ago go first. |
 
 ## Logs
 
