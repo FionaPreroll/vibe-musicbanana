@@ -10,6 +10,7 @@ export const me: Me = {
 	time_zone: null,
 	week_start: 1,
 	show_streaks: true,
+	language: null,
 	profiles: [
 		{ slug: 'default', name: 'Default', visibility: 'public' },
 		{ slug: 'work', name: 'Work', visibility: 'private' }
