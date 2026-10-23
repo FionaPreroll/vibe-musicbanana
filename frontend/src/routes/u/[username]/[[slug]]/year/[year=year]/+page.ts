@@ -25,8 +25,10 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	// For the viewer's time zone (see zone.svelte.ts).
 	await parent();
 	const tz = timeZone();
+	// The charts also show how their entries moved since the year before.
+	const query = { year, tz, source, compare: true };
 	const chart = (kind: ChartKind) =>
-		getJson<ChartEntry[]>(fetch, `${api}/top/${kind}`, { year, tz, limit: 10, source });
+		getJson<ChartEntry[]>(fetch, `${api}/top/${kind}`, { ...query, limit: 10 });
 	try {
 		const [overview, review, artists, releases, recordings, sources] = await Promise.all([
 			getJson<Overview>(fetch, api, { tz, source }),
@@ -39,6 +41,7 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 		return {
 			base: profilePath(params.username, slug),
 			api,
+			query,
 			source,
 			sources,
 			overview,
