@@ -9,3 +9,11 @@ coverage:
         informational: true
 comment:
   layout: "condensed_header, diff, flags"
+# One upload per CI job; each flag covers its half of the repository.
+flags:
+  backend:
+    paths:
+      - backend/
+  frontend:
+    paths:
+      - frontend/
