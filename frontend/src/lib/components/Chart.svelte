@@ -1,12 +1,14 @@
 <script lang="ts">
 	import type { ChartEntry } from '#lib/api.ts';
 	import { formatNumber } from '#lib/format.ts';
+	import Cover from '#lib/components/Cover.svelte';
 
 	let {
 		title,
 		entries,
 		href,
-		hideArtist
+		hideArtist,
+		cover
 	}: {
 		title: string;
 		entries: ChartEntry[];
@@ -14,6 +16,8 @@
 		href?: (entry: ChartEntry) => string;
 		/** Leaves out this artist's name, e.g. on the artist's own page. */
 		hideArtist?: string;
+		/** Album covers before the names, see covers.svelte.ts. */
+		cover?: (entry: ChartEntry) => string | null;
 	} = $props();
 
 	const max = $derived(entries[0]?.listens ?? 1);
@@ -34,11 +38,14 @@
 					<svelte:element
 						this={href ? 'a' : 'div'}
 						href={href?.(entry)}
-						class="relative flex items-baseline gap-2 px-2 py-1 {href
+						class="relative flex {cover ? 'items-center' : 'items-baseline'} gap-2 px-2 py-1 {href
 							? 'hover:bg-stone-900/5'
 							: ''}"
 					>
 						<span class="w-5 shrink-0 text-right text-xs text-stone-400 tabular-nums">{i + 1}</span>
+						{#if cover}
+							<Cover src={cover(entry)} name={entry.name} class="size-7 text-xs" />
+						{/if}
 						<span class="min-w-0 flex-1 truncate" title={entry.name}>
 							{entry.name}
 							{#if entry.artist && entry.artist !== hideArtist}<span class="text-stone-500">

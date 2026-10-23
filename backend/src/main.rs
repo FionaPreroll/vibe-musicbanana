@@ -895,6 +895,21 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
         );
     }
 
+    let covers = musicbanana::covers::Settings::from_env(|name| env::var(name).ok())?;
+    if covers.enabled {
+        tracing::info!(
+            "album covers from the Cover Art Archive{}, kept in {}",
+            if covers.lookup {
+                " and MusicBrainz searches"
+            } else {
+                ""
+            },
+            covers.cache_dir.display()
+        );
+    } else {
+        tracing::info!("album covers off (COVER_ART)");
+    }
+
     musicbanana::status::started();
     connections::spawn(db.clone());
     let live = live::Hub::default();
@@ -905,6 +920,7 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
             yourspotify_allowed: Arc::new(allowed),
             access_log,
             live: live.clone(),
+            covers: Arc::new(musicbanana::covers::Covers::new(covers)),
         },
         &static_dir,
     );

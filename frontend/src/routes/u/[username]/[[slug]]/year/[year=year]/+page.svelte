@@ -11,6 +11,7 @@
 	} from '#lib/format.ts';
 	import { localDay, parseDay } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
+	import { coverUrl, coversShown } from '#lib/covers.svelte.ts';
 	import { wallClock, wallDay } from '#lib/zone.svelte.ts';
 	import type { PageProps } from './$types';
 
@@ -26,6 +27,9 @@
 	const entryHref = (kind: EntityKind, id: number, name: string) =>
 		entityPath(data.base, kind, id, name) + keep;
 	const link = (kind: EntityKind) => (entry: ChartEntry) => entryHref(kind, entry.id, entry.name);
+	const albumCover = $derived(
+		coversShown() ? (entry: ChartEntry) => coverUrl(data.api, entry.id) : undefined
+	);
 
 	// The years before and after with listens.
 	const earlier = $derived(overview.years.findLast((y) => y.year < year)?.year ?? null);
@@ -203,7 +207,7 @@
 
 		<div class="mt-10 grid gap-8 md:grid-cols-3">
 			<Chart title="Top artists" entries={data.artists} href={link('artist')} />
-			<Chart title="Top albums" entries={data.releases} href={link('album')} />
+			<Chart title="Top albums" entries={data.releases} href={link('album')} cover={albumCover} />
 			<Chart title="Top tracks" entries={data.recordings} href={link('track')} />
 		</div>
 

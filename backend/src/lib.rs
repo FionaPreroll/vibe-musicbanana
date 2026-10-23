@@ -3,6 +3,7 @@ pub mod auth;
 pub mod catalog;
 mod clock;
 pub mod connections;
+pub mod covers;
 pub mod delete;
 pub mod edit;
 mod entities;
@@ -51,6 +52,8 @@ pub struct AppState {
     pub access_log: bool,
     /// The live updates for open profile pages.
     pub live: live::Hub,
+    /// Album covers, off unless switched on.
+    pub covers: Arc<covers::Covers>,
 }
 
 impl AppState {
@@ -61,6 +64,7 @@ impl AppState {
             yourspotify_allowed: Arc::default(),
             access_log: false,
             live: live::Hub::default(),
+            covers: Arc::default(),
         }
     }
 }
@@ -133,6 +137,7 @@ fn api() -> Router<AppState> {
         .merge(on_this_day::routes())
         .merge(lost_found::routes())
         .merge(clock::routes())
+        .merge(covers::routes())
         .nest("/listenbrainz/1", listenbrainz::routes())
         .route_layer(middleware::from_fn(status::measure))
         .fallback(|| async { StatusCode::NOT_FOUND })

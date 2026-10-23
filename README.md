@@ -61,6 +61,7 @@ CI runs the backend tests through [cargo-llvm-cov](https://github.com/taiki-e/ca
 | `/u/<username>/artist/<id>-<name>`, `…/album/…` and `…/track/…` (after the slug for other profiles), e.g. `/u/fiona/artist/1-die-arzte`: listens per month, first and last listen, phases of heavy listening, the albums and tracks heard | `GET /api/profiles/<username>/<slug>/{artists,releases,recordings}/<id>?tz=` |
 | `/u/<username>/search?q=` (after the slug for other profiles), also from the search field in the header of a profile's pages (`/` jumps into it): the artists, albums and tracks the profile has heard whose names hold every word, ignoring case and accents, the most heard first; a word may also be the artist's name of an album or track ("ärzte unrockbar") | `GET /api/profiles/<username>/<slug>/search?q=&limit=` |
 | `?source=Navidrome` on any page of a profile (overview, artist, album, track, search), picked under the period: only the listens from that source; the sources are the clients without their version ("Navidrome 0.64.2 (…)" is "Navidrome"), "Spotify via YourSpotify" and the imports such as `import:php-2016` | every API route of a profile takes `source=`; `GET /api/profiles/<username>/<slug>/sources` lists them with their listens |
+| Album covers, when switched on (see [Album covers](#album-covers)): on the album page, in the album charts and in the recent listens; a tile with the first letter where there is none | `GET /api/config` (`{"covers"}`), `GET /api/profiles/<username>/<slug>/releases/<id>/cover?size=250\|500` |
 | `/login` | `POST /api/session` (`{"login", "password"}`), `DELETE /api/session` logs out |
 | `/settings`: the account's profiles (create, rename, who sees them), scrobble tokens (create, revoke), YourSpotify connections (connect, remove), time zone and first day of the week, whether to show streaks, user name and password | `GET /api/me` (the profiles without their listens), `GET`/`POST /api/me/profiles` (with their listens), `PATCH /api/me/profiles/<slug>`, `GET`/`POST /api/me/tokens`, `DELETE /api/me/tokens/<id>`, `GET`/`POST /api/me/yourspotify`, `DELETE /api/me/yourspotify/<id>`, `PUT /api/me/time` (`{"time_zone", "week_start"}`; `time_zone` null for the browser's, `week_start` 1 for Monday to 7 for Sunday), `PUT /api/me/streaks` (`{"show_streaks"}`), `PUT /api/me/username`, `PUT /api/me/password`; `GET /api/renamed/<old name>/<slug>` gives the current name |
 | `/merges` (admins only): merge suggestions of artists, albums and tracks, merging with a dry run first, merging by hand, hidden suggestions and the merge log with undo, see [Merging duplicates](#in-the-browser) | `GET /api/admin/merges/suggestions/<artist\|release\|recording>?limit=`, `GET`/`POST /api/admin/merges/hidden/<kind>` (`{"from", "into"}`), `DELETE /api/admin/merges/hidden/<kind>/<from>/<into>`, `GET /api/admin/catalog/<kind>?q=`, `POST /api/admin/merges` (`{"kind", "from", "into", "dry_run", "force"}`), `GET /api/admin/merges?before=&limit=`, `POST /api/admin/merges/<n>/undo` (`{"dry_run"}`) |
@@ -259,6 +260,15 @@ When YourSpotify has imported an older Spotify export after the connection was m
 
 YourSpotify has no documented API; the importer uses the route its web interface reads the history from (`GET /spotify/gethistory`), which a new YourSpotify version could change. A YourSpotify that takes no time range there gets the old way: everything fetched newest first, then stored at once.
 
+## Album covers
+
+Albums can show their front cover from the [Cover Art Archive](https://coverartarchive.org/): on the album page, small in the top albums and in the recent listens. It is off by default, since it means requests to the outside; `COVER_ART=on` switches it on. While it is off, pages look as without covers.
+
+- The browser never talks to the archive. It asks musicbanana (`GET /api/profiles/<username>/<slug>/releases/<id>/cover?size=250`, or `500` for the album page), which fetches the cover of the album's release group once and keeps it on disk, in `COVER_ART_CACHE` (default `cache/covers`, in the image `/var/cache/musicbanana/covers`). Only albums the profile has listens of answer, so a private profile's albums stay hidden also as pictures.
+- Albums with a MusicBrainz ID (from Picard-tagged files) get theirs right away. The others, and albums the archive has no cover for, get a banana-yellow tile with their first letter.
+- `COVER_ART_LOOKUP=on` also searches MusicBrainz by artist and title for albums without an ID. It takes only a release group with exactly that title and artist (ignoring case), so a cover is missing rather than wrong. The searches run in the background, one a second as MusicBrainz asks, so a page with many such albums first shows tiles and the covers on a later visit. What a search found stays in the cache only; it does not become the album's MusicBrainz ID.
+- "No cover" and "nothing found" are asked again after 30 days, failed requests (the archive down or slow) on the next view. Deleting the cache directory forgets everything; it fills up again as pages are viewed. Each album takes one small file per size viewed (250 and 500 pixels wide).
+
 ## Running with Docker
 
 `Dockerfile` builds one image with the server and the frontend. CI publishes it for every change on main that passed all checks, as `ghcr.io/fionapreroll/vibe-musicbanana:latest` and `:sha-<commit>`, for x86-64 (linux/amd64). `deploy/compose.yaml` runs it together with its own PostgreSQL. On the machine that runs Navidrome:
@@ -298,6 +308,8 @@ YOURSPOTIFY_TOKEN=<public token>
 YOURSPOTIFY_USER=<username>
 ```
 
+**Album covers** (see [above](#album-covers)): `COVER_ART=on` in `.env`, and `COVER_ART_LOOKUP=on` for the searches by name. The covers are kept in the volume `covers` (`/var/cache/musicbanana` in the container), so they survive updates; `docker compose down -v` or `docker volume rm musicbanana_covers` empties it, and it needs no backup.
+
 **Moving existing data in**, for example the database the PHP import went into:
 
 ```sh
@@ -321,7 +333,7 @@ cd backend && cargo build --release
 STATIC_DIR=../frontend/build DATABASE_URL=postgres://… ./target/release/musicbanana
 ```
 
-Environment: `DATABASE_URL` (required), `LISTEN_ADDR` (default `127.0.0.1:3000`), `STATIC_DIR` (default `../frontend/build`), `ACCESS_LOG`, `RUST_LOG` (see [Logs](#logs)), `YOURSPOTIFY_ALLOWED_URLS` (see [above](#connections-the-server-keeps-up-to-date)).
+Environment: `DATABASE_URL` (required), `LISTEN_ADDR` (default `127.0.0.1:3000`), `STATIC_DIR` (default `../frontend/build`), `ACCESS_LOG`, `RUST_LOG` (see [Logs](#logs)), `YOURSPOTIFY_ALLOWED_URLS` (see [above](#connections-the-server-keeps-up-to-date)), `COVER_ART`, `COVER_ART_LOOKUP` and `COVER_ART_CACHE` (see [Album covers](#album-covers)).
 
 ## Logs
 

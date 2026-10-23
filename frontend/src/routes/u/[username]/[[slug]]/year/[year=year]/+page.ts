@@ -38,6 +38,7 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 		]);
 		return {
 			base: profilePath(params.username, slug),
+			api,
 			source,
 			sources,
 			overview,

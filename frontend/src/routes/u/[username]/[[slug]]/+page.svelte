@@ -24,6 +24,8 @@
 	import { now } from '#lib/now.svelte.ts';
 	import { parseDay, periodEnd, periodSearch, type Period } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
+	import { coverUrl, coversShown } from '#lib/covers.svelte.ts';
+	import Cover from '#lib/components/Cover.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -46,6 +48,9 @@
 	const entryHref = (kind: EntityKind, id: number, name: string) =>
 		entityPath(data.base, kind, id, name) + withSource('', data.source);
 	const link = (kind: EntityKind) => (entry: ChartEntry) => entryHref(kind, entry.id, entry.name);
+	const albumCover = $derived(
+		coversShown() ? (entry: ChartEntry) => coverUrl(data.api, entry.id) : undefined
+	);
 
 	// A profile nobody listened to lately keeps its page as it was.
 	const week = $derived(
@@ -245,7 +250,7 @@
 
 	<div class="mt-8 grid gap-8 md:grid-cols-3">
 		<Chart title="Top artists" entries={data.artists} href={link('artist')} />
-		<Chart title="Top albums" entries={data.releases} href={link('album')} />
+		<Chart title="Top albums" entries={data.releases} href={link('album')} cover={albumCover} />
 		<Chart title="Top tracks" entries={data.recordings} href={link('track')} />
 	</div>
 
@@ -292,11 +297,20 @@
 				</h3>
 				<ol class="divide-y divide-stone-200">
 					{#each day.items as listen (listen.listened_at)}
-						<li class="flex items-baseline gap-3 py-1.5 sm:gap-4">
+						<li
+							class="flex gap-3 py-1.5 sm:gap-4 {coversShown() ? 'items-center' : 'items-baseline'}"
+						>
 							<ListenTime
 								class="w-28 shrink-0 text-sm text-stone-500 tabular-nums sm:w-32"
 								at={listen.listened_at}
 							/>
+							{#if coversShown()}
+								<Cover
+									src={listen.release_id ? coverUrl(data.api, listen.release_id) : null}
+									name={listen.album ?? listen.track}
+									class="size-8 text-sm"
+								/>
+							{/if}
 							<span class="min-w-0 truncate">
 								<a
 									class="font-medium hover:underline"

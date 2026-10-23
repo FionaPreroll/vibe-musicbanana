@@ -38,7 +38,7 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 		if (segment !== entitySegment(entity.id, entity.name)) {
 			redirect(308, entityPath(base, params.kind, entity.id, entity.name) + url.search);
 		}
-		return { base, kind: params.kind, entity, source, sources };
+		return { base, api, kind: params.kind, entity, source, sources };
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) {
 			await followRename(fetch, params.username, slug, url);
