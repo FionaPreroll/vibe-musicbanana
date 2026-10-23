@@ -123,10 +123,8 @@ fn settings(url: &Url, dir: &Path, lookup: bool) -> Settings {
     Settings {
         enabled: true,
         lookup,
-        cache_dir: dir.to_owned(),
-        archive: url.clone(),
-        musicbrainz: url.clone(),
         search_interval: Duration::ZERO,
+        ..Settings::off(dir).with_upstream(url)
     }
 }
 

@@ -271,6 +271,16 @@ Albums can show their front cover from the [Cover Art Archive](https://coverarta
 - Albums with a MusicBrainz ID (from Picard-tagged files) get theirs right away. The others, and albums the archive has no cover for, get a banana-yellow tile with their first letter.
 - `COVER_ART_LOOKUP=on` also searches MusicBrainz by artist and title for albums without an ID. It takes only a release group with exactly that title and artist (ignoring case), so a cover is missing rather than wrong. The searches run in the background, one a second as MusicBrainz asks, so a page with many such albums first shows tiles and the covers on a later visit. What a search found stays in the cache only; it does not become the album's MusicBrainz ID.
 - "No cover" and "nothing found" are asked again after 30 days, failed requests (the archive down or slow) on the next view. Deleting the cache directory forgets everything; it fills up again as pages are viewed. Each album takes one small file per size viewed (250 and 500 pixels wide).
+- `COVER_ART_CACHE_MAX` caps the cache (default `1G`, at least `10M`; `500M`, `2G` and plain bytes work, K/M/G counting in steps of 1024). Past the limit, the covers seen longest ago are deleted until the cache is down to 90 % of it; they come back when viewed again.
+
+### What guards the requests to the outside
+
+- Nothing a visitor sends goes into an address: they are built from the fixed hosts `coverartarchive.org` and `musicbrainz.org`, an ID out of the database and the size 250 or 500 (anything else is refused with 400). Cache file names are only such IDs or a hash, so no name can point outside the cache directory.
+- The archive sends covers on to archive.org. Redirects are followed at most 5 times and only back to the archive or over HTTPS, on the standard port, to `archive.org` and its subdomains; never to an IP address, another port or an address with a user name. Any other redirect is refused, the cover counts as missing for 30 days, and the server logs a warning (target `musicbanana::covers`) with both addresses, shortened to scheme, host, port and path (a query could hold a secret), with everything but printable ASCII escaped and cut to 200 characters. Searches at MusicBrainz follow no redirect at all.
+- Answers are read in pieces and dropped as soon as they grow past 5 MB for a cover or 1 MB for a search, also when they gave no length or a wrong one. Only JPEG, PNG, GIF and WebP are served, recognized by their first bytes, never SVG or HTML, with the server's own `Content-Type` and `X-Content-Type-Options: nosniff`.
+- At most 4 covers are fetched at once, each within 15 seconds; at most 1000 searches wait, more are asked again on a later view.
+
+Tests: `backend/tests/covers.rs` and `backend/tests/cover_hardening.rs` run against stand-ins for both services (redirects elsewhere and in a loop, oversized answers with and without a length, a full queue, the cache limit), and property tests in `backend/src/covers.rs` (proptest) try random addresses, bytes and names on the checks above.
 
 ## Running with Docker
 
@@ -311,7 +321,7 @@ YOURSPOTIFY_TOKEN=<public token>
 YOURSPOTIFY_USER=<username>
 ```
 
-**Album covers** (see [above](#album-covers)): `COVER_ART=on` in `.env`, and `COVER_ART_LOOKUP=on` for the searches by name. The covers are kept in the volume `covers` (`/var/cache/musicbanana` in the container), so they survive updates; `docker compose down -v` or `docker volume rm musicbanana_covers` empties it, and it needs no backup.
+**Album covers** (see [above](#album-covers)): `COVER_ART=on` in `.env`, `COVER_ART_LOOKUP=on` for the searches by name and `COVER_ART_CACHE_MAX` for another limit than 1G. The covers are kept in the volume `covers` (`/var/cache/musicbanana` in the container), so they survive updates; `docker compose down -v` or `docker volume rm musicbanana_covers` empties it, and it needs no backup.
 
 **Moving existing data in**, for example the database the PHP import went into:
 
@@ -336,7 +346,7 @@ cd backend && cargo build --release
 STATIC_DIR=../frontend/build DATABASE_URL=postgres://… ./target/release/musicbanana
 ```
 
-Environment: `DATABASE_URL` (required), `LISTEN_ADDR` (default `127.0.0.1:3000`), `STATIC_DIR` (default `../frontend/build`), `ACCESS_LOG`, `RUST_LOG` (see [Logs](#logs)), `YOURSPOTIFY_ALLOWED_URLS` (see [above](#connections-the-server-keeps-up-to-date)), `COVER_ART`, `COVER_ART_LOOKUP` and `COVER_ART_CACHE` (see [Album covers](#album-covers)).
+Environment: `DATABASE_URL` (required), `LISTEN_ADDR` (default `127.0.0.1:3000`), `STATIC_DIR` (default `../frontend/build`), `ACCESS_LOG`, `RUST_LOG` (see [Logs](#logs)), `YOURSPOTIFY_ALLOWED_URLS` (see [above](#connections-the-server-keeps-up-to-date)), `COVER_ART`, `COVER_ART_LOOKUP`, `COVER_ART_CACHE` and `COVER_ART_CACHE_MAX` (see [Album covers](#album-covers)).
 
 ## Logs
 
