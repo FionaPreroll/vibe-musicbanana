@@ -126,7 +126,8 @@ export function timeSince(then: Date, now = new Date()) {
 		d.setUTCMonth(d.getUTCMonth() + k);
 		return d;
 	};
-	if (months > 0 && shifted(months) > now) months--;
+	// Adding months to the 31st can run over into the month after, so maybe step back twice.
+	while (months > 0 && shifted(months) > now) months--;
 	let rest = Math.max(0, Math.floor((now.getTime() - shifted(months).getTime()) / 60_000));
 	const weeks = Math.floor(rest / (7 * 24 * 60));
 	rest -= weeks * 7 * 24 * 60;
