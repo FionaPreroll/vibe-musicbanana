@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.title, a.name AS artist,\n                  array(SELECT DISTINCT m.mbid FROM release_mbid m\n                         WHERE m.release_id = r.id ORDER BY m.mbid) AS \"mbids!\"\n             FROM release r\n             JOIN artist a ON a.id = r.artist_id\n            WHERE r.id = (SELECT coalesce(merged_into, id) FROM release WHERE id = $1)\n              AND EXISTS (SELECT FROM listen l\n                           WHERE l.release_id = r.id AND l.profile_id = $2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "release",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "artist",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "mbids!",
+        "type_info": "UuidArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "dee334a34997209f7ba9e6fa1a0b2f5d5391a7991f84b163b069ce11984b8756"
+}

@@ -215,6 +215,9 @@ export type NowPlaying = {
 	duration_ms: number | null;
 };
 
+/** GET /api/config: what the server offers (backend/src/covers.rs). */
+export type ServerConfig = { covers: boolean };
+
 /** The logged-in account, with its profiles (the default one first). */
 export type Me = {
 	username: string;

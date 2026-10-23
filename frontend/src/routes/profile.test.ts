@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NowPlaying, Week } from '#lib/api.ts';
 import type { Period } from '#lib/period.ts';
+import { useCovers } from '#lib/covers.svelte.ts';
 import { goto, visit } from '../test/app.svelte.ts';
 import { FakeEventSource } from '../test/events.ts';
 import { fakeApi } from '../test/fetch.ts';
@@ -29,6 +30,7 @@ beforeEach(() => {
 	FakeEventSource.install();
 });
 afterEach(() => {
+	useCovers(false);
 	vi.useRealTimers();
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
@@ -517,6 +519,28 @@ describe('artist, album and track pages', () => {
 		expect(screen.queryByRole('heading', { name: 'Albums' })).toBeNull();
 	});
 
+	it('shows album covers on artist and track pages, none for an artist itself', () => {
+		useCovers(true);
+		const artist = render(EntityPage, {
+			params: {} as never,
+			data: { ...(data('artist') as object), api } as never
+		});
+		const albums = screen.getByRole('heading', { name: 'Albums' }).parentElement!;
+		expect(albums.querySelector('img')).toHaveAttribute('src', `${api}/releases/10/cover`);
+		// No large cover for an artist.
+		expect(artist.container.querySelectorAll('img').length).toBe(1);
+		artist.unmount();
+		render(EntityPage, {
+			params: {} as never,
+			data: {
+				...(data('track', { name: 'Junge', artist: { id: 1, name: 'Die Ärzte' } }) as object),
+				api
+			} as never
+		});
+		const on = screen.getByRole('heading', { name: 'On albums' }).parentElement!;
+		expect(on.querySelector('img')).toHaveAttribute('src', `${api}/releases/10/cover`);
+	});
+
 	it('shows a track that was never heard here', () => {
 		render(EntityPage, {
 			params: {} as never,
@@ -590,6 +614,17 @@ describe('year in review', () => {
 		expect(screen.getByText(/A session goes on/)).toHaveTextContent(
 			'Mostly Die Ärzte (40), Björk (15) and Tocotronic (6).'
 		);
+	});
+
+	it('shows album covers in the top albums when the server has them', () => {
+		useCovers(true);
+		const { container } = render(YearPage, { params: {} as never, data: data() });
+		const albums = screen.getByRole('heading', { name: 'Top albums' }).parentElement!;
+		expect(albums.querySelector('img')).toHaveAttribute(
+			'src',
+			expect.stringMatching(/\/releases\/10\/cover$/)
+		);
+		expect(container.querySelectorAll('img').length).toBe(albums.querySelectorAll('img').length);
 	});
 
 	it('tells a running year from a past one', () => {

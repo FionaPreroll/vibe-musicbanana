@@ -35,12 +35,17 @@ RUN apt-get update \
  && apt-get install --yes --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --no-create-home --uid 10001 musicbanana
+# Album covers (README, "Album covers"); a volume, so they survive updates. Made
+# here so that a new named volume starts out owned by musicbanana.
+RUN mkdir -p /var/cache/musicbanana/covers && chown -R musicbanana /var/cache/musicbanana
 COPY --from=backend /usr/local/bin/musicbanana /usr/local/bin/musicbanana
 COPY --from=frontend /src/frontend/build /usr/share/musicbanana
 ENV LISTEN_ADDR=0.0.0.0:3000 \
     STATIC_DIR=/usr/share/musicbanana \
+    COVER_ART_CACHE=/var/cache/musicbanana/covers \
     RUST_LOG=musicbanana=info,tower_http=info
 USER musicbanana
+VOLUME /var/cache/musicbanana
 EXPOSE 3000
 # Subcommands work as arguments, e.g. `docker compose run --rm musicbanana token list`.
 ENTRYPOINT ["musicbanana"]
