@@ -21,6 +21,7 @@ services:
       YOURSPOTIFY_ALLOWED_URLS: ${YOURSPOTIFY_ALLOWED_URLS:-}
       COVER_ART: ${COVER_ART:-off}
       COVER_ART_LOOKUP: ${COVER_ART_LOOKUP:-off}
+      COVER_ART_CACHE_MAX: ${COVER_ART_CACHE_MAX:-1G}
       RUST_LOG: ${RUST_LOG:-musicbanana=info,tower_http=info}
     ports:
       - "${MUSICBANANA_PORT:-3000}:3000"

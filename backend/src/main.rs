@@ -898,13 +898,14 @@ async fn serve(db: PgPool) -> anyhow::Result<()> {
     let covers = musicbanana::covers::Settings::from_env(|name| env::var(name).ok())?;
     if covers.enabled {
         tracing::info!(
-            "album covers from the Cover Art Archive{}, kept in {}",
+            "album covers from the Cover Art Archive{}, kept in {} (at most {} MiB)",
             if covers.lookup {
                 " and MusicBrainz searches"
             } else {
                 ""
             },
-            covers.cache_dir.display()
+            covers.cache_dir.display(),
+            covers.cache_max / (1024 * 1024)
         );
     } else {
         tracing::info!("album covers off (COVER_ART)");
