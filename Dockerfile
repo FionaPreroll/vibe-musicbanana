@@ -35,7 +35,7 @@ RUN apt-get update \
  && apt-get install --yes --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --no-create-home --uid 10001 musicbanana
-# Album covers (README, "Album covers"); a volume, so they survive updates. Made
+# Album covers (docs/covers.md); a volume, so they survive updates. Made
 # here so that a new named volume starts out owned by musicbanana.
 RUN mkdir -p /var/cache/musicbanana/covers && chown -R musicbanana /var/cache/musicbanana
 COPY --from=backend /usr/local/bin/musicbanana /usr/local/bin/musicbanana

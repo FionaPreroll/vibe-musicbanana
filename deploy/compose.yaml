@@ -5,7 +5,7 @@
 #   docker compose up -d    # builds it from this checkout if it was not pulled
 #
 # The web interface and the scrobble API listen on port 3000 (MUSICBANANA_PORT).
-# README.md, "Running with Docker", has the Navidrome settings, tokens, moving
+# docs/installation.md has the Navidrome settings, tokens, moving
 # existing data in, updates and backups.
 
 name: musicbanana
@@ -26,7 +26,7 @@ services:
     ports:
       - "${MUSICBANANA_PORT:-3000}:3000"
     volumes:
-      # Album covers from the Cover Art Archive (README, "Album covers").
+      # Album covers from the Cover Art Archive (docs/covers.md).
       - covers:/var/cache/musicbanana
     depends_on:
       db:
