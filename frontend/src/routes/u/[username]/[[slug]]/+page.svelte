@@ -26,6 +26,8 @@
 	import { now } from '#lib/now.svelte.ts';
 	import { comparisonLabel, parseDay, periodEnd, periodSearch, type Period } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
+	import { coverUrl, coversShown } from '#lib/covers.svelte.ts';
+	import Cover from '#lib/components/Cover.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -48,6 +50,9 @@
 	const entryHref = (kind: EntityKind, id: number, name: string) =>
 		entityPath(data.base, kind, id, name) + withSource('', data.source);
 	const link = (kind: EntityKind) => (entry: ChartEntry) => entryHref(kind, entry.id, entry.name);
+	const albumCover = $derived(
+		coversShown() ? (entry: ChartEntry) => coverUrl(data.api, entry.id) : undefined
+	);
 	// The next places of a chart, for "Show more".
 	const more = (kind: ChartKind) => (offset: number, limit: number) =>
 		getJson<ChartEntry[]>(fetch, `${data.api}/top/${kind}`, {
@@ -269,6 +274,7 @@
 			entries={data.releases}
 			href={link('album')}
 			more={more('releases')}
+			cover={albumCover}
 		/>
 		<Chart
 			title={m.common.topTracks}
@@ -324,11 +330,20 @@
 				</h3>
 				<ol class="divide-y divide-stone-200">
 					{#each day.items as listen (listen.listened_at)}
-						<li class="flex items-baseline gap-3 py-1.5 sm:gap-4">
+						<li
+							class="flex gap-3 py-1.5 sm:gap-4 {coversShown() ? 'items-center' : 'items-baseline'}"
+						>
 							<ListenTime
 								class="w-28 shrink-0 text-sm text-stone-500 tabular-nums sm:w-32"
 								at={listen.listened_at}
 							/>
+							{#if coversShown()}
+								<Cover
+									src={listen.release_id ? coverUrl(data.api, listen.release_id) : null}
+									name={listen.album ?? listen.track}
+									class="size-8 text-sm"
+								/>
+							{/if}
 							<span class="min-w-0 truncate">
 								<a
 									class="font-medium hover:underline"

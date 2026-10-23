@@ -283,6 +283,7 @@ const en = {
 	entity: {
 		kinds: { artist: 'Artist', album: 'Album', track: 'Track' },
 		musicBrainzOf: (i: number, count: number) => `MusicBrainz ${i} of ${count}`,
+		coverOf: (album: string) => `Cover of ${album}`,
 		/** {artist} is a link. */
 		by: 'by {artist}',
 		listens: 'Listens',

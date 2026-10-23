@@ -11,6 +11,8 @@
 		listenCount
 	} from '#lib/format.ts';
 	import { withSource } from '#lib/source.ts';
+	import { coverUrl, coversShown } from '#lib/covers.svelte.ts';
+	import Cover from '#lib/components/Cover.svelte';
 	import Fill from '#lib/i18n/Fill.svelte';
 	import { m } from '#lib/i18n/index.ts';
 	import type { PageProps } from './$types';
@@ -34,6 +36,9 @@
 		entityPath(data.base, 'album', entry.id, entry.name) + keep;
 	const trackHref = (entry: ChartEntry) =>
 		entityPath(data.base, 'track', entry.id, entry.name) + keep;
+	const albumCover = $derived(
+		coversShown() ? (entry: ChartEntry) => coverUrl(data.api, entry.id) : undefined
+	);
 </script>
 
 <svelte:head>
@@ -42,38 +47,51 @@
 
 <main class="mx-auto max-w-6xl px-4 pb-16 sm:px-8">
 	<header class="mt-6">
-		<p class="text-sm text-stone-500">
-			<a class="hover:text-stone-900 hover:underline" href={data.base + keep}
-				>{profile.username}{#if profile.slug !== 'default'}&nbsp;/ {profile.name}{/if}</a
-			>
-			· {m.entity.kinds[data.kind]}
-			{#if entity.mbids.length === 1}
-				· <a class="hover:text-stone-900 hover:underline" href={musicBrainz(entity.mbids[0])}
-					>MusicBrainz</a
-				>
-			{:else if entity.mbids.length > 1}
-				· MusicBrainz:
-				{#each entity.mbids as mbid, i (mbid)}
-					<a
-						class="hover:text-stone-900 hover:underline"
-						href={musicBrainz(mbid)}
-						aria-label={m.entity.musicBrainzOf(i + 1, entity.mbids.length)}>{i + 1}</a
-					>{i < entity.mbids.length - 1 ? ', ' : ''}
-				{/each}
+		<div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-6">
+			{#if data.kind === 'album' && coversShown()}
+				<Cover
+					src={coverUrl(data.api, entity.id)}
+					srcset="{coverUrl(data.api, entity.id)} 1x, {coverUrl(data.api, entity.id, 500)} 2x"
+					name={entity.name}
+					alt={m.entity.coverOf(entity.name)}
+					class="size-40 text-6xl shadow-sm sm:size-48"
+				/>
 			{/if}
-		</p>
-		<h1 class="mt-1 text-3xl font-bold">{entity.name}</h1>
-		{#if entity.artist}
-			<p class="mt-1 text-lg text-stone-600">
-				<Fill text={m.entity.by}>
-					{#snippet artist()}<a
-							class="font-medium text-stone-900 hover:underline"
-							href={entityPath(data.base, 'artist', entity.artist!.id, entity.artist!.name) + keep}
-							>{entity.artist!.name}</a
-						>{/snippet}
-				</Fill>
-			</p>
-		{/if}
+			<div class="min-w-0">
+				<p class="text-sm text-stone-500">
+					<a class="hover:text-stone-900 hover:underline" href={data.base + keep}
+						>{profile.username}{#if profile.slug !== 'default'}&nbsp;/ {profile.name}{/if}</a
+					>
+					· {m.entity.kinds[data.kind]}
+					{#if entity.mbids.length === 1}
+						· <a class="hover:text-stone-900 hover:underline" href={musicBrainz(entity.mbids[0])}
+							>MusicBrainz</a
+						>
+					{:else if entity.mbids.length > 1}
+						· MusicBrainz:
+						{#each entity.mbids as mbid, i (mbid)}
+							<a
+								class="hover:text-stone-900 hover:underline"
+								href={musicBrainz(mbid)}
+								aria-label={m.entity.musicBrainzOf(i + 1, entity.mbids.length)}>{i + 1}</a
+							>{i < entity.mbids.length - 1 ? ', ' : ''}
+						{/each}
+					{/if}
+				</p>
+				<h1 class="mt-1 text-3xl font-bold">{entity.name}</h1>
+				{#if entity.artist}
+					<p class="mt-1 text-lg text-stone-600">
+						<Fill text={m.entity.by}>
+							{#snippet artist()}<a
+									class="font-medium text-stone-900 hover:underline"
+									href={entityPath(data.base, 'artist', entity.artist!.id, entity.artist!.name) +
+										keep}>{entity.artist!.name}</a
+								>{/snippet}
+						</Fill>
+					</p>
+				{/if}
+			</div>
+		</div>
 		<SourcePicker sources={data.sources} />
 		<dl class="mt-5 flex flex-wrap gap-x-10 gap-y-3">
 			<div>
@@ -139,6 +157,7 @@
 				entries={entity.releases}
 				href={albumHref}
 				hideArtist={entity.name}
+				cover={albumCover}
 			/>
 			<Chart
 				title={m.common.tracks}
@@ -159,6 +178,7 @@
 				entries={entity.releases}
 				href={albumHref}
 				hideArtist={entity.artist?.name}
+				cover={albumCover}
 			/>
 		{/if}
 	</div>

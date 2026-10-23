@@ -21,6 +21,7 @@
 	import { m } from '#lib/i18n/index.ts';
 	import { comparisonLabel, localDay, parseDay } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
+	import { coverUrl, coversShown } from '#lib/covers.svelte.ts';
 	import { wallClock, wallDay } from '#lib/zone.svelte.ts';
 	import type { PageProps } from './$types';
 
@@ -36,6 +37,9 @@
 	const entryHref = (kind: EntityKind, id: number, name: string) =>
 		entityPath(data.base, kind, id, name) + keep;
 	const link = (kind: EntityKind) => (entry: ChartEntry) => entryHref(kind, entry.id, entry.name);
+	const albumCover = $derived(
+		coversShown() ? (entry: ChartEntry) => coverUrl(data.api, entry.id) : undefined
+	);
 	// The next places of a chart, for "Show more".
 	const more = (kind: ChartKind) => (offset: number, limit: number) =>
 		getJson<ChartEntry[]>(fetch, `${data.api}/top/${kind}`, { ...data.query, offset, limit });
@@ -226,6 +230,7 @@
 				entries={data.releases}
 				href={link('album')}
 				more={more('releases')}
+				cover={albumCover}
 			/>
 			<Chart
 				title={m.common.topTracks}

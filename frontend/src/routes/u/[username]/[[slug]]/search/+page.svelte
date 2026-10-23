@@ -4,6 +4,7 @@
 	import Chart from '#lib/components/Chart.svelte';
 	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import { withSource } from '#lib/source.ts';
+	import { coverUrl, coversShown } from '#lib/covers.svelte.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import type { PageProps } from './$types';
 
@@ -28,6 +29,9 @@
 
 	const link = (kind: EntityKind) => (entry: ChartEntry) =>
 		entityPath(data.base, kind, entry.id, entry.name) + withSource('', data.source);
+	const albumCover = $derived(
+		coversShown() ? (entry: ChartEntry) => coverUrl(data.api, entry.id) : undefined
+	);
 	const nothing = $derived(
 		data.found.artists.length + data.found.releases.length + data.found.recordings.length === 0
 	);
@@ -70,7 +74,12 @@
 	{:else if data.q}
 		<div class="mt-8 grid gap-8 md:grid-cols-3">
 			<Chart title={m.common.artists} entries={data.found.artists} href={link('artist')} />
-			<Chart title={m.common.albums} entries={data.found.releases} href={link('album')} />
+			<Chart
+				title={m.common.albums}
+				entries={data.found.releases}
+				href={link('album')}
+				cover={albumCover}
+			/>
 			<Chart title={m.common.tracks} entries={data.found.recordings} href={link('track')} />
 		</div>
 	{:else}

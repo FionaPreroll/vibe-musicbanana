@@ -29,7 +29,7 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 				: Promise.resolve<SearchResult>({ artists: [], releases: [], recordings: [] }),
 			getJson<Source[]>(fetch, `${api}/sources`)
 		]);
-		return { base: profilePath(params.username, slug), overview, q, source, found, sources };
+		return { base: profilePath(params.username, slug), api, overview, q, source, found, sources };
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) {
 			await followRename(fetch, params.username, params.slug ?? 'default', url);

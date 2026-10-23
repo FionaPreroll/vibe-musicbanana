@@ -284,6 +284,7 @@ const de: Messages = {
 	entity: {
 		kinds: { artist: 'Künstler', album: 'Album', track: 'Titel' },
 		musicBrainzOf: (i, count) => `MusicBrainz ${i} von ${count}`,
+		coverOf: (album) => `Cover von „${album}“`,
 		by: 'von {artist}',
 		listens: 'Wiedergaben',
 		firstListen: 'Zuerst gehört',

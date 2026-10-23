@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ChartEntry } from '#lib/api.ts';
 	import { formatNumber } from '#lib/format.ts';
+	import Cover from '#lib/components/Cover.svelte';
 	import { m } from '#lib/i18n/index.ts';
 	import { movement } from '#lib/movement.ts';
 
@@ -9,6 +10,7 @@
 		entries,
 		href,
 		hideArtist,
+		cover,
 		more,
 		pageSize = 20
 	}: {
@@ -18,6 +20,8 @@
 		href?: (entry: ChartEntry) => string;
 		/** Leaves out this artist's name, e.g. on the artist's own page. */
 		hideArtist?: string;
+		/** Album covers before the names, see covers.svelte.ts. */
+		cover?: (entry: ChartEntry) => string | null;
 		/** Loads the next places from `offset` on; adds "Show more" below the chart. */
 		more?: (offset: number, limit: number) => Promise<ChartEntry[]>;
 		/** How many places "Show more" adds. */
@@ -89,13 +93,16 @@
 					<svelte:element
 						this={href ? 'a' : 'div'}
 						href={href?.(entry)}
-						class="relative flex items-baseline gap-2 px-2 py-1 {href
+						class="relative flex {cover ? 'items-center' : 'items-baseline'} gap-2 px-2 py-1 {href
 							? 'hover:bg-stone-900/5'
 							: ''}"
 					>
 						<span class="w-6 shrink-0 text-right text-xs text-stone-400 tabular-nums"
 							>{entry.rank ?? i + 1}</span
 						>
+						{#if cover}
+							<Cover src={cover(entry)} name={entry.name} class="size-7 text-xs" />
+						{/if}
 						<span class="min-w-0 flex-1 truncate" title={entry.name}>
 							{entry.name}
 							{#if entry.artist && entry.artist !== hideArtist}<span class="text-stone-500">
