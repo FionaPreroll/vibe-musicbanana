@@ -141,6 +141,14 @@ pub struct Covers {
     searches: OnceLock<mpsc::UnboundedSender<Search>>,
 }
 
+/// What [`Covers::looked_up`] knows about an album without an ID.
+pub enum Lookup {
+    /// Searched: the release group found, if any.
+    Done(Option<Uuid>),
+    /// The search is still to come.
+    Queued,
+}
+
 /// An album to look up at MusicBrainz.
 struct Search {
     key: String,
@@ -272,22 +280,22 @@ impl Covers {
     }
 
     /// The release group a search by artist and title found, if one was made.
-    /// Otherwise the search is queued, and `Err(())` says to ask again later.
-    pub async fn looked_up(&self, artist: &str, title: &str) -> Result<Option<Uuid>, ()> {
+    /// Otherwise the search is queued, to ask again later.
+    pub async fn looked_up(&self, artist: &str, title: &str) -> Lookup {
         let key = search_key(artist, title);
         let file = self.search_file(&key);
         if let Ok(text) = tokio::fs::read(&file).await
             && let Ok(found) = serde_json::from_slice::<Found>(&text)
             && (found.mbid.is_some() || fresh(&file).await)
         {
-            return Ok(found.mbid);
+            return Lookup::Done(found.mbid);
         }
         self.queue(Search {
             key,
             artist: artist.to_owned(),
             title: title.to_owned(),
         });
-        Err(())
+        Lookup::Queued
     }
 
     fn search_file(&self, key: &str) -> PathBuf {
@@ -556,8 +564,8 @@ async fn cover(
     let mut later = false;
     if mbids.is_empty() && covers.settings().lookup {
         match covers.looked_up(&release.artist, &release.title).await {
-            Ok(found) => mbids.extend(found),
-            Err(()) => later = true,
+            Lookup::Done(found) => mbids.extend(found),
+            Lookup::Queued => later = true,
         }
     }
     for mbid in mbids {
