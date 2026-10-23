@@ -77,6 +77,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
       - run: pnpm run check
+      # Unit and component tests with coverage, for Codecov.
+      - run: pnpm run test:coverage
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: frontend/coverage/lcov.info
+          flags: frontend
       - run: pnpm run build
 
   docker:
