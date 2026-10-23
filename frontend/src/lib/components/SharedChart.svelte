@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { SharedEntry } from '#lib/api.ts';
 	import { formatNumber } from '#lib/format.ts';
+	import { m } from '#lib/i18n/index.ts';
 
 	let {
 		title,
@@ -24,7 +25,7 @@
 <section>
 	<h2 class="mb-2 text-sm font-semibold tracking-wide text-stone-500 uppercase">{title}</h2>
 	{#if entries.length === 0}
-		<p class="text-sm text-stone-500">Nothing in common.</p>
+		<p class="text-sm text-stone-500">{m.compare.nothingShared}</p>
 	{:else}
 		<ol class="space-y-1">
 			{#each entries as entry, i (entry.id)}

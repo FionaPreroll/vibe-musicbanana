@@ -303,6 +303,41 @@ const de: Messages = {
 		hint: 'Jedes Wort zählt, egal ob groß oder klein, mit oder ohne Akzente: „ärzte unrockbar“ findet den Titel.'
 	},
 
+	compare: {
+		button: 'Vergleichen',
+		crumb: 'Vergleich',
+		pickTitle: (username) => `Vergleich · ${username}`,
+		pickHeading: 'Vergleichen mit …',
+		pickIntro:
+			'Sieh dir an, was zwei Profile beide hören, wie sehr sich ihr Geschmack deckt und was jedes beim anderen entdecken könnte.',
+		yourProfiles: 'Deine Profile',
+		otherProfiles: 'Andere Profile',
+		profiles: 'Profile',
+		noOthers: 'Es gibt kein anderes Profil mit Wiedergaben, mit dem du vergleichen könntest.',
+		title: (a, b) => `${a} und ${b} · Vergleich`,
+		swap: '⇄ Tauschen',
+		swapTitle: 'Seiten tauschen',
+		overlap: 'Übereinstimmung',
+		levels: {
+			twins: 'Musikalische Zwillinge',
+			verySimilar: 'Sehr ähnlicher Geschmack',
+			similar: 'Ähnlicher Geschmack',
+			some: 'Einiges gemeinsam',
+			little: 'Wenig gemeinsam',
+			nothing: 'Nichts gemeinsam'
+		},
+		scoreNote: (period) =>
+			`Anteil ihrer Wiedergaben, der auf dieselben Künstler entfällt · ${period}`,
+		artists: (count) => `${n(count)} Künstler`,
+		inCommon: (artists, albums, tracks) =>
+			`${n(artists)} Künstler · ${n(albums)} ${plural(albums, { one: 'Album', other: 'Alben' })} · ${n(tracks)} Titel gemeinsam`,
+		both: 'Hören beide',
+		onlyOne: 'Nur einer von beiden',
+		onlyIntro: 'Künstler, die das andere Profil nie gehört hat.',
+		only: (name) => `Nur ${name}`,
+		allArtists: (count) => `${n(count)} Künstler insgesamt`,
+		nothingShared: 'Nichts gemeinsam.'
+	},
 	review: {
 		title: (year) => `Jahresrückblick ${year}`,
 		crumb: 'Jahresrückblick',
@@ -683,6 +718,7 @@ const de: Messages = {
 			`„${slug}“ geht nicht als Profiladresse: erlaubt sind bis zu 32 Kleinbuchstaben, Ziffern und Bindestriche.`,
 		slugReserved: (slug) => `„${slug}“ ist für die Seiten eines Profils reserviert.`,
 		ownProfile: () => 'Das ist dein eigenes Profil.',
+		compareWithItself: () => 'Ein Profil lässt sich nicht mit sich selbst vergleichen.',
 		pickListens: () => 'Wähle Wiedergaben aus oder grenze den Verlauf zuerst ein.',
 		unknownTimeZone: (zone) => `Unbekannte Zeitzone: ${zone}`,
 		unknownLanguage: (code) => `Unbekannte Sprache: ${code}`,

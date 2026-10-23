@@ -276,6 +276,10 @@ describe('the backend’s messages', () => {
 		],
 		['that is your own profile', 'Das ist dein eigenes Profil.'],
 		[
+			'a profile cannot be compared with itself',
+			'Ein Profil lässt sich nicht mit sich selbst vergleichen.'
+		],
+		[
 			'pick listens, or narrow the history down first',
 			'Wähle Wiedergaben aus oder grenze den Verlauf zuerst ein.'
 		],

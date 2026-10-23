@@ -4,7 +4,8 @@
 	import PeriodPicker from '#lib/components/PeriodPicker.svelte';
 	import SharedChart from '#lib/components/SharedChart.svelte';
 	import { combinedYears, comparePath, earliest, latest, scoreLabel } from '#lib/compare.ts';
-	import { formatNumber, formatPercent, listenCount } from '#lib/format.ts';
+	import { formatPercent, listenCount } from '#lib/format.ts';
+	import { m } from '#lib/i18n/index.ts';
 	import { periodLabel, periodSearch } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
 	import type { PageProps } from './$types';
@@ -31,7 +32,7 @@
 </script>
 
 <svelte:head>
-	<title>{names[0]} and {names[1]} · Compare · musicbanana</title>
+	<title>{m.compare.title(names[0], names[1])} · musicbanana</title>
 </svelte:head>
 
 {#snippet side(info: CompareSide, base: string, color: string)}
@@ -44,8 +45,7 @@
 			<span class="truncate">{label(info)}</span>
 		</a>
 		<p class="mt-0.5 text-sm text-stone-600">
-			{listenCount(info.listens)} · {formatNumber(info.artists)}
-			{info.artists === 1 ? 'artist' : 'artists'}
+			{listenCount(info.listens)} · {m.compare.artists(info.artists)}
 		</p>
 	</div>
 {/snippet}
@@ -53,7 +53,7 @@
 <main class="mx-auto max-w-6xl px-4 pb-16 sm:px-8">
 	<p class="mt-6 text-sm text-stone-500">
 		<a class="hover:text-stone-900 hover:underline" href={baseA}>{names[0]}</a>
-		· <a class="hover:text-stone-900 hover:underline" href="{baseA}/compare">Compare</a>
+		· <a class="hover:text-stone-900 hover:underline" href="{baseA}/compare">{m.compare.crumb}</a>
 	</p>
 
 	<header class="mt-3 grid items-start gap-4 sm:grid-cols-[1fr_auto_1fr]">
@@ -61,24 +61,24 @@
 		<a
 			class="self-center justify-self-start rounded px-2 py-1 text-sm text-stone-600 hover:bg-stone-200 sm:justify-self-center"
 			href={swapped}
-			title="Swap sides">⇄ Swap</a
+			title={m.compare.swapTitle}>{m.compare.swap}</a
 		>
 		{@render side(c.b, baseB, '--series-3')}
 	</header>
 
-	<section class="mt-6 rounded-lg bg-yellow-100/70 px-4 py-4 sm:px-6" aria-label="Overlap">
+	<section
+		class="mt-6 rounded-lg bg-yellow-100/70 px-4 py-4 sm:px-6"
+		aria-label={m.compare.overlap}
+	>
 		<p class="flex flex-wrap items-baseline gap-x-3">
 			<span class="text-5xl font-bold tabular-nums">{formatPercent(c.score)}</span>
 			<span class="text-xl font-semibold">{scoreLabel(c.score)}</span>
 		</p>
 		<p class="mt-1 text-sm text-stone-600">
-			Share of their listening that goes to the same artists · {periodLabel(data.period)}
+			{m.compare.scoreNote(periodLabel(data.period))}
 		</p>
 		<p class="mt-2 text-sm text-stone-700">
-			{formatNumber(c.shared.artists)}
-			{c.shared.artists === 1 ? 'artist' : 'artists'} · {formatNumber(c.shared.releases)}
-			{c.shared.releases === 1 ? 'album' : 'albums'} · {formatNumber(c.shared.recordings)}
-			{c.shared.recordings === 1 ? 'track' : 'tracks'} in common
+			{m.compare.inCommon(c.shared.artists, c.shared.releases, c.shared.recordings)}
 		</p>
 	</section>
 
@@ -89,29 +89,44 @@
 		last={latest(overviewA.last_listened_at, overviewB.last_listened_at)}
 	/>
 
-	<h2 class="mt-10 text-lg font-semibold">Both listen to</h2>
+	<h2 class="mt-10 text-lg font-semibold">{m.compare.both}</h2>
 	<div class="mt-3 grid gap-8 md:grid-cols-3">
-		<SharedChart title="Artists" entries={c.artists} {names} href={shared(baseA, 'artist')} />
-		<SharedChart title="Albums" entries={c.releases} {names} href={shared(baseA, 'album')} />
-		<SharedChart title="Tracks" entries={c.recordings} {names} href={shared(baseA, 'track')} />
+		<SharedChart
+			title={m.common.artists}
+			entries={c.artists}
+			{names}
+			href={shared(baseA, 'artist')}
+		/>
+		<SharedChart
+			title={m.common.albums}
+			entries={c.releases}
+			{names}
+			href={shared(baseA, 'album')}
+		/>
+		<SharedChart
+			title={m.common.tracks}
+			entries={c.recordings}
+			{names}
+			href={shared(baseA, 'track')}
+		/>
 	</div>
 
-	<h2 class="mt-12 text-lg font-semibold">Only one of them</h2>
-	<p class="mt-1 text-sm text-stone-600">Artists the other profile has never listened to.</p>
+	<h2 class="mt-12 text-lg font-semibold">{m.compare.onlyOne}</h2>
+	<p class="mt-1 text-sm text-stone-600">{m.compare.onlyIntro}</p>
 	<div class="mt-3 grid gap-8 md:grid-cols-2">
 		<div>
-			<Chart title="Only {names[0]}" entries={c.a.only} href={artistOf(baseA)} />
+			<Chart title={m.compare.only(names[0])} entries={c.a.only} href={artistOf(baseA)} />
 			{#if c.a.only_count > c.a.only.length}
 				<p class="mt-1 px-2 text-sm text-stone-500">
-					{formatNumber(c.a.only_count)} artists in all
+					{m.compare.allArtists(c.a.only_count)}
 				</p>
 			{/if}
 		</div>
 		<div>
-			<Chart title="Only {names[1]}" entries={c.b.only} href={artistOf(baseB)} />
+			<Chart title={m.compare.only(names[1])} entries={c.b.only} href={artistOf(baseB)} />
 			{#if c.b.only_count > c.b.only.length}
 				<p class="mt-1 px-2 text-sm text-stone-500">
-					{formatNumber(c.b.only_count)} artists in all
+					{m.compare.allArtists(c.b.only_count)}
 				</p>
 			{/if}
 		</div>

@@ -8,6 +8,7 @@ import {
 	type Overview,
 	type ProfileSummary
 } from '#lib/api.ts';
+import { m } from '#lib/i18n/index.ts';
 import type { PageLoad } from './$types';
 
 // /u/<username>/compare: which profile to compare this one with. The viewer's
@@ -35,7 +36,7 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) {
 			await followRename(fetch, params.username, slug, url);
-			error(404, 'There is no such profile.');
+			error(404, m.errors.noProfile);
 		}
 		throw e;
 	}

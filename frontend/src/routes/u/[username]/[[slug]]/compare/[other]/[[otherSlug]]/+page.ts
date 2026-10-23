@@ -11,6 +11,7 @@ import { compareApi } from '#lib/compare.ts';
 import { parsePeriod, periodQuery } from '#lib/period.ts';
 import { sourceOf } from '#lib/source.ts';
 import { timeZone } from '#lib/zone.svelte.ts';
+import { m } from '#lib/i18n/index.ts';
 import type { PageLoad } from './$types';
 
 // /u/<username>[/<slug>]/compare/<other>[/<other slug>]: two profiles side by
@@ -20,7 +21,7 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	const a: [string, string] = [params.username, params.slug ?? 'default'];
 	const b: [string, string] = [params.other, params.otherSlug ?? 'default'];
 	const period = parsePeriod(url.searchParams);
-	if (!period) error(400, 'Invalid period');
+	if (!period) error(400, m.errors.invalidPeriod);
 	const source = sourceOf(url);
 	const tz = timeZone();
 
@@ -44,7 +45,7 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 			bases: [profilePath(...a), profilePath(...b)] as const
 		};
 	} catch (e) {
-		if (e instanceof ApiError && e.status === 404) error(404, 'There is no such profile.');
+		if (e instanceof ApiError && e.status === 404) error(404, m.errors.noProfile);
 		if (e instanceof ApiError && e.status === 400) error(400, e.message);
 		throw e;
 	}
