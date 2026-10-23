@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT username::text AS \"username!\", email::text AS \"email!\", is_admin,\n                  time_zone, week_start, show_streaks\n             FROM account WHERE id = $1",
+  "query": "SELECT username::text AS \"username!\", email::text AS \"email!\", is_admin, created_at,\n                  time_zone, week_start, show_streaks, language\n             FROM account WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -28,6 +28,17 @@
       },
       {
         "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
         "name": "time_zone",
         "type_info": "Text",
         "origin": {
@@ -38,7 +49,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "week_start",
         "type_info": "Int2",
         "origin": {
@@ -49,13 +60,24 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "show_streaks",
         "type_info": "Bool",
         "origin": {
           "Table": {
             "table": "account",
             "name": "show_streaks"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "language",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "language"
           }
         }
       }
@@ -69,10 +91,12 @@
       null,
       null,
       false,
+      false,
       true,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "c08947fbc08d0c8f9da6541a63944359fec2dcdb5bb72561530b1425e3d1ddd4"
+  "hash": "8e6a02ff59a0a297039fec5c621e1b124cf3b5cafe9b16feb799b0eb42d38e13"
 }

@@ -3,6 +3,7 @@
 	// here; the browser remembers that pick. The script in app.html applies it before
 	// the first paint.
 	import { onMount } from 'svelte';
+	import { m } from '#lib/i18n/index.ts';
 
 	let dark = $state(false);
 
@@ -47,8 +48,8 @@
 	type="button"
 	class="cursor-pointer self-center text-stone-600 hover:text-stone-900"
 	aria-pressed={dark}
-	aria-label="Dark mode"
-	title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+	aria-label={m.nav.darkMode}
+	title={dark ? m.nav.toLight : m.nav.toDark}
 	onclick={toggle}
 >
 	{#if dark}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { errorMessage, profileApi, sendJson, type FollowInfo } from '#lib/api.ts';
+	import { m } from '#lib/i18n/index.ts';
 
 	// Follow, ask to follow, take the request back or stop following.
 	let { info, onchange }: { info: FollowInfo; onchange?: (info: FollowInfo) => void } = $props();
@@ -16,7 +17,7 @@
 			method === 'DELETE' &&
 			current === 'following' &&
 			info.visibility === 'followers' &&
-			!confirm(`Stop following? You won't see this profile until ${info.username} says yes again.`)
+			!confirm(m.follow.confirmStop(info.username))
 		) {
 			return;
 		}
@@ -39,14 +40,16 @@
 <span class="inline-flex flex-wrap items-baseline gap-2 text-sm">
 	{#if current === 'none'}
 		<button class={button} disabled={busy} onclick={() => act('PUT')}>
-			{info.visibility === 'followers' ? 'Ask to follow' : 'Follow'}
+			{info.visibility === 'followers' ? m.follow.ask : m.follow.follow}
 		</button>
 	{:else if current === 'requested'}
-		<span class="text-stone-600">Asked {info.username} to follow</span>
-		<button class={button} disabled={busy} onclick={() => act('DELETE')}>Take back</button>
+		<span class="text-stone-600">{m.follow.asked(info.username)}</span>
+		<button class={button} disabled={busy} onclick={() => act('DELETE')}>{m.follow.takeBack}</button
+		>
 	{:else}
-		<span class="text-stone-600">Following</span>
-		<button class={button} disabled={busy} onclick={() => act('DELETE')}>Unfollow</button>
+		<span class="text-stone-600">{m.follow.following}</span>
+		<button class={button} disabled={busy} onclick={() => act('DELETE')}>{m.follow.unfollow}</button
+		>
 	{/if}
 	{#if error}<span class="text-red-700" role="alert">{error}</span>{/if}
 </span>

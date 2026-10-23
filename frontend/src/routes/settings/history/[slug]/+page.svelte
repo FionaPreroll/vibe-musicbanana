@@ -10,9 +10,11 @@
 		type HistoryPage
 	} from '#lib/api.ts';
 	import ListenTime from '#lib/components/ListenTime.svelte';
-	import { byDay, formatDateTime, formatDay, formatNumber, listenCount } from '#lib/format.ts';
+	import { byDay, formatDateTime, formatDay, formatNumber } from '#lib/format.ts';
 	import { now } from '#lib/now.svelte.ts';
 	import { filterQuery } from '#lib/history.ts';
+	import Fill from '#lib/i18n/Fill.svelte';
+	import { m } from '#lib/i18n/index.ts';
 	import { sourceLabel } from '#lib/source.ts';
 	import type { PageProps } from './$types';
 
@@ -81,12 +83,11 @@
 	const toTrash = (body: object) =>
 		act(async () => {
 			const { ids } = await sendJson<{ ids: number[] }>(fetch, 'POST', `${data.api}/trash`, body);
-			return { message: `Moved ${listenCount(ids.length)} to the trash.`, undo: ids };
+			return { message: m.history.moved(ids.length), undo: ids };
 		});
 
 	function trashAllMatching() {
-		const n = listenCount(page.total);
-		if (!confirm(`Move all ${n} that match to the trash?`)) return;
+		if (!confirm(m.history.confirmMoveAll(page.total))) return;
 		toTrash(filterQuery(data.filter));
 	}
 
@@ -98,17 +99,11 @@
 				`${data.api}/trash/restore`,
 				{ ids }
 			);
-			return (
-				`Restored ${listenCount(restored)}.` +
-				(kept
-					? ` ${listenCount(kept)} stayed in the trash: the profile has another listen at that time now.`
-					: '')
-			);
+			return m.history.restored(restored, kept);
 		});
 
 	function deleteForGood(ids?: number[]) {
-		const n = listenCount(ids?.length ?? data.inTrash.total);
-		if (!confirm(`Delete ${n} for good? This can't be undone.`)) return;
+		if (!confirm(m.history.confirmDelete(ids?.length ?? data.inTrash.total))) return;
 		act(async () => {
 			const { deleted } = await sendJson<{ deleted: number }>(
 				fetch,
@@ -116,7 +111,7 @@
 				`${data.api}/trash/empty`,
 				{ ids }
 			);
-			return `Deleted ${listenCount(deleted)} for good.`;
+			return m.history.deleted(deleted);
 		});
 	}
 
@@ -127,106 +122,108 @@
 </script>
 
 <svelte:head>
-	<title>Edit listening history · musicbanana</title>
+	<title>{m.history.title} · musicbanana</title>
 </svelte:head>
 
 <main class="mx-auto max-w-4xl px-4 pb-16 sm:px-8">
-	<p class="mt-6 text-sm"><a class="text-stone-600 underline" href="/settings">Settings</a></p>
-	<h1 class="mt-2 text-3xl font-bold">Edit listening history</h1>
+	<p class="mt-6 text-sm">
+		<a class="text-stone-600 underline" href="/settings">{m.settings.title}</a>
+	</p>
+	<h1 class="mt-2 text-3xl font-bold">{m.history.title}</h1>
 	<p class="mt-1 text-stone-600">
-		of
-		<a class="underline" href={profilePath(data.me!.username, data.profile.slug)}
-			>{profilePath(data.me!.username, data.profile.slug)}</a
-		>. Listens in the trash leave the charts and every page, and stay there until you restore them
-		or empty the trash. A player or an import sending them again doesn't bring them back.
+		<Fill text={m.history.intro}>
+			{#snippet profile()}<a
+					class="underline"
+					href={profilePath(data.me!.username, data.profile.slug)}
+					>{profilePath(data.me!.username, data.profile.slug)}</a
+				>{/snippet}
+		</Fill>
 	</p>
 
 	<nav class="mt-8 flex gap-6 border-b border-stone-200">
 		<a
 			class="{tab} {data.trash ? 'border-transparent text-stone-500' : 'border-stone-900'}"
 			href="?"
-			aria-current={data.trash ? undefined : 'page'}>Listens</a
+			aria-current={data.trash ? undefined : 'page'}>{m.history.listens}</a
 		>
 		<a
 			class="{tab} {data.trash ? 'border-stone-900' : 'border-transparent text-stone-500'}"
 			href="?trash"
 			aria-current={data.trash ? 'page' : undefined}
-			>Trash <span class="text-stone-500 tabular-nums">{formatNumber(data.inTrash.total)}</span></a
+			>{m.history.trash}
+			<span class="text-stone-500 tabular-nums">{formatNumber(data.inTrash.total)}</span></a
 		>
 	</nav>
 
 	{#if !data.trash}
 		<form class="mt-4 flex flex-wrap items-end gap-3" method="GET">
 			<label class="flex min-w-48 flex-1 flex-col gap-1 text-sm">
-				<span>Words</span>
+				<span>{m.history.words}</span>
 				<input
 					class={input}
 					name="q"
 					type="search"
-					placeholder="Artist, track or album"
+					placeholder={m.history.placeholder}
 					value={data.filter.q}
 				/>
 			</label>
 			<label class="flex flex-col gap-1 text-sm">
-				<span>From</span>
+				<span>{m.common.from}</span>
 				<input class={input} name="from" type="datetime-local" value={data.filter.from} />
 			</label>
 			<label class="flex flex-col gap-1 text-sm">
-				<span>To</span>
+				<span>{m.common.to}</span>
 				<input class={input} name="to" type="datetime-local" value={data.filter.to} />
 			</label>
 			<label class="flex flex-col gap-1 text-sm">
-				<span>Source</span>
+				<span>{m.history.source}</span>
 				<select class={input} name="source" value={data.filter.source}>
-					<option value="">All sources</option>
+					<option value="">{m.source.all}</option>
 					{#each data.sources as s (s.source)}
 						<option value={s.source}>{sourceLabel(s.source)}</option>
 					{/each}
 				</select>
 			</label>
-			<button class={button}>Show</button>
-			{#if filtered}<a class="pb-1.5 text-sm text-stone-600 underline" href="?">Clear</a>{/if}
+			<button class={button}>{m.common.show}</button>
+			{#if filtered}<a class="pb-1.5 text-sm text-stone-600 underline" href="?">{m.history.clear}</a
+				>{/if}
 		</form>
 	{/if}
 
 	<div class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
 		<span class="text-stone-600">
-			{#if data.trash}
-				{listenCount(page.total)} in the trash.
-			{:else}
-				{listenCount(page.total)}{filtered ? ' match' : ''}.
-			{/if}
-			{#if selected.size}{formatNumber(selected.size)} selected.{/if}
+			{data.trash ? m.history.inTrash(page.total) : m.history.total(page.total, filtered)}
+			{#if selected.size}{m.history.selected(selected.size)}{/if}
 		</span>
 		<span class="ml-auto flex flex-wrap gap-2">
 			{#if data.trash}
 				<button
 					class={button}
 					disabled={busy || !selected.size}
-					onclick={() => restore([...selected])}>Restore selected</button
+					onclick={() => restore([...selected])}>{m.history.restoreSelected}</button
 				>
 				<button class={button} disabled={busy || !page.total} onclick={() => restore()}
-					>Restore all</button
+					>{m.history.restoreAll}</button
 				>
 				<button
 					class="{button} text-red-800"
 					disabled={busy || !selected.size}
-					onclick={() => deleteForGood([...selected])}>Delete selected for good</button
+					onclick={() => deleteForGood([...selected])}>{m.history.deleteSelected}</button
 				>
 				<button
 					class="{button} text-red-800"
 					disabled={busy || !page.total}
-					onclick={() => deleteForGood()}>Empty the trash</button
+					onclick={() => deleteForGood()}>{m.history.emptyTrash}</button
 				>
 			{:else}
 				<button
 					class={button}
 					disabled={busy || !selected.size}
-					onclick={() => toTrash({ ids: [...selected] })}>Move selected to the trash</button
+					onclick={() => toTrash({ ids: [...selected] })}>{m.history.moveSelected}</button
 				>
 				{#if filtered && page.total > 0}
 					<button class={button} disabled={busy} onclick={trashAllMatching}
-						>Move all {formatNumber(page.total)} to the trash</button
+						>{m.history.moveAll(page.total)}</button
 					>
 				{/if}
 			{/if}
@@ -239,7 +236,7 @@
 			{done.message}
 			{#if done.undo?.length}
 				<button class="ml-1 underline" disabled={busy} onclick={() => restore(done!.undo)}
-					>Undo</button
+					>{m.common.undo}</button
 				>
 			{/if}
 		</p>
@@ -247,7 +244,7 @@
 
 	{#if shown.length === 0}
 		<p class="mt-6 text-sm text-stone-500">
-			{data.trash ? 'The trash is empty.' : 'No listens.'}
+			{data.trash ? m.history.trashEmpty : m.history.noListens}
 		</p>
 	{:else}
 		<div class="mt-4 overflow-x-auto">
@@ -257,15 +254,15 @@
 						<th class="w-8 py-2 pr-2">
 							<input
 								type="checkbox"
-								aria-label="Select all shown"
+								aria-label={m.history.selectAll}
 								checked={allShownSelected}
 								onchange={toggleAll}
 							/>
 						</th>
-						<th class="py-2 pr-4 font-normal">Time</th>
-						<th class="py-2 pr-4 font-normal">Listen</th>
-						<th class="py-2 pr-4 font-normal">Source</th>
-						{#if data.trash}<th class="py-2 font-normal">Trashed</th>{/if}
+						<th class="py-2 pr-4 font-normal">{m.history.time}</th>
+						<th class="py-2 pr-4 font-normal">{m.history.listen}</th>
+						<th class="py-2 pr-4 font-normal">{m.history.source}</th>
+						{#if data.trash}<th class="py-2 font-normal">{m.history.trashed}</th>{/if}
 					</tr>
 				</thead>
 				{#each days as day (day.key)}
@@ -284,7 +281,7 @@
 								<td class="py-2 pr-2 align-top">
 									<input
 										type="checkbox"
-										aria-label="Select {l.artist} – {l.track}, {formatDateTime(l.listened_at)}"
+										aria-label={m.history.select(l.artist, l.track, formatDateTime(l.listened_at))}
 										checked={selected.has(l.id)}
 										onchange={(e) =>
 											e.currentTarget.checked ? selected.add(l.id) : selected.delete(l.id)}
@@ -314,7 +311,7 @@
 			</table>
 		</div>
 		{#if next}
-			<button class="{button} mt-4" disabled={busy} onclick={showMore}>Show more</button>
+			<button class="{button} mt-4" disabled={busy} onclick={showMore}>{m.common.showMore}</button>
 		{/if}
 	{/if}
 </main>

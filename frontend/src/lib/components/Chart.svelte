@@ -2,7 +2,8 @@
 	import type { ChartEntry } from '#lib/api.ts';
 	import { formatNumber } from '#lib/format.ts';
 	import Cover from '#lib/components/Cover.svelte';
-	import { movement, movementText as text } from '#lib/movement.ts';
+	import { m } from '#lib/i18n/index.ts';
+	import { movement } from '#lib/movement.ts';
 
 	let {
 		title,
@@ -79,7 +80,7 @@
 <section class="min-w-0">
 	<h2 class="mb-2 text-sm font-semibold tracking-wide text-stone-500 uppercase">{title}</h2>
 	{#if entries.length === 0}
-		<p class="text-sm text-stone-500">{text.empty}</p>
+		<p class="text-sm text-stone-500">{m.chart.nothing}</p>
 	{:else}
 		<ol class="space-y-0.5">
 			{#each shown as entry, i (entry.id)}
@@ -113,12 +114,12 @@
 								class="w-8 shrink-0 text-right text-xs tabular-nums"
 								data-movement={move.kind}
 								title={move.kind === 'new'
-									? text.newTitle
+									? m.chart.newTitle
 									: move.kind === 'same'
-										? text.sameTitle
+										? m.chart.sameTitle
 										: move.kind === 'up'
-											? text.upTitle(move.places, entry.previous_rank ?? 0)
-											: text.downTitle(move.places, entry.previous_rank ?? 0)}
+											? m.chart.upTitle(move.places, entry.previous_rank ?? 0)
+											: m.chart.downTitle(move.places, entry.previous_rank ?? 0)}
 							>
 								{#if move.kind === 'up'}
 									<span class="text-green-800">↑{move.places}</span>
@@ -127,10 +128,10 @@
 								{:else if move.kind === 'new'}
 									<span
 										class="rounded bg-yellow-300/70 px-1 text-[0.65rem] font-semibold tracking-wide text-stone-900 uppercase"
-										>{text.new}</span
+										>{m.chart.new}</span
 									>
 								{:else}
-									<span class="text-stone-400">{text.same}</span>
+									<span class="text-stone-400">{m.chart.same}</span>
 								{/if}
 							</span>
 						{/if}
@@ -146,15 +147,15 @@
 						type="button"
 						class="font-medium text-stone-600 hover:text-stone-900 disabled:opacity-60"
 						disabled={loading}
-						onclick={loadMore}>{loading ? text.loading : text.showMore}</button
+						onclick={loadMore}>{loading ? m.chart.loading : m.chart.showMore}</button
 					>
 				{/if}
 				{#if extra.length}
 					<button type="button" class="text-stone-500 hover:text-stone-900" onclick={showLess}
-						>{text.showLess}</button
+						>{m.chart.showLess}</button
 					>
 				{/if}
-				{#if failed}<span class="text-red-700">{text.failed}</span>{/if}
+				{#if failed}<span class="text-red-700">{m.chart.failed}</span>{/if}
 			</div>
 		{/if}
 	{/if}

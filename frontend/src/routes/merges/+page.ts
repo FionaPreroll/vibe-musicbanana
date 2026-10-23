@@ -6,6 +6,7 @@ import {
 	type MergeLog,
 	type MergeSuggestions
 } from '#lib/api.ts';
+import { m } from '#lib/i18n/index.ts';
 import type { PageLoad } from './$types';
 
 const kinds: CatalogKind[] = ['artist', 'release', 'recording'];
@@ -23,7 +24,7 @@ export const load: PageLoad = async ({ parent, url, fetch }) => {
 		]);
 		return { kind, suggestions, log };
 	} catch (e) {
-		if (e instanceof ApiError && e.status === 403) error(403, 'Merges are for admins.');
+		if (e instanceof ApiError && e.status === 403) error(403, m.errors.mergesForAdmins);
 		throw e;
 	}
 };

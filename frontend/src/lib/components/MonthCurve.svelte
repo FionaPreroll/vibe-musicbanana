@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Month, Phase } from '#lib/api.ts';
 	import { formatMonth, listenCount } from '#lib/format.ts';
+	import { m } from '#lib/i18n/index.ts';
 
 	let { months, phases }: { months: Month[]; phases: Phase[] } = $props();
 
@@ -84,9 +85,10 @@
 			viewBox="0 0 {layout.total} 100"
 			preserveAspectRatio="none"
 			role="img"
-			aria-label="Listens per month from {formatMonth(months[0].month)} to {formatMonth(
-				months[months.length - 1].month
-			)}"
+			aria-label={m.monthCurve.label(
+				formatMonth(months[0].month),
+				formatMonth(months[months.length - 1].month)
+			)}
 		>
 			{#each bands as band (band.from)}
 				<rect class="fill-yellow-100" x={band.from} width={band.length} y="0" height="100" />
@@ -114,7 +116,7 @@
 					/>
 				{/each}
 				<rect class="fill-transparent" x={b.slot} width={b.slots} y="0" height="100">
-					<title>No listens between {formatMonth(b.after)} and {formatMonth(b.before)}</title>
+					<title>{m.monthCurve.gap(formatMonth(b.after), formatMonth(b.before))}</title>
 				</rect>
 			{/each}
 			{#each months as m, i (m.month)}

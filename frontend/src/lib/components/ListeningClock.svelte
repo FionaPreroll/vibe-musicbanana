@@ -1,22 +1,27 @@
 <script lang="ts">
 	import type { Clock } from '#lib/api.ts';
-	import { formatPercent, listenCount } from '#lib/format.ts';
+	import { dates, formatPercent, listenCount } from '#lib/format.ts';
+	import { m } from '#lib/i18n/index.ts';
 	import { timeZone, weekStart } from '#lib/zone.svelte.ts';
 
 	let { clock }: { clock: Clock } = $props();
 
 	// Monday 2024-01-01 and the days after it name the weekdays, Monday first like the API.
 	const day = (i: number, hour = 0) => new Date(2024, 0, 1 + i, hour);
-	const shortWeekday = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
-	const longWeekday = new Intl.DateTimeFormat(undefined, { weekday: 'long' });
-	const hourFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric' });
-	const weekdays = Array.from({ length: 7 }, (_, i) => ({
-		short: shortWeekday.format(day(i)),
-		long: longWeekday.format(day(i))
-	}));
+	const shortWeekday = dates({ weekday: 'short' });
+	const longWeekday = dates({ weekday: 'long' });
+	const hourFormat = dates({ hour: 'numeric' });
+	const weekdays = $derived(
+		Array.from({ length: 7 }, (_, i) => ({
+			short: shortWeekday().format(day(i)),
+			long: longWeekday().format(day(i))
+		}))
+	);
 	/** E.g. "9 – 10 PM" or "21–22 Uhr". */
-	const hourRange = (hour: number) => hourFormat.formatRange(day(0, hour), day(0, hour + 1));
-	const axis = [0, 6, 12, 18].map((hour) => ({ hour, label: hourFormat.format(day(0, hour)) }));
+	const hourRange = (hour: number) => hourFormat().formatRange(day(0, hour), day(0, hour + 1));
+	const axis = $derived(
+		[0, 6, 12, 18].map((hour) => ({ hour, label: hourFormat().format(day(0, hour)) }))
+	);
 
 	const sum = (ns: number[]) => ns.reduce((a, b) => a + b, 0);
 	const dayTotals = $derived(clock.weekdays.map(sum));
@@ -53,19 +58,19 @@
 </script>
 
 <section class="max-w-3xl">
-	<h2 class="text-sm font-semibold tracking-wide text-stone-500 uppercase">Listening clock</h2>
-	<p class="text-sm text-stone-500">By weekday and hour, in {timeZone().replaceAll('_', ' ')}</p>
+	<h2 class="text-sm font-semibold tracking-wide text-stone-500 uppercase">{m.clock.heading}</h2>
+	<p class="text-sm text-stone-500">{m.clock.sub(timeZone().replaceAll('_', ' '))}</p>
 
 	<dl class="mt-3 grid grid-cols-2 gap-x-6 gap-y-4">
 		<div>
-			<dt class={label}>Busiest day</dt>
+			<dt class={label}>{m.clock.busiestDay}</dt>
 			<dd class="text-2xl font-semibold">{weekdays[busiestDay].long}</dd>
-			<dd class="text-sm text-stone-500">{share(dayTotals[busiestDay])} of the listens</dd>
+			<dd class="text-sm text-stone-500">{m.clock.share(share(dayTotals[busiestDay]))}</dd>
 		</div>
 		<div>
-			<dt class={label}>Busiest hour</dt>
+			<dt class={label}>{m.clock.busiestHour}</dt>
 			<dd class="text-2xl font-semibold tabular-nums">{hourRange(busiestHour)}</dd>
-			<dd class="text-sm text-stone-500">{share(hourTotals[busiestHour])} of the listens</dd>
+			<dd class="text-sm text-stone-500">{m.clock.share(share(hourTotals[busiestHour]))}</dd>
 		</div>
 	</dl>
 
@@ -73,8 +78,7 @@
 		<div
 			class="grid {columns} items-center gap-0.5"
 			role="img"
-			aria-label="Listens by weekday and hour; most on {weekdays[busiestDay]
-				.long} and at {hourRange(busiestHour)}"
+			aria-label={m.clock.label(weekdays[busiestDay].long, hourRange(busiestHour))}
 		>
 			<!-- Listens per hour over all weekdays. -->
 			<span></span>
@@ -115,12 +119,12 @@
 		</div>
 
 		<figcaption class="mt-2 flex items-center gap-1 text-xs text-stone-500">
-			Fewer
+			{m.clock.fewer}
 			<span class="size-2.5 rounded-sm bg-stone-200/60"></span>
 			{#each shades as s (s)}
 				<span class="size-2.5 rounded-sm {s}"></span>
 			{/each}
-			More listens
+			{m.clock.more}
 		</figcaption>
 	</figure>
 </section>
