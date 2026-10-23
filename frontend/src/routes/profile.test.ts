@@ -84,6 +84,10 @@ describe('profile page', () => {
 		layOut(800);
 		render(ProfilePage, { params: {} as never, data: data() });
 		expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('fiona');
+		expect(screen.getByRole('link', { name: 'Compare' })).toHaveAttribute(
+			'href',
+			'/u/fiona/compare'
+		);
 		expect(
 			screen.getByText(/2,048 listens\s+from Aug 12, 2007 to Oct 7, 2026/)
 		).toBeInTheDocument();
@@ -247,6 +251,23 @@ describe('profile page', () => {
 			'fiona / Work Followers only'
 		);
 		expect(screen.getByRole('button', { name: 'Ask to follow' })).toBeInTheDocument();
+	});
+
+	it('compares somebody else’s profile with the viewer’s, for the same period', () => {
+		vi.stubGlobal('fetch', routes());
+		render(ProfilePage, {
+			params: {} as never,
+			data: data({
+				me: { ...fixtures.me, username: 'alex' },
+				overview: { ...fixtures.overview, own: false },
+				period: { kind: 'year', year: 2010 },
+				source: 'Navidrome'
+			})
+		});
+		expect(screen.getByRole('link', { name: 'Compare' })).toHaveAttribute(
+			'href',
+			'/u/fiona/compare/alex?year=2010&source=Navidrome'
+		);
 	});
 
 	it('follows listens and now playing live', async () => {

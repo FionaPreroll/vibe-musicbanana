@@ -226,7 +226,7 @@ pub(crate) struct TopParams {
     #[serde(default, with = "day::option")]
     to: Option<Date>,
     pub(crate) tz: Option<String>,
-    limit: Option<i64>,
+    pub(crate) limit: Option<i64>,
     /// Places to skip, for the next page of a chart.
     offset: Option<i64>,
     /// Also give each entry its place in the period before, see `previous_period`.

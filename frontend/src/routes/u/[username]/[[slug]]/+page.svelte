@@ -20,6 +20,7 @@
 	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import VisibilityBadge from '#lib/components/VisibilityBadge.svelte';
 	import WeekGlance from '#lib/components/WeekGlance.svelte';
+	import { comparePath } from '#lib/compare.ts';
 	import { byDay, formatCalendarDay, formatDate, formatDay, listenCount } from '#lib/format.ts';
 	import { timeZone } from '#lib/zone.svelte.ts';
 	import { m } from '#lib/i18n/index.ts';
@@ -62,6 +63,16 @@
 			limit
 		});
 	const comparedWith = $derived(comparisonLabel(data.period));
+
+	// Straight to the viewer's default profile when there is one to compare with, for
+	// the same period.
+	const compareHref = $derived.by(() => {
+		const mine = data.me?.profiles[0];
+		const search = withSource(periodSearch(data.period), data.source);
+		return data.me && mine && !overview.own
+			? comparePath(data.base, data.me.username, mine.slug) + search
+			: `${data.base}/compare`;
+	});
 
 	// A profile nobody listened to lately keeps its page as it was.
 	const week = $derived(
@@ -200,9 +211,13 @@
 				>{/if}
 			<VisibilityBadge visibility={overview.visibility} />
 		</h1>
-		{#if data.follow}
-			<div class="mt-2"><FollowButton info={data.follow} /></div>
-		{/if}
+		<div class="mt-2 flex flex-wrap items-center gap-2">
+			{#if data.follow}<FollowButton info={data.follow} />{/if}
+			<a
+				class="rounded border border-stone-300 px-3 py-1 text-sm hover:bg-stone-100"
+				href={compareHref}>Compare</a
+			>
+		</div>
 		<p class="mt-1 text-stone-600">
 			{listenCount(overview.listens)}
 			{#if overview.first_listened_at && overview.last_listened_at}

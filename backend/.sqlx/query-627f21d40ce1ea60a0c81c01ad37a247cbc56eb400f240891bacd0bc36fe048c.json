@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH span AS (\n               SELECT coalesce($3::date::timestamp AT TIME ZONE $5, '-infinity') AS lo,\n                      coalesce(($4::date + 1)::timestamp AT TIME ZONE $5, 'infinity') AS hi\n           ), period AS (\n               SELECT l.profile_id, l.artist_id, l.release_id, l.recording_id\n                 FROM span, listen l\n                WHERE l.profile_id IN ($1, $2)\n                  AND l.listened_at >= span.lo AND l.listened_at < span.hi\n                  AND ($7::text IS NULL OR listen_source(l.client) = $7)\n           ), counted AS MATERIALIZED (\n               SELECT 'artist' AS kind, artist_id AS id,\n                      count(*) FILTER (WHERE profile_id = $1) AS a,\n                      count(*) FILTER (WHERE profile_id = $2) AS b\n                 FROM period\n                GROUP BY 2\n               UNION ALL\n               SELECT 'release', release_id,\n                      count(*) FILTER (WHERE profile_id = $1),\n                      count(*) FILTER (WHERE profile_id = $2)\n                 FROM period\n                WHERE release_id IS NOT NULL\n                GROUP BY 2\n               UNION ALL\n               SELECT 'recording', recording_id,\n                      count(*) FILTER (WHERE profile_id = $1),\n                      count(*) FILTER (WHERE profile_id = $2)\n                 FROM period\n                GROUP BY 2\n           ), totals AS MATERIALIZED (\n               SELECT sum(a)::float8 AS a, sum(b)::float8 AS b FROM counted WHERE kind = 'artist'\n           ), ranked AS (\n               SELECT c.kind, c.id, c.a, c.b,\n                      row_number() OVER (PARTITION BY c.kind\n                                         ORDER BY least(c.a / t.a, c.b / t.b) DESC, c.a + c.b DESC, c.id)\n                          AS rank,\n                      sum(least(c.a / t.a, c.b / t.b)) OVER (PARTITION BY c.kind) AS overlap,\n                      count(*) OVER (PARTITION BY c.kind) AS shared\n                 FROM counted c\n                CROSS JOIN totals t\n                WHERE c.a > 0 AND c.b > 0\n           ), top AS MATERIALIZED (\n               SELECT * FROM ranked WHERE rank <= $6\n           )\n           SELECT k.kind AS \"kind!\", k.id AS \"id!\", k.a AS \"a!\", k.b AS \"b!\",\n                  k.overlap AS \"overlap!\", k.shared AS \"shared!\",\n                  CASE k.kind\n                      WHEN 'artist' THEN (SELECT name FROM artist WHERE id = k.id)\n                      WHEN 'release' THEN (SELECT title FROM release WHERE id = k.id)\n                      ELSE (SELECT title FROM recording WHERE id = k.id)\n                  END AS \"name!\",\n                  CASE k.kind\n                      WHEN 'release' THEN (SELECT a.name FROM release r JOIN artist a ON a.id = r.artist_id\n                                            WHERE r.id = k.id)\n                      WHEN 'recording' THEN (SELECT a.name FROM recording r JOIN artist a ON a.id = r.artist_id\n                                              WHERE r.id = k.id)\n                  END AS \"artist?\"\n             FROM top k\n            ORDER BY k.kind, k.rank",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "id!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "a!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "b!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "overlap!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "shared!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "artist?",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Date",
+        "Date",
+        "Text",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "627f21d40ce1ea60a0c81c01ad37a247cbc56eb400f240891bacd0bc36fe048c"
+}
