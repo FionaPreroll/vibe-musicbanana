@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { errorMessage } from '#lib/api.ts';
+import { comparisonLabel } from '#lib/period.ts';
 import { formatDuration, formatNumber, listenCount, timeSince } from '#lib/format.ts';
 import de from './de.ts';
 import en from './en.ts';
@@ -130,6 +131,22 @@ describe('in German', () => {
 		);
 		expect(plural(1, { one: 'a', other: 'b' })).toBe('a');
 		expect(plural(0, { other: 'b' })).toBe('b');
+	});
+
+	it('describes how chart places moved', () => {
+		useLanguage('de');
+		expect(m.chart.upTitle(1, 4)).toBe('1 Platz hoch, vorher 4');
+		expect(m.chart.downTitle(3, 2)).toBe('3 Plätze runter, vorher 2');
+		expect(comparisonLabel({ kind: 'year', year: 2012 })).toBe(
+			'Die Pfeile vergleichen jeden Platz mit 2011.'
+		);
+		expect(comparisonLabel({ kind: 'days', days: 1 })).toBe(
+			'Die Pfeile vergleichen jeden Platz mit dem Vortag.'
+		);
+		expect(comparisonLabel({ kind: 'days', days: 30 })).toBe(
+			'Die Pfeile vergleichen jeden Platz mit den 30 Tagen davor.'
+		);
+		expect(comparisonLabel({ kind: 'all' })).toBeNull();
 	});
 
 	it('says how long since in the dative, after „seit“', () => {

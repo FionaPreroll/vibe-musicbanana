@@ -149,7 +149,26 @@ const en = {
 	},
 
 	chart: {
-		nothing: 'Nothing here.'
+		nothing: 'Nothing here.',
+		/** The badge for an entry that was not in the chart of the period before. */
+		new: 'new',
+		newTitle: 'Not heard in the period before',
+		same: '=',
+		sameTitle: 'Same place as in the period before',
+		upTitle: (places: number, previous: number) =>
+			`Up ${n(places)} ${plural(places, { one: 'place', other: 'places' })}, from ${n(previous)}`,
+		downTitle: (places: number, previous: number) =>
+			`Down ${n(places)} ${plural(places, { one: 'place', other: 'places' })}, from ${n(previous)}`,
+		showMore: 'Show more',
+		showLess: 'Show less',
+		loading: 'Loading…',
+		failed: 'Could not load more.',
+		/** Below the charts: what their arrows compare with. */
+		comparedWithYear: (year: number) => `Arrows compare each place with ${year}.`,
+		comparedWithDays: (days: number) =>
+			days === 1
+				? 'Arrows compare each place with the day before.'
+				: `Arrows compare each place with the ${n(days)} days before.`
 	},
 
 	onThisDay: {

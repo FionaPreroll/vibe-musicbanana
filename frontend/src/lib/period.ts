@@ -89,6 +89,28 @@ export function periodQuery(period: Period) {
 	}
 }
 
+/**
+ * What the arrows in the charts compare with (see `previous_period` in
+ * backend/src/profiles.rs), or null where they compare with nothing.
+ */
+export function comparisonLabel(period: Period, today = zoneToday()) {
+	switch (period.kind) {
+		case 'all':
+			return null;
+		case 'year':
+			return m.chart.comparedWithYear(period.year - 1);
+		case 'days':
+			return m.chart.comparedWithDays(period.days);
+		case 'range': {
+			if (!period.from) return null;
+			const from = parseDay(period.from);
+			const to = period.to ? parseDay(period.to) : today;
+			const days = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
+			return days >= 1 ? m.chart.comparedWithDays(days) : null;
+		}
+	}
+}
+
 /** Midnight after the last day of the period in the viewer's time zone, or null when it runs up to now. */
 export function periodEnd(period: Period): Date | null {
 	if (period.kind === 'year') return fromWallClock(localDay(period.year + 1, 1, 1));

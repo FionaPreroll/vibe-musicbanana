@@ -3,6 +3,7 @@
 		entityPath,
 		getJson,
 		type ChartEntry,
+		type ChartKind,
 		type EntityKind,
 		type ListensPage,
 		type NowPlaying,
@@ -23,7 +24,7 @@
 	import { timeZone } from '#lib/zone.svelte.ts';
 	import { m } from '#lib/i18n/index.ts';
 	import { now } from '#lib/now.svelte.ts';
-	import { parseDay, periodEnd, periodSearch, type Period } from '#lib/period.ts';
+	import { comparisonLabel, parseDay, periodEnd, periodSearch, type Period } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
 	import type { PageProps } from './$types';
 
@@ -47,6 +48,15 @@
 	const entryHref = (kind: EntityKind, id: number, name: string) =>
 		entityPath(data.base, kind, id, name) + withSource('', data.source);
 	const link = (kind: EntityKind) => (entry: ChartEntry) => entryHref(kind, entry.id, entry.name);
+	// The next places of a chart, for "Show more".
+	const more = (kind: ChartKind) => (offset: number, limit: number) =>
+		getJson<ChartEntry[]>(fetch, `${data.api}/top/${kind}`, {
+			...data.query,
+			compare: true,
+			offset,
+			limit
+		});
+	const comparedWith = $derived(comparisonLabel(data.period));
 
 	// A profile nobody listened to lately keeps its page as it was.
 	const week = $derived(
@@ -248,10 +258,28 @@
 	{/if}
 
 	<div class="mt-8 grid gap-8 md:grid-cols-3">
-		<Chart title={m.common.topArtists} entries={data.artists} href={link('artist')} />
-		<Chart title={m.common.topAlbums} entries={data.releases} href={link('album')} />
-		<Chart title={m.common.topTracks} entries={data.recordings} href={link('track')} />
+		<Chart
+			title={m.common.topArtists}
+			entries={data.artists}
+			href={link('artist')}
+			more={more('artists')}
+		/>
+		<Chart
+			title={m.common.topAlbums}
+			entries={data.releases}
+			href={link('album')}
+			more={more('releases')}
+		/>
+		<Chart
+			title={m.common.topTracks}
+			entries={data.recordings}
+			href={link('track')}
+			more={more('recordings')}
+		/>
 	</div>
+	{#if comparedWith}
+		<p class="mt-3 text-xs text-stone-500">{comparedWith}</p>
+	{/if}
 
 	{#await data.clock then clock}
 		{#if clock && clock.listens > 0}

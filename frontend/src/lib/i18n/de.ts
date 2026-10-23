@@ -147,7 +147,24 @@ const de: Messages = {
 	},
 
 	chart: {
-		nothing: 'Hier ist noch nichts.'
+		nothing: 'Hier ist noch nichts.',
+		new: 'neu',
+		newTitle: 'Im Zeitraum davor nicht gehört',
+		same: '=',
+		sameTitle: 'Gleicher Platz wie im Zeitraum davor',
+		upTitle: (places, previous) =>
+			`${n(places)} ${plural(places, { one: 'Platz', other: 'Plätze' })} hoch, vorher ${n(previous)}`,
+		downTitle: (places, previous) =>
+			`${n(places)} ${plural(places, { one: 'Platz', other: 'Plätze' })} runter, vorher ${n(previous)}`,
+		showMore: 'Mehr anzeigen',
+		showLess: 'Weniger anzeigen',
+		loading: 'Lädt …',
+		failed: 'Mehr ließ sich nicht laden.',
+		comparedWithYear: (year) => `Die Pfeile vergleichen jeden Platz mit ${year}.`,
+		comparedWithDays: (days) =>
+			days === 1
+				? 'Die Pfeile vergleichen jeden Platz mit dem Vortag.'
+				: `Die Pfeile vergleichen jeden Platz mit den ${n(days)} Tagen davor.`
 	},
 
 	onThisDay: {

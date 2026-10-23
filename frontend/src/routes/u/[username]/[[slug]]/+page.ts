@@ -40,7 +40,9 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const { me } = await parent();
 	const tz = timeZone();
 	const query = { ...periodQuery(period), tz, limit: 10, source };
-	const chart = (kind: ChartKind) => getJson<ChartEntry[]>(fetch, `${api}/top/${kind}`, query);
+	// The charts also show how their entries moved since the period before.
+	const chart = (kind: ChartKind) =>
+		getJson<ChartEntry[]>(fetch, `${api}/top/${kind}`, { ...query, compare: true });
 
 	// Asked for together with the rest; the page works without them.
 	const clock = getJson<Clock>(fetch, `${api}/clock`, query).catch(() => null);
@@ -81,6 +83,7 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 		return {
 			follow,
 			api,
+			query,
 			base,
 			period,
 			source,
