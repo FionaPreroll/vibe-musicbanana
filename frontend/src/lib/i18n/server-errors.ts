@@ -31,6 +31,7 @@ const patterns = {
 	badSlug: /^"(.*)" does not work as a profile address\b/s,
 	slugReserved: /^"(.*)" is taken by the pages of a profile$/s,
 	ownProfile: /^that is your own profile$/,
+	compareWithItself: /^a profile cannot be compared with itself$/,
 	pickListens: /^pick listens, or narrow the history down first$/,
 	unknownTimeZone: /^unknown time zone: (.*)$/s,
 	unknownLanguage: /^unknown language: (.*)$/s,

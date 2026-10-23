@@ -3,6 +3,7 @@
 	import VisibilityBadge from '#lib/components/VisibilityBadge.svelte';
 	import { comparePath } from '#lib/compare.ts';
 	import { listenCount } from '#lib/format.ts';
+	import { m } from '#lib/i18n/index.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -11,7 +12,7 @@
 </script>
 
 <svelte:head>
-	<title>Compare · {overview.username} · musicbanana</title>
+	<title>{m.compare.pickTitle(overview.username)} · musicbanana</title>
 </svelte:head>
 
 {#snippet choices(title: string, profiles: ProfileSummary[])}
@@ -43,23 +44,25 @@
 		<a class="hover:text-stone-900 hover:underline" href={data.base}
 			>{overview.username}{#if overview.slug !== 'default'}&nbsp;/ {overview.name}{/if}</a
 		>
-		· Compare
+		· {m.compare.crumb}
 	</p>
-	<h1 class="mt-2 text-3xl font-bold">Compare with…</h1>
+	<h1 class="mt-2 text-3xl font-bold">{m.compare.pickHeading}</h1>
 	<p class="mt-1 text-stone-600">
-		See what two profiles both listen to, how much their taste overlaps, and what each one could
-		discover in the other.
+		{m.compare.pickIntro}
 	</p>
 
 	{#if data.own.length > 0}
-		{@render choices('Your profiles', data.own)}
+		{@render choices(m.compare.yourProfiles, data.own)}
 	{/if}
 	{#if data.others.length > 0}
-		{@render choices(data.own.length > 0 ? 'Other profiles' : 'Profiles', data.others)}
+		{@render choices(
+			data.own.length > 0 ? m.compare.otherProfiles : m.compare.profiles,
+			data.others
+		)}
 	{/if}
 	{#if data.own.length + data.others.length === 0}
 		<p class="mt-6 text-sm text-stone-500">
-			There is no other profile with listens to compare with.
+			{m.compare.noOthers}
 		</p>
 	{/if}
 </main>

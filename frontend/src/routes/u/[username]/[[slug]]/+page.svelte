@@ -215,7 +215,7 @@
 			{#if data.follow}<FollowButton info={data.follow} />{/if}
 			<a
 				class="rounded border border-stone-300 px-3 py-1 text-sm hover:bg-stone-100"
-				href={compareHref}>Compare</a
+				href={compareHref}>{m.compare.button}</a
 			>
 		</div>
 		<p class="mt-1 text-stone-600">

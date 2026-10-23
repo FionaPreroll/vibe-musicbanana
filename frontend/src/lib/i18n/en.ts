@@ -303,6 +303,42 @@ const en = {
 		hint: 'Every word counts, in any case and with or without accents; “ärzte unrockbar” finds the track.'
 	},
 
+	compare: {
+		button: 'Compare',
+		crumb: 'Compare',
+		pickTitle: (username: string) => `Compare · ${username}`,
+		pickHeading: 'Compare with…',
+		pickIntro:
+			'See what two profiles both listen to, how much their taste overlaps, and what each one could discover in the other.',
+		yourProfiles: 'Your profiles',
+		otherProfiles: 'Other profiles',
+		profiles: 'Profiles',
+		noOthers: 'There is no other profile with listens to compare with.',
+		title: (a: string, b: string) => `${a} and ${b} · Compare`,
+		swap: '⇄ Swap',
+		swapTitle: 'Swap sides',
+		overlap: 'Overlap',
+		/** The words for an overlap, from the most to the least (see compare.ts). */
+		levels: {
+			twins: 'Musical twins',
+			verySimilar: 'Very similar taste',
+			similar: 'Similar taste',
+			some: 'Some common ground',
+			little: 'Little in common',
+			nothing: 'Nothing in common'
+		},
+		scoreNote: (period: string) =>
+			`Share of their listening that goes to the same artists · ${period}`,
+		artists: (count: number) => `${n(count)} ${plural(count, { one: 'artist', other: 'artists' })}`,
+		inCommon: (artists: number, albums: number, tracks: number) =>
+			`${n(artists)} ${plural(artists, { one: 'artist', other: 'artists' })} · ${n(albums)} ${plural(albums, { one: 'album', other: 'albums' })} · ${n(tracks)} ${plural(tracks, { one: 'track', other: 'tracks' })} in common`,
+		both: 'Both listen to',
+		onlyOne: 'Only one of them',
+		onlyIntro: 'Artists the other profile has never listened to.',
+		only: (name: string) => `Only ${name}`,
+		allArtists: (count: number) => `${n(count)} artists in all`,
+		nothingShared: 'Nothing in common.'
+	},
 	review: {
 		title: (year: number) => `${year} in review`,
 		crumb: 'Year in review',

@@ -2,6 +2,7 @@
 // with the period of the profile page in the query (see period.ts).
 
 import { profilePath } from '#lib/api.ts';
+import { m } from '#lib/i18n/index.ts';
 
 /** The comparison of the profile at `base` (see profilePath) with another one. */
 export function comparePath(base: string, username: string, slug = 'default') {
@@ -14,17 +15,17 @@ export function compareApi(a: [string, string], b: [string, string]) {
 }
 
 /** The words for an overlap from 0 to 1, the highest first. */
-const levels: [number, string][] = [
-	[0.5, 'Musical twins'],
-	[0.3, 'Very similar taste'],
-	[0.15, 'Similar taste'],
-	[0.05, 'Some common ground'],
-	[Number.MIN_VALUE, 'Little in common']
+const levels: [number, keyof typeof m.compare.levels][] = [
+	[0.5, 'twins'],
+	[0.3, 'verySimilar'],
+	[0.15, 'similar'],
+	[0.05, 'some'],
+	[Number.MIN_VALUE, 'little']
 ];
 
 /** How an overlap reads in words. */
 export function scoreLabel(score: number) {
-	return levels.find(([least]) => score >= least)?.[1] ?? 'Nothing in common';
+	return m.compare.levels[levels.find(([least]) => score >= least)?.[1] ?? 'nothing'];
 }
 
 /**

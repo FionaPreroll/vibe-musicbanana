@@ -4,15 +4,17 @@ import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { createRawSnippet } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Week } from '#lib/api.ts';
+import type { Comparison, Week } from '#lib/api.ts';
+import { scoreLabel } from '#lib/compare.ts';
 import WeekGlance from '#lib/components/WeekGlance.svelte';
 import Fill from '#lib/i18n/Fill.svelte';
 import { language } from '#lib/i18n/index.ts';
 import { useLanguage } from '#lib/i18n/locale.svelte.ts';
-import { invalidateAll } from '../test/app.svelte.ts';
+import { invalidateAll, visit } from '../test/app.svelte.ts';
 import { fakeApi } from '../test/fetch.ts';
 import * as fixtures from '../test/fixtures.ts';
 import SettingsPage from './settings/+page.svelte';
+import ComparePage from './u/[username]/[[slug]]/compare/[other]/[[otherSlug]]/+page.svelte';
 import YearPage from './u/[username]/[[slug]]/year/[year=year]/+page.svelte';
 import { load as layoutLoad } from './+layout.ts';
 
@@ -174,5 +176,67 @@ describe('the layout', () => {
 		await layoutLoad({ fetch } as never);
 		expect(language()).toBe('de');
 		expect(document.documentElement.lang).toBe('de');
+	});
+});
+
+describe('the comparison in German', () => {
+	const comparison: Comparison = {
+		a: {
+			username: 'fiona',
+			slug: 'default',
+			name: 'Default',
+			listens: 2048,
+			artists: 120,
+			only_count: 12,
+			only: [{ id: 3, name: 'Björk', listens: 40 }]
+		},
+		b: {
+			username: 'alex',
+			slug: 'default',
+			name: 'Default',
+			listens: 512,
+			artists: 1,
+			only_count: 0,
+			only: []
+		},
+		score: 0.42,
+		shared: { artists: 1, releases: 2, recordings: 1 },
+		artists: [{ id: 1, name: 'Die Ärzte', a: 300, b: 25 }],
+		releases: [],
+		recordings: []
+	};
+
+	it('says the overlap and what only one hears', () => {
+		Element.prototype.scrollIntoView = vi.fn();
+		visit('/u/fiona/compare/alex');
+		render(ComparePage, {
+			params: {} as never,
+			data: {
+				me: null,
+				period: { kind: 'all' },
+				source: null,
+				comparison,
+				overviews: [fixtures.overview, { ...fixtures.overview, username: 'alex' }],
+				bases: ['/u/fiona', '/u/alex']
+			} as never
+		});
+		expect(screen.getByText('42 %')).toBeInTheDocument();
+		expect(screen.getByText('Sehr ähnlicher Geschmack')).toBeInTheDocument();
+		expect(screen.getByText(/1 Künstler · 2 Alben · 1 Titel gemeinsam/)).toBeInTheDocument();
+		expect(screen.getByText('2.048 Wiedergaben · 120 Künstler')).toBeInTheDocument();
+		expect(screen.getByRole('heading', { name: 'Hören beide' })).toBeInTheDocument();
+		expect(screen.getByText('Nur fiona')).toBeInTheDocument();
+		expect(screen.getByText('12 Künstler insgesamt')).toBeInTheDocument();
+		expect(screen.getAllByText('Nichts gemeinsam.')).toHaveLength(2);
+		expect(screen.getByRole('link', { name: /Tauschen/ })).toHaveAttribute(
+			'title',
+			'Seiten tauschen'
+		);
+	});
+
+	it('puts every overlap in words', () => {
+		expect(scoreLabel(0.6)).toBe('Musikalische Zwillinge');
+		expect(scoreLabel(0.01)).toBe('Wenig gemeinsam');
+		expect(scoreLabel(0)).toBe('Nichts gemeinsam');
 	});
 });
