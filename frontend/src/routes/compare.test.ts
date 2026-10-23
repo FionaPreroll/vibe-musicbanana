@@ -149,6 +149,16 @@ describe('shared chart', () => {
 		expect(within(rows[0]).getByTitle('alex')).toHaveTextContent('5');
 	});
 
+	it('works without links and without an artist', () => {
+		render(SharedChart, {
+			title: 'Artists',
+			entries: comparison.artists,
+			names: ['fiona', 'alex']
+		});
+		expect(screen.queryByRole('link')).not.toBeInTheDocument();
+		expect(screen.getByRole('listitem')).toHaveTextContent(/^1\s*Die Ärzte\s*300/);
+	});
+
 	it('says when there is nothing in common', () => {
 		render(SharedChart, { title: 'Tracks', entries: [], names: ['fiona', 'alex'] });
 		expect(screen.getByText('Nothing in common.')).toBeInTheDocument();
@@ -297,6 +307,24 @@ describe('compare picker', () => {
 			} as never
 		});
 		expect(screen.getByText(/no other profile with listens/)).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: 'fiona' })).toHaveAttribute('href', '/u/fiona');
+	});
+
+	it('names a profile other than the default one', () => {
+		render(PickPage, {
+			params: {} as never,
+			data: {
+				me: null,
+				base: '/u/fiona/work',
+				overview: { ...fixtures.overview, slug: 'work', name: 'Work' },
+				own: [],
+				others: []
+			} as never
+		});
+		expect(screen.getByRole('link', { name: /fiona\s*\/ Work/ })).toHaveAttribute(
+			'href',
+			'/u/fiona/work'
+		);
 	});
 
 	it('answers 404 for an unknown profile', async () => {
@@ -330,6 +358,18 @@ describe('compare load', () => {
 		...fields
 	});
 	const params = { username: 'fiona', other: 'alex', otherSlug: 'work' };
+
+	it('takes the default profiles when the address names no slug', async () => {
+		const fetch = fakeApi({
+			'GET /api/compare/fiona/default/alex/default': comparison,
+			'GET /api/profiles/fiona/default': fixtures.overview,
+			'GET /api/profiles/alex/default': alexOverview
+		});
+		const data = await compareLoad(
+			event({ fetch, path: '/u/fiona/compare/alex', params: { username: 'fiona', other: 'alex' } })
+		);
+		expect(data).toMatchObject({ bases: ['/u/fiona', '/u/alex'] });
+	});
 
 	it('loads the comparison for the period', async () => {
 		const data = await compareLoad(
