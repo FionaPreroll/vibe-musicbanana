@@ -1,4 +1,5 @@
-import { ApiError, getJson, type Me } from '#lib/api.ts';
+import { ApiError, getJson, type Me, type ServerConfig } from '#lib/api.ts';
+import { useCovers } from '#lib/covers.svelte.ts';
 import { useTimeSettings } from '#lib/zone.svelte.ts';
 import type { LayoutLoad } from './$types';
 
@@ -8,6 +9,8 @@ export const ssr = false;
 // Who is logged in, if anybody. Logging in or out reloads this and every page with it,
 // as private profiles appear or go, and so do the time zone and first weekday.
 export const load: LayoutLoad = async ({ fetch }) => {
+	// What the server offers; without an answer the pages show no covers.
+	const config = getJson<ServerConfig>(fetch, '/api/config').catch(() => ({ covers: false }));
 	let me: Me | null;
 	try {
 		me = await getJson<Me>(fetch, '/api/me');
@@ -16,5 +19,6 @@ export const load: LayoutLoad = async ({ fetch }) => {
 		me = null;
 	}
 	useTimeSettings(me);
+	useCovers((await config).covers);
 	return { me };
 };

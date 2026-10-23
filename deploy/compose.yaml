@@ -19,9 +19,14 @@ services:
       DATABASE_URL: postgres://musicbanana:${MUSICBANANA_DB_PASSWORD:?set MUSICBANANA_DB_PASSWORD in .env}@db:5432/musicbanana
       ACCESS_LOG: ${ACCESS_LOG:-on}
       YOURSPOTIFY_ALLOWED_URLS: ${YOURSPOTIFY_ALLOWED_URLS:-}
+      COVER_ART: ${COVER_ART:-off}
+      COVER_ART_LOOKUP: ${COVER_ART_LOOKUP:-off}
       RUST_LOG: ${RUST_LOG:-musicbanana=info,tower_http=info}
     ports:
       - "${MUSICBANANA_PORT:-3000}:3000"
+    volumes:
+      # Album covers from the Cover Art Archive (README, "Album covers").
+      - covers:/var/cache/musicbanana
     depends_on:
       db:
         condition: service_healthy
@@ -58,3 +63,4 @@ services:
 
 volumes:
   db:
+  covers:
