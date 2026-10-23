@@ -3,6 +3,7 @@
 	import type { Source } from '#lib/api.ts';
 	import { formatDate, listenCount } from '#lib/format.ts';
 	import { sourceLabel, sourceOf } from '#lib/source.ts';
+	import { m } from '#lib/i18n/index.ts';
 
 	// Narrows the page to the listens of one source, keeping the rest of the query.
 	let { sources }: { sources: Source[] } = $props();
@@ -22,13 +23,13 @@
 
 <!-- Only worth showing when there is something to choose, or a choice to undo. -->
 {#if sources.length > 1 || current !== null}
-	<nav class="mt-3 flex flex-wrap items-baseline gap-1" aria-label="Source">
-		<span class="mr-1 text-sm text-stone-500">From</span>
+	<nav class="mt-3 flex flex-wrap items-baseline gap-1" aria-label={m.source.label}>
+		<span class="mr-1 text-sm text-stone-500">{m.source.from}</span>
 		<a
 			href={href(null)}
 			data-sveltekit-noscroll
 			class={button(current === null)}
-			aria-current={current === null ? 'page' : undefined}>All sources</a
+			aria-current={current === null ? 'page' : undefined}>{m.source.all}</a
 		>
 		{#each sources as s (s.source)}
 			<a
@@ -36,8 +37,9 @@
 				data-sveltekit-noscroll
 				class={button(current === s.source)}
 				aria-current={current === s.source ? 'page' : undefined}
-				title="{listenCount(s.listens)}, {formatDate(s.first_listened_at)} to {formatDate(
-					s.last_listened_at
+				title="{listenCount(s.listens)}, {m.common.dateRange(
+					formatDate(s.first_listened_at),
+					formatDate(s.last_listened_at)
 				)}">{sourceLabel(s.source)}</a
 			>
 		{/each}

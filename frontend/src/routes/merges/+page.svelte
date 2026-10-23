@@ -14,32 +14,16 @@
 		type UndoResult
 	} from '#lib/api.ts';
 	import CatalogPicker from '#lib/components/CatalogPicker.svelte';
-	import { formatDateTime, formatNumber, listenCount } from '#lib/format.ts';
+	import { formatDateTime, listenCount } from '#lib/format.ts';
+	import Fill from '#lib/i18n/Fill.svelte';
+	import { m } from '#lib/i18n/index.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
-	const kindLabel: Record<CatalogKind, string> = {
-		artist: 'artist',
-		release: 'album',
-		recording: 'track'
-	};
-	const tabs: [CatalogKind, string][] = [
-		['artist', 'Artists'],
-		['release', 'Albums'],
-		['recording', 'Tracks']
-	];
-	const likeness: Record<MergeSuggestions['suggestions'][number]['likeness'], [string, string]> = {
-		same_letters: [
-			'Same letters',
-			'Only case, accents, punctuation, spaces, a leading "The" or "&" for "and" differ.'
-		],
-		one_letter: ['One letter apart', 'One letter more, missing, different or swapped.'],
-		version: [
-			'Another version?',
-			'The same title apart from a note such as "(Live)", "- Radio Edit" or "feat. …". Live versions and the original are better kept apart.'
-		]
-	};
+	const kindLabel = (kind: CatalogKind) => m.merges.kind[kind];
+	const kinds: CatalogKind[] = ['artist', 'release', 'recording'];
+	const likeness = (l: MergeSuggestions['suggestions'][number]['likeness']) => m.merges.likeness[l];
 
 	let busy = $state(false);
 	let error = $state('');
@@ -120,7 +104,12 @@
 				manualInto = null;
 			}
 			return {
-				message: `Merged ${kindLabel[result.kind]} “${result.from[1]}” into “${result.into[1]}”: ${listenCount(result.listens)} moved over.`,
+				message: m.merges.merged(
+					kindLabel(result.kind),
+					result.from[1],
+					result.into[1],
+					result.listens
+				),
 				undo: result.op ?? undefined
 			};
 		});
@@ -130,7 +119,7 @@
 		act(async () => {
 			await sendJson(fetch, 'POST', `/api/admin/merges/hidden/${kind}`, { from, into });
 			if (pending?.at === `${from}-${into}`) pending = null;
-			return 'Hidden. It stays out of the suggestions until you show it again.';
+			return m.merges.hidden;
 		});
 	}
 
@@ -157,7 +146,7 @@
 				`/api/admin/merges/hidden/${data.kind}/${h.from[0]}/${h.into[0]}`
 			);
 			hiddenShown = hiddenShown?.filter((x) => x !== h) ?? null;
-			return `“${h.from[1]}” and “${h.into[1]}” are suggested again.`;
+			return m.merges.suggestedAgain(h.from[1], h.into[1]);
 		});
 	}
 
@@ -196,13 +185,10 @@
 		act(async () => {
 			const result = await sendJson<UndoResult>(fetch, 'POST', `/api/admin/merges/${op}/undo`, {});
 			undoing = null;
-			const m = result.merge;
-			return `Undid merge ${m.id}: ${kindLabel[m.kind]} “${m.from[1]}” stands on its own again.`;
+			const undone = result.merge;
+			return m.merges.undid(undone.id, kindLabel(undone.kind), undone.from[1]);
 		});
 	}
-
-	const count = (n: number, one: string, many: string) =>
-		`${formatNumber(n)} ${n === 1 ? one : many}`;
 
 	const button =
 		'rounded border border-stone-300 bg-white px-3 py-1.5 text-sm hover:bg-stone-100 disabled:opacity-50';
@@ -213,7 +199,7 @@
 </script>
 
 <svelte:head>
-	<title>Merges · musicbanana</title>
+	<title>{m.merges.title} · musicbanana</title>
 </svelte:head>
 
 {#snippet entry(e: CatalogEntry)}
@@ -225,61 +211,51 @@
 {#snippet previewBox(p: MergeResult)}
 	<div class="mt-2 rounded border border-yellow-300 bg-yellow-50 p-3 text-sm">
 		<p>
-			Would merge {kindLabel[p.kind]} <span class="font-medium">“{p.from[1]}”</span> (#{p.from[0]})
-			into <span class="font-medium">“{p.into[1]}”</span> (#{p.into[0]}).
+			<Fill text={m.merges.wouldMerge(kindLabel(p.kind))}>
+				{#snippet from()}<span class="font-medium">{m.common.quote(p.from[1])}</span>
+					(#{p.from[0]}){/snippet}
+				{#snippet into()}<span class="font-medium">{m.common.quote(p.into[1])}</span>
+					(#{p.into[0]}){/snippet}
+			</Fill>
 		</p>
 		<ul class="mt-1 list-inside list-disc text-stone-700">
-			<li>
-				{listenCount(p.listens)} and {count(p.spellings, 'spelling', 'spellings')} count for “{p
-					.into[1]}” from then on.
-			</li>
+			<li>{m.merges.countFor(p.listens, p.spellings, p.into[1])}</li>
 			{#if p.kind === 'artist'}
-				<li>
-					Albums: {formatNumber(p.releases_moved)} moved over, {formatNumber(p.releases_merged)} merged
-					with one of the same title.
-				</li>
-				<li>
-					Tracks: {formatNumber(p.recordings_moved)} moved over, {formatNumber(p.recordings_merged)} merged
-					with one of the same title.
-				</li>
+				<li>{m.merges.albumsMoved(p.releases_moved, p.releases_merged)}</li>
+				<li>{m.merges.tracksMoved(p.recordings_moved, p.recordings_merged)}</li>
 			{/if}
 		</ul>
 		{#if p.told_apart}
 			<label class="mt-2 flex items-start gap-2 text-red-800">
 				<input class="mt-1" type="checkbox" bind:checked={pending!.force} />
-				<span
-					>Their MusicBrainz IDs say these are different ones. Merge anyway, for example an artist's
-					other name or a track MusicBrainz lists twice.</span
-				>
+				<span>{m.merges.toldApart}</span>
 			</label>
 		{/if}
 		<div class="mt-3 flex gap-2">
 			<button
 				class="{button} border-yellow-500 font-medium"
 				disabled={busy || (p.told_apart && !pending!.force)}
-				onclick={merge}>Merge</button
+				onclick={merge}>{m.merges.merge}</button
 			>
-			<button class={button} disabled={busy} onclick={() => (pending = null)}>Cancel</button>
+			<button class={button} disabled={busy} onclick={() => (pending = null)}
+				>{m.common.cancel}</button
+			>
 		</div>
 	</div>
 {/snippet}
 
 <main class="mx-auto max-w-4xl px-4 pb-16 sm:px-8">
-	<h1 class="mt-6 text-3xl font-bold">Merges</h1>
-	<p class="mt-1 text-stone-600">
-		Merging puts two entries of the catalog together that are the same under different spellings,
-		for every profile. The listens keep what the players sent, later listens with either spelling
-		count for the one that stays, and every merge can be undone in the log below.
-	</p>
+	<h1 class="mt-6 text-3xl font-bold">{m.merges.title}</h1>
+	<p class="mt-1 text-stone-600">{m.merges.intro}</p>
 
 	<nav class="mt-8 flex gap-6 border-b border-stone-200">
-		{#each tabs as [kind, label] (kind)}
+		{#each kinds as kind (kind)}
 			<a
 				class="{tab} {data.kind === kind
 					? 'border-stone-900'
 					: 'border-transparent text-stone-500'}"
 				href="?kind={kind}"
-				aria-current={data.kind === kind ? 'page' : undefined}>{label}</a
+				aria-current={data.kind === kind ? 'page' : undefined}>{m.merges.kinds[kind]}</a
 			>
 		{/each}
 	</nav>
@@ -290,33 +266,30 @@
 			{done.message}
 			{#if done.undo}
 				<button class="ml-1 underline" disabled={busy} onclick={() => previewUndo(done!.undo!)}
-					>Undo</button
+					>{m.common.undo}</button
 				>
 			{/if}
 		</p>
 	{/if}
 
 	<section class="mt-6">
-		<h2 class={heading}>Suggestions</h2>
+		<h2 class={heading}>{m.merges.suggestions}</h2>
 		<p class="text-sm text-stone-600">
 			{#if data.suggestions.total === 0}
-				No look-alikes left.
+				{m.merges.noneLeft}
 			{:else if data.suggestions.total > data.suggestions.suggestions.length}
-				The first {formatNumber(data.suggestions.suggestions.length)} of {formatNumber(
-					data.suggestions.total
-				)}, the most certain first.
+				{m.merges.firstOf(data.suggestions.suggestions.length, data.suggestions.total)}
 			{:else}
-				{count(data.suggestions.total, 'look-alike', 'look-alikes')}, the most certain first.
+				{m.merges.count(data.suggestions.total)}
 			{/if}
 			{#if data.kind !== 'artist'}
-				Albums and tracks are only compared within an artist, so merging look-alike artists first
-				also merges their albums and tracks of the same title.
+				{m.merges.withinArtist}
 			{/if}
 			{#if data.suggestions.hidden > 0}
 				<button class="underline" onclick={toggleHidden}
 					>{hiddenShown
-						? 'Close the hidden ones'
-						: `${formatNumber(data.suggestions.hidden)} hidden`}</button
+						? m.merges.closeHidden
+						: m.merges.hiddenCount(data.suggestions.hidden)}</button
 				>
 			{/if}
 		</p>
@@ -328,13 +301,16 @@
 				{#each hiddenShown as h (`${h.from[0]}-${h.into[0]}`)}
 					<li class="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2">
 						<span class="min-w-56 flex-1"
-							>“{h.from[1]}” (#{h.from[0]}) and “{h.into[1]}” (#{h.into[0]})
-							<span class="text-stone-500">· hidden {formatDateTime(h.hidden_at)}</span></span
+							>{m.merges.pair(h.from[1], h.from[0], h.into[1], h.into[0])}
+							<span class="text-stone-500">· {m.merges.hiddenAt(formatDateTime(h.hidden_at))}</span
+							></span
 						>
-						<button class={small} disabled={busy} onclick={() => unhide(h)}>Suggest again</button>
+						<button class={small} disabled={busy} onclick={() => unhide(h)}
+							>{m.merges.suggestAgain}</button
+						>
 					</li>
 				{:else}
-					<li class="px-3 py-2 text-stone-500">None.</li>
+					<li class="px-3 py-2 text-stone-500">{m.common.none}</li>
 				{/each}
 			</ul>
 		{/if}
@@ -343,7 +319,7 @@
 			<ul class="mt-3 divide-y divide-stone-200 text-sm">
 				{#each data.suggestions.suggestions as s (`${s.from.id}-${s.into.id}`)}
 					{@const at = `${s.from.id}-${s.into.id}`}
-					{@const [label, why] = likeness[s.likeness]}
+					{@const [label, why] = likeness(s.likeness)}
 					<li class="py-2">
 						<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
 							<span
@@ -354,26 +330,28 @@
 							>
 							<span class="min-w-56 flex-1">
 								{@render entry(s.from)}
-								<span class="text-stone-400" aria-label="into">→</span>
+								<span class="text-stone-400" aria-label={m.merges.into}>→</span>
 								{@render entry(s.into)}
 							</span>
 							<span class="flex shrink-0 gap-1.5">
 								<button
 									class={small}
 									disabled={busy}
-									onclick={() => preview(at, data.kind, s.from.id, s.into.id)}>Merge…</button
+									onclick={() => preview(at, data.kind, s.from.id, s.into.id)}
+									>{m.merges.mergeEllipsis}</button
 								>
 								<button
 									class={small}
 									disabled={busy}
-									title="Keep “{s.from.name}” and merge “{s.into.name}” into it instead"
-									onclick={() => preview(at, data.kind, s.into.id, s.from.id)}>Other way…</button
+									title={m.merges.otherWayTitle(s.from.name, s.into.name)}
+									onclick={() => preview(at, data.kind, s.into.id, s.from.id)}
+									>{m.merges.otherWay}</button
 								>
 								<button
 									class={small}
 									disabled={busy}
-									title="These are different ones; don't suggest them again"
-									onclick={() => hide(data.kind, s.from.id, s.into.id)}>Hide</button
+									title={m.merges.hideTitle}
+									onclick={() => hide(data.kind, s.from.id, s.into.id)}>{m.merges.hide}</button
 								>
 							</span>
 						</div>
@@ -385,38 +363,39 @@
 	</section>
 
 	<section class="mt-10">
-		<h2 class={heading}>Merge by hand</h2>
+		<h2 class={heading}>{m.merges.byHand}</h2>
 		<p class="text-sm text-stone-600">
-			Any two {kindLabel[data.kind]}s, also ones the suggestions don't find.
+			{m.merges.anyTwo(m.merges.kinds[data.kind])}
 		</p>
 		<div class="mt-3 flex flex-wrap items-end gap-3">
-			<CatalogPicker kind={data.kind} label="Merge (goes away)" bind:picked={manualFrom} />
+			<CatalogPicker kind={data.kind} label={m.merges.fromLabel} bind:picked={manualFrom} />
 			<button
 				class="{button} shrink-0"
-				title="Swap"
-				aria-label="Swap"
+				title={m.merges.swap}
+				aria-label={m.merges.swap}
 				disabled={busy}
 				onclick={() => ([manualFrom, manualInto] = [manualInto, manualFrom])}>⇄</button
 			>
-			<CatalogPicker kind={data.kind} label="Into (stays)" bind:picked={manualInto} />
+			<CatalogPicker kind={data.kind} label={m.merges.intoLabel} bind:picked={manualInto} />
 			<button
 				class="{button} shrink-0"
 				disabled={busy || !manualFrom || !manualInto}
-				onclick={() => preview('manual', data.kind, manualFrom!.id, manualInto!.id)}>Preview</button
+				onclick={() => preview('manual', data.kind, manualFrom!.id, manualInto!.id)}
+				>{m.merges.preview}</button
 			>
 		</div>
 		{#if pending?.at === 'manual'}{@render previewBox(pending.preview)}{/if}
 	</section>
 
 	<section class="mt-10">
-		<h2 class={heading}>Log</h2>
+		<h2 class={heading}>{m.merges.log}</h2>
 		<p class="text-sm text-stone-600">
-			All merges, from here, the command line and <code>merge editions</code>, the latest first.
-			Undoing one puts back what it changed; later merges of the same entries have to be undone
-			first.
+			<Fill text={m.merges.logIntro}>
+				{#snippet editions()}<code>merge editions</code>{/snippet}
+			</Fill>
 		</p>
 		{#if log.length === 0}
-			<p class="mt-3 text-sm text-stone-500">No merges yet.</p>
+			<p class="mt-3 text-sm text-stone-500">{m.merges.noMerges}</p>
 		{:else}
 			<ul class="mt-3 divide-y divide-stone-200 text-sm">
 				{#each log as op (op.id)}
@@ -424,11 +403,15 @@
 						<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
 							<span class="w-12 shrink-0 text-stone-500 tabular-nums">#{op.id}</span>
 							<span class="min-w-56 flex-1 {op.undone_at ? 'text-stone-500' : ''}">
-								<span class="text-stone-500">{kindLabel[op.kind]}</span>
-								<span class={op.undone_at ? 'line-through' : 'font-medium'}>“{op.from[1]}”</span>
+								<span class="text-stone-500">{kindLabel(op.kind)}</span>
+								<span class={op.undone_at ? 'line-through' : 'font-medium'}
+									>{m.common.quote(op.from[1])}</span
+								>
 								<span class="text-stone-500">#{op.from[0]}</span>
-								<span class="text-stone-400" aria-label="into">→</span>
-								<span class={op.undone_at ? 'line-through' : 'font-medium'}>“{op.into[1]}”</span>
+								<span class="text-stone-400" aria-label={m.merges.into}>→</span>
+								<span class={op.undone_at ? 'line-through' : 'font-medium'}
+									>{m.common.quote(op.into[1])}</span
+								>
 								<span class="text-stone-500">#{op.into[0]}</span>
 							</span>
 							<span class="shrink-0 text-stone-500 tabular-nums"
@@ -437,11 +420,11 @@
 							<span class="w-28 shrink-0 text-right">
 								{#if op.undone_at}
 									<span class="text-xs text-stone-500" title={formatDateTime(op.undone_at)}
-										>undone</span
+										>{m.merges.undone}</span
 									>
 								{:else}
 									<button class={small} disabled={busy} onclick={() => previewUndo(op.id)}
-										>Undo…</button
+										>{m.merges.undoEllipsis}</button
 									>
 								{/if}
 							</span>
@@ -449,21 +432,22 @@
 						{#if undoing?.merge.id === op.id}
 							<div class="mt-2 rounded border border-yellow-300 bg-yellow-50 p-3 text-sm">
 								<p>
-									Would undo merge {op.id}: {kindLabel[op.kind]} “{op.from[1]}” stands on its own
-									again, with {count(undoing.restored, 'change', 'changes')} put back.
-									{#if undoing.kept}
-										{count(undoing.kept, 'row stays', 'rows stay')} as it is now, as it changed again
-										since.
-									{/if}
+									{m.merges.wouldUndo(
+										op.id,
+										kindLabel(op.kind),
+										op.from[1],
+										undoing.restored,
+										undoing.kept
+									)}
 								</p>
 								<div class="mt-3 flex gap-2">
 									<button
 										class="{button} border-yellow-500 font-medium"
 										disabled={busy}
-										onclick={() => undo(op.id)}>Undo merge</button
+										onclick={() => undo(op.id)}>{m.merges.undoMerge}</button
 									>
 									<button class={button} disabled={busy} onclick={() => (undoing = null)}
-										>Cancel</button
+										>{m.common.cancel}</button
 									>
 								</div>
 							</div>
@@ -472,7 +456,8 @@
 				{/each}
 			</ul>
 			{#if next}
-				<button class="{button} mt-4" disabled={busy} onclick={showMore}>Show more</button>
+				<button class="{button} mt-4" disabled={busy} onclick={showMore}>{m.common.showMore}</button
+				>
 			{/if}
 		{/if}
 	</section>

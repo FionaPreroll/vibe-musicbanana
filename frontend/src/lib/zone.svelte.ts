@@ -9,6 +9,7 @@
 // into such a holder for the day and time it was in `timeZone()`.
 
 import type { Me } from '#lib/api.ts';
+import { formatLocale } from '#lib/i18n/locale.svelte.ts';
 
 // Browsers name some zones by their old names (Chrome says Asia/Calcutta in
 // India), which PostgreSQL only knows with the tz database's "backward" links,
@@ -69,13 +70,21 @@ function knownZone(zone: string) {
 	}
 }
 
-/** A formatter of `options` in the current time zone, made once per zone. */
+/**
+ * A formatter of `options` in the current time zone and locale (see
+ * i18n/locale.svelte.ts), made once per zone and locale; `locale` fixes one.
+ */
 export function zoned(options: Intl.DateTimeFormatOptions, locale?: string) {
-	let made: { zone: string; format: Intl.DateTimeFormat } | undefined;
+	let made: { zone: string; locale: string; format: Intl.DateTimeFormat } | undefined;
 	return () => {
 		const zone = current.zone;
-		if (made?.zone !== zone) {
-			made = { zone, format: new Intl.DateTimeFormat(locale, { ...options, timeZone: zone }) };
+		const wanted = locale ?? formatLocale();
+		if (made?.zone !== zone || made.locale !== wanted) {
+			made = {
+				zone,
+				locale: wanted,
+				format: new Intl.DateTimeFormat(wanted, { ...options, timeZone: zone })
+			};
 		}
 		return made.format;
 	};

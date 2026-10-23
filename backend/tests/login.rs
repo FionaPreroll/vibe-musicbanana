@@ -619,6 +619,73 @@ async fn time_zone_and_week_start(db: PgPool) {
 }
 
 #[sqlx::test(fixtures("profiles"))]
+async fn language(db: PgPool) {
+    set_password(&db, 1, "banana-split").await;
+    let app = app(db);
+    let fiona = log_in(&app, "fiona", "banana-split").await;
+    let change = |body: Value| {
+        let app = app.clone();
+        let cookie = fiona.clone();
+        async move {
+            call(
+                &app,
+                Method::PUT,
+                "/api/me/language",
+                Some(&cookie),
+                Some(body),
+            )
+            .await
+        }
+    };
+
+    // The browser's language until the account picks one.
+    let me = get(&app, "/api/me", Some(&fiona)).await.body;
+    assert_eq!(me["language"], Value::Null);
+
+    let reply = change(json!({ "language": "de" })).await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+    assert_eq!(reply.body, json!({ "language": "de" }));
+    assert_eq!(
+        get(&app, "/api/me", Some(&fiona)).await.body["language"],
+        "de"
+    );
+
+    // Language codes only.
+    for language in ["", "deutsch", "DE", "de-AT", "d"] {
+        let body = json!({ "language": language });
+        let reply = change(body.clone()).await;
+        let expected = if language.is_empty() {
+            StatusCode::OK
+        } else {
+            StatusCode::BAD_REQUEST
+        };
+        assert_eq!(reply.status, expected, "{body}");
+    }
+    // Empty went back to the browser's, and so does null.
+    assert_eq!(
+        get(&app, "/api/me", Some(&fiona)).await.body["language"],
+        Value::Null
+    );
+    change(json!({ "language": "en" })).await;
+    let reply = change(json!({ "language": null })).await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+    assert_eq!(
+        get(&app, "/api/me", Some(&fiona)).await.body["language"],
+        Value::Null
+    );
+
+    let reply = call(
+        &app,
+        Method::PUT,
+        "/api/me/language",
+        None,
+        Some(json!({ "language": "de" })),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+}
+
+#[sqlx::test(fixtures("profiles"))]
 async fn using_a_login_moves_its_end_on_at_most_once_an_hour(db: PgPool) {
     set_password(&db, 1, "banana").await;
     let app = app(db.clone());

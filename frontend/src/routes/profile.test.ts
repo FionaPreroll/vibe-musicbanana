@@ -612,7 +612,7 @@ describe('year in review', () => {
 		expect(screen.getByText('#4 → #1')).toBeInTheDocument();
 		expect(screen.getByText('+200')).toBeInTheDocument();
 		expect(screen.getByText(/A session goes on/)).toHaveTextContent(
-			'Mostly Die Ärzte (40), Björk (15) and Tocotronic (6).'
+			'Mostly Die Ärzte (40), Björk (15), and Tocotronic (6).'
 		);
 	});
 

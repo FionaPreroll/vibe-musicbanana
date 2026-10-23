@@ -3,6 +3,8 @@
 	import { profilePath } from '#lib/api.ts';
 	import { connectionState, refetchState } from '#lib/connections.ts';
 	import { formatDateTime, formatNumber, listenCount } from '#lib/format.ts';
+	import { localized } from '#lib/i18n/intl.ts';
+	import { m } from '#lib/i18n/index.ts';
 	import { sourceLabel } from '#lib/source.ts';
 	import type { PageProps } from './$types';
 
@@ -16,6 +18,18 @@
 		return () => clearInterval(timer);
 	});
 
+	// Numbers with as many decimals as given, in the page's locale.
+	const decimals = [0, 1, 2].map((digits) =>
+		localized(
+			(locale) =>
+				new Intl.NumberFormat(locale, {
+					minimumFractionDigits: digits,
+					maximumFractionDigits: digits
+				})
+		)
+	);
+	const fixed = (n: number, digits: number) => decimals[digits]().format(n);
+
 	function bytes(n: number | null) {
 		if (n == null) return '–';
 		const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -24,17 +38,17 @@
 			n /= 1024;
 			i++;
 		}
-		return `${n.toFixed(i === 0 || n >= 100 ? 0 : 1)} ${units[i]}`;
+		return `${fixed(n, i === 0 || n >= 100 ? 0 : 1)} ${units[i]}`;
 	}
 
 	function duration(seconds: number) {
 		const d = Math.floor(seconds / 86400);
 		const h = Math.floor((seconds % 86400) / 3600);
-		const m = Math.floor((seconds % 3600) / 60);
-		return d > 0 ? `${d} d ${h} h` : h > 0 ? `${h} h ${m} min` : `${m} min ${seconds % 60} s`;
+		const min = Math.floor((seconds % 3600) / 60);
+		return m.status.uptimeValue(d, h, min, seconds % 60);
 	}
 
-	const ms = (n: number) => (n < 0.1 ? '< 0.1 ms' : `${n.toFixed(n < 10 ? 1 : 0)} ms`);
+	const ms = (n: number) => (n < 0.1 ? `< ${fixed(0.1, 1)} ms` : `${fixed(n, n < 10 ? 1 : 0)} ms`);
 
 	const heading = 'mb-3 text-sm font-semibold tracking-wide text-stone-500 uppercase';
 	const term = 'text-stone-500';
@@ -43,7 +57,7 @@
 </script>
 
 <svelte:head>
-	<title>Status · musicbanana</title>
+	<title>{m.status.title} · musicbanana</title>
 </svelte:head>
 
 {#snippet facts(rows: [string, string][])}
@@ -56,67 +70,82 @@
 {/snippet}
 
 <main class="mx-auto max-w-4xl px-4 pb-16 sm:px-8">
-	<h1 class="mt-6 text-3xl font-bold">Status</h1>
-	<p class="mt-1 text-sm text-stone-600">Refreshes every 10 seconds.</p>
+	<h1 class="mt-6 text-3xl font-bold">{m.status.title}</h1>
+	<p class="mt-1 text-sm text-stone-600">{m.status.refresh}</p>
 
 	<div class="mt-8 grid gap-10 md:grid-cols-2">
 		<section>
-			<h2 class={heading}>Build</h2>
+			<h2 class={heading}>{m.status.build}</h2>
 			{@render facts([
-				['Version', s.build.version + (s.build.debug ? ' (debug build)' : '')],
-				['Commit', s.build.commit ? s.build.commit.slice(0, 12) : 'not known (local build)'],
-				['Started', formatDateTime(s.build.started_at)],
-				['Uptime', duration(s.build.uptime_seconds)]
+				[m.status.version, s.build.version + (s.build.debug ? ` ${m.status.debugBuild}` : '')],
+				[m.status.commit, s.build.commit ? s.build.commit.slice(0, 12) : m.status.unknownCommit],
+				[m.status.started, formatDateTime(s.build.started_at)],
+				[m.status.uptime, duration(s.build.uptime_seconds)]
 			])}
 		</section>
 
 		<section>
-			<h2 class={heading}>Process</h2>
+			<h2 class={heading}>{m.status.process}</h2>
 			{@render facts([
 				[
 					'CPU',
 					s.process.cpu_percent == null
 						? '–'
-						: `${s.process.cpu_percent} % of a core (${formatNumber(Math.round(s.process.cpu_seconds ?? 0))} s in all)`
+						: m.status.cpu(
+								formatNumber(s.process.cpu_percent),
+								formatNumber(Math.round(s.process.cpu_seconds ?? 0))
+							)
 				],
 				[
-					'Memory',
-					`${bytes(s.process.memory_bytes)}, at most ${bytes(s.process.memory_peak_bytes)}`
+					m.status.memory,
+					m.status.memoryValue(bytes(s.process.memory_bytes), bytes(s.process.memory_peak_bytes))
 				],
-				['Threads', s.process.threads == null ? '–' : String(s.process.threads)],
+				[m.status.threads, s.process.threads == null ? '–' : formatNumber(s.process.threads)],
 				[
-					'Machine',
-					`${s.process.cores} cores, load ${s.process.load_average?.map((l) => l.toFixed(2)).join(' ') ?? '–'}`
+					m.status.machine,
+					m.status.machineValue(
+						s.process.cores,
+						s.process.load_average?.map((l) => fixed(l, 2)).join(' ') ?? '–'
+					)
 				],
 				[
-					'Machine memory',
-					`${bytes(s.process.memory_available_bytes)} free of ${bytes(s.process.memory_total_bytes)}` +
-						(s.process.memory_limit_bytes ? `, limit ${bytes(s.process.memory_limit_bytes)}` : '')
+					m.status.machineMemory,
+					m.status.free(
+						bytes(s.process.memory_available_bytes),
+						bytes(s.process.memory_total_bytes),
+						s.process.memory_limit_bytes ? bytes(s.process.memory_limit_bytes) : null
+					)
 				]
 			])}
 		</section>
 
 		<section>
-			<h2 class={heading}>Database</h2>
+			<h2 class={heading}>{m.status.database}</h2>
 			{@render facts([
 				['PostgreSQL', s.database.version.split(' on ')[0]],
-				['Size', bytes(s.database.bytes)],
-				['Migration', s.database.migration == null ? '–' : String(s.database.migration)],
+				[m.status.size, bytes(s.database.bytes)],
+				[m.status.migration, s.database.migration == null ? '–' : String(s.database.migration)],
 				[
-					'Connections',
-					`${s.database.pool_size - s.database.pool_idle} busy, ${s.database.pool_idle} idle in the pool; ${s.database.connections ?? '–'} to the database`
+					m.status.connections,
+					m.status.connectionsValue(
+						s.database.pool_size - s.database.pool_idle,
+						s.database.pool_idle,
+						s.database.connections == null ? '–' : formatNumber(s.database.connections)
+					)
 				],
 				[
-					'Cache hits',
-					s.database.cache_hit_percent == null ? '–' : `${s.database.cache_hit_percent} %`
+					m.status.cacheHits,
+					s.database.cache_hit_percent == null
+						? '–'
+						: `${formatNumber(s.database.cache_hit_percent)} %`
 				]
 			])}
 		</section>
 
 		<section>
-			<h2 class={heading}>Listens in the last 24 hours</h2>
+			<h2 class={heading}>{m.status.lastDay}</h2>
 			{#if s.database.last_day.length === 0}
-				<p class="text-sm text-stone-500">None.</p>
+				<p class="text-sm text-stone-500">{m.common.none}</p>
 			{:else}
 				{@render facts(
 					s.database.last_day.map((r) => [sourceLabel(r.source), listenCount(r.listens)])
@@ -126,14 +155,12 @@
 	</div>
 
 	<section class="mt-10">
-		<h2 class={heading}>YourSpotify connections</h2>
+		<h2 class={heading}>{m.status.yourspotify}</h2>
 		<p class="mb-2 text-sm text-stone-500">
-			The server last looked for due connections {s.workers.last_round_at
-				? `at ${formatDateTime(s.workers.last_round_at)}`
-				: 'not yet'}.
+			{m.status.lastRound(s.workers.last_round_at ? formatDateTime(s.workers.last_round_at) : null)}
 		</p>
 		{#if s.workers.yourspotify.length === 0}
-			<p class="text-sm text-stone-500">None.</p>
+			<p class="text-sm text-stone-500">{m.common.none}</p>
 		{:else}
 			<ul class="divide-y divide-stone-200 text-sm">
 				{#each s.workers.yourspotify as c (c.id)}
@@ -155,22 +182,19 @@
 	</section>
 
 	<section class="mt-10">
-		<h2 class={heading}>API response times since the start</h2>
-		<p class="mb-2 text-sm text-stone-500">
-			By route under /api, the ones that took the most time in all first; median and 95th percentile
-			of the latest 500 requests each.
-		</p>
+		<h2 class={heading}>{m.status.routes}</h2>
+		<p class="mb-2 text-sm text-stone-500">{m.status.routesIntro}</p>
 		<div class="overflow-x-auto">
 			<table class="w-full text-sm">
 				<thead class="text-left text-stone-500">
 					<tr>
-						<th class={cell}>Route</th>
-						<th class="{num} font-normal">Requests</th>
+						<th class={cell}>{m.status.route}</th>
+						<th class="{num} font-normal">{m.status.requests}</th>
 						<th class="{num} font-normal">5xx</th>
-						<th class="{num} font-normal">Mean</th>
-						<th class="{num} font-normal">Median</th>
+						<th class="{num} font-normal">{m.status.mean}</th>
+						<th class="{num} font-normal">{m.status.median}</th>
 						<th class="{num} font-normal">95 %</th>
-						<th class="{num} font-normal">Max</th>
+						<th class="{num} font-normal">{m.status.max}</th>
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-stone-200">
@@ -193,13 +217,13 @@
 	</section>
 
 	<section class="mt-10">
-		<h2 class={heading}>Tables</h2>
+		<h2 class={heading}>{m.status.tables}</h2>
 		<table class="text-sm">
 			<thead class="text-left text-stone-500">
 				<tr>
-					<th class="{cell} font-normal">Table</th>
-					<th class="{num} font-normal">Rows (about)</th>
-					<th class="{num} font-normal">Size</th>
+					<th class="{cell} font-normal">{m.status.table}</th>
+					<th class="{num} font-normal">{m.status.rows}</th>
+					<th class="{num} font-normal">{m.status.size}</th>
 				</tr>
 			</thead>
 			<tbody class="divide-y divide-stone-200">

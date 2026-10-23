@@ -9,7 +9,10 @@
 		type Visibility
 	} from '#lib/api.ts';
 	import { connectionState, importing, refetchState } from '#lib/connections.ts';
-	import { formatDateTime, listenCount } from '#lib/format.ts';
+	import { dates, formatDateTime, formatOrList, listenCount } from '#lib/format.ts';
+	import Fill from '#lib/i18n/Fill.svelte';
+	import { catalogs, languageNames, m } from '#lib/i18n/index.ts';
+	import { browserLanguage, useLanguage } from '#lib/i18n/locale.svelte.ts';
 	import { browserTimeZone, zoneNames } from '#lib/zone.svelte.ts';
 	import type { PageProps } from './$types';
 
@@ -17,11 +20,11 @@
 
 	const me = $derived(data.me);
 
-	const visibilities: { value: Visibility; label: string }[] = [
-		{ value: 'public', label: 'Public' },
-		{ value: 'followers', label: 'Followers only' },
-		{ value: 'private', label: 'Private' }
-	];
+	const visibilities = $derived<{ value: Visibility; label: string }[]>([
+		{ value: 'public', label: m.visibility.public },
+		{ value: 'followers', label: m.visibility.followers },
+		{ value: 'private', label: m.visibility.private }
+	]);
 
 	// Each form keeps its own error, so it shows next to what failed.
 	let errors: Record<string, string> = $state({});
@@ -87,7 +90,7 @@
 	}
 
 	const revoke = (id: number, label: string) => {
-		if (!confirm(`Revoke the token "${label}"? Its client can't scrobble any more.`)) return;
+		if (!confirm(m.settings.tokens.confirmRevoke(label))) return;
 		change('tokens', () => sendJson(fetch, 'DELETE', `/api/me/tokens/${id}`));
 	};
 
@@ -115,17 +118,12 @@
 	}
 
 	const disconnect = (c: Connection) => {
-		if (!confirm(`Stop importing from YourSpotify into ${c.profile}? Its listens stay.`)) return;
+		if (!confirm(m.settings.yourspotify.confirmDisconnect(c.profile))) return;
 		change('connections', () => sendJson(fetch, 'DELETE', `/api/me/yourspotify/${c.id}`));
 	};
 
 	const refetch = (c: Connection) => {
-		if (
-			!confirm(
-				`Fetch the whole history from YourSpotify into ${c.profile} again? Plays it has already are skipped.`
-			)
-		)
-			return;
+		if (!confirm(m.settings.yourspotify.confirmRefetch(c.profile))) return;
 		change('connections', () => sendJson(fetch, 'POST', `/api/me/yourspotify/${c.id}/refetch`));
 	};
 
@@ -149,7 +147,10 @@
 		);
 
 	function removeFollower(f: Follower) {
-		const what = f.state === 'requested' ? `Say no to ${f.username}?` : `Remove ${f.username}?`;
+		const what =
+			f.state === 'requested'
+				? m.settings.followers.confirmNo(f.username)
+				: m.settings.followers.confirmRemove(f.username);
 		if (confirm(what)) answer(f, 'DELETE');
 	}
 
@@ -162,11 +163,10 @@
 		me.time_zone && !knownZones.includes(me.time_zone) ? [...knownZones, me.time_zone] : knownZones
 	);
 	// Monday 2024-01-01 and the days after it name the weekdays.
-	const weekdayName = new Intl.DateTimeFormat(undefined, { weekday: 'long' });
-	const weekStarts = [1, 7, 6].map((n) => ({
-		value: n,
-		label: weekdayName.format(new Date(2024, 0, n))
-	}));
+	const weekdayName = dates({ weekday: 'long' });
+	const weekStarts = $derived(
+		[1, 7, 6].map((n) => ({ value: n, label: weekdayName().format(new Date(2024, 0, n)) }))
+	);
 
 	let time: { zone: string; weekStart: number } | null = $state(null);
 	const shownTime = $derived(time ?? { zone: me.time_zone ?? '', weekStart: me.week_start });
@@ -180,6 +180,18 @@
 			time = null;
 			timeSaved = true;
 		}
+	}
+
+	// Language: shown in the new one at once, and saved for the account.
+
+	const languages = languageNames();
+	const browserLanguageName = catalogs[browserLanguage()].languageName;
+
+	async function setLanguage(language: string) {
+		useLanguage(language || null);
+		await change('language', () =>
+			sendJson(fetch, 'PUT', '/api/me/language', { language: language || null })
+		);
 	}
 
 	// Streaks
@@ -225,7 +237,7 @@
 		event.preventDefault();
 		passwordChanged = false;
 		if (password.new !== password.repeated) {
-			errors.password = 'The new passwords differ.';
+			errors.password = m.settings.password.differ;
 			return;
 		}
 		const { current, new: newPassword } = password;
@@ -251,17 +263,17 @@
 {/snippet}
 
 <svelte:head>
-	<title>Settings · musicbanana</title>
+	<title>{m.settings.title} · musicbanana</title>
 </svelte:head>
 
 <main class="mx-auto max-w-3xl px-4 pb-16 sm:px-8">
-	<h1 class="mt-6 text-3xl font-bold">Settings</h1>
+	<h1 class="mt-6 text-3xl font-bold">{m.settings.title}</h1>
 	<p class="mt-1 text-stone-600">{me.username} · {me.email}</p>
 
 	<section class="mt-10">
-		<h2 class={heading}>Profiles</h2>
+		<h2 class={heading}>{m.settings.profiles.heading}</h2>
 		<p class="mb-3 text-sm text-stone-600">
-			Each profile has its own listens and charts, for example one per player or per person.
+			{m.settings.profiles.intro}
 		</p>
 		<ul class="divide-y divide-stone-200">
 			{#each data.profiles as profile (profile.slug)}
@@ -273,11 +285,12 @@
 						<span class="text-sm text-stone-500 tabular-nums">{listenCount(profile.listens)}</span>
 						<a
 							class="text-sm text-stone-600 underline hover:text-stone-900"
-							href="/settings/history/{encodeURIComponent(profile.slug)}">Edit listening history</a
+							href="/settings/history/{encodeURIComponent(profile.slug)}"
+							>{m.settings.profiles.editHistory}</a
 						>
 						<select
 							class="{select} ml-auto text-sm"
-							aria-label="Who sees {profile.name}"
+							aria-label={m.settings.profiles.whoSees(profile.name)}
 							value={profile.visibility}
 							onchange={(e) => setVisibility(profile.slug, e.currentTarget.value as Visibility)}
 						>
@@ -295,14 +308,14 @@
 					>
 						<input
 							class="{input} min-w-0 flex-1"
-							aria-label="Name of {profile.slug}"
+							aria-label={m.settings.profiles.nameOf(profile.slug)}
 							value={names[profile.slug] ?? profile.name}
 							oninput={(e) => (names[profile.slug] = e.currentTarget.value)}
 						/>
 						<button
 							class={button}
 							disabled={names[profile.slug] === undefined || names[profile.slug] === profile.name}
-							>Rename</button
+							>{m.settings.profiles.rename}</button
 						>
 					</form>
 					{@render error(`profile-${profile.slug}`)}
@@ -311,26 +324,26 @@
 		</ul>
 
 		<form class="mt-4 rounded border border-stone-200 p-4" onsubmit={createProfile}>
-			<h3 class="font-medium">New profile</h3>
+			<h3 class="font-medium">{m.settings.profiles.new}</h3>
 			<div class="mt-3 grid gap-3 sm:grid-cols-3">
 				<label class="flex flex-col gap-1 text-sm">
-					<span>Address</span>
+					<span>{m.settings.profiles.address}</span>
 					<input
 						class={input}
 						required
 						maxlength="32"
 						pattern="[a-z0-9][a-z0-9\-]*"
-						title="Lower-case letters, digits and dashes"
+						title={m.settings.profiles.addressRule}
 						placeholder="spotify"
 						bind:value={newProfile.slug}
 					/>
 				</label>
 				<label class="flex flex-col gap-1 text-sm">
-					<span>Name</span>
+					<span>{m.settings.profiles.name}</span>
 					<input class={input} required placeholder="Spotify" bind:value={newProfile.name} />
 				</label>
 				<label class="flex flex-col gap-1 text-sm">
-					<span>Who sees it</span>
+					<span>{m.settings.profiles.whoSeesIt}</span>
 					<select class={select} bind:value={newProfile.visibility}>
 						{#each visibilities as v (v.value)}
 							<option value={v.value}>{v.label}</option>
@@ -339,25 +352,25 @@
 				</label>
 			</div>
 			<p class="mt-2 text-sm text-stone-500">
-				The address makes /u/{me.username}/{newProfile.slug || 'spotify'}.
+				{m.settings.profiles.addressMakes(`/u/${me.username}/${newProfile.slug || 'spotify'}`)}
 			</p>
 			{@render error('new-profile')}
-			<button class="{button} mt-3">Create profile</button>
+			<button class="{button} mt-3">{m.settings.profiles.create}</button>
 		</form>
 	</section>
 
 	<section class="mt-12">
-		<h2 class={heading}>Scrobble tokens</h2>
+		<h2 class={heading}>{m.settings.tokens.heading}</h2>
 		<p class="mb-3 text-sm text-stone-600">
-			A player scrobbles with a token, which decides the profile its listens go to. In Navidrome it
-			goes into the personal settings under "Scrobble to ListenBrainz".
+			{m.settings.tokens.intro}
 		</p>
 
 		{#if created}
 			<div class="mb-4 rounded border border-yellow-400 bg-yellow-50 p-4" role="status">
 				<p class="text-sm">
-					The token for <span class="font-medium">{created.label}</span>. It is shown only now, so
-					copy it into the player:
+					<Fill text={m.settings.tokens.created}>
+						{#snippet label()}<span class="font-medium">{created!.label}</span>{/snippet}
+					</Fill>
 				</p>
 				<input
 					class="{input} mt-2 w-full bg-white font-mono text-sm"
@@ -365,19 +378,21 @@
 					value={created.token}
 					onfocus={(e) => e.currentTarget.select()}
 				/>
-				<button class="{button} mt-2" onclick={() => (created = null)}>Done</button>
+				<button class="{button} mt-2" onclick={() => (created = null)}
+					>{m.settings.tokens.done}</button
+				>
 			</div>
 		{/if}
 
 		{#if data.tokens.length === 0}
-			<p class="text-sm text-stone-500">No tokens yet.</p>
+			<p class="text-sm text-stone-500">{m.settings.tokens.none}</p>
 		{:else}
 			<table class="w-full text-sm">
 				<thead class="text-left text-stone-500">
 					<tr>
-						<th class="py-1 font-medium">Label</th>
-						<th class="py-1 font-medium">Profile</th>
-						<th class="hidden py-1 font-medium sm:table-cell">Last used</th>
+						<th class="py-1 font-medium">{m.settings.tokens.label}</th>
+						<th class="py-1 font-medium">{m.settings.tokens.profile}</th>
+						<th class="hidden py-1 font-medium sm:table-cell">{m.settings.tokens.lastUsed}</th>
 						<th></th>
 					</tr>
 				</thead>
@@ -387,10 +402,12 @@
 							<td class="py-2">{token.label}</td>
 							<td class="py-2">{token.profile}</td>
 							<td class="hidden py-2 text-stone-500 tabular-nums sm:table-cell">
-								{token.last_used_at ? formatDateTime(token.last_used_at) : 'never'}
+								{token.last_used_at ? formatDateTime(token.last_used_at) : m.settings.tokens.never}
 							</td>
 							<td class="py-2 text-right">
-								<button class={button} onclick={() => revoke(token.id, token.label)}>Revoke</button>
+								<button class={button} onclick={() => revoke(token.id, token.label)}
+									>{m.settings.tokens.revoke}</button
+								>
 							</td>
 						</tr>
 					{/each}
@@ -401,7 +418,7 @@
 
 		<form class="mt-4 flex flex-wrap items-end gap-3" onsubmit={createToken}>
 			<label class="flex flex-col gap-1 text-sm">
-				<span>Profile</span>
+				<span>{m.settings.tokens.profile}</span>
 				<select class={select} bind:value={newToken.profile}>
 					{#each me.profiles as profile (profile.slug)}
 						<option value={profile.slug}>{profile.name}</option>
@@ -409,22 +426,23 @@
 				</select>
 			</label>
 			<label class="flex min-w-48 flex-1 flex-col gap-1 text-sm">
-				<span>Label</span>
+				<span>{m.settings.tokens.label}</span>
 				<input class={input} required placeholder="Navidrome" bind:value={newToken.label} />
 			</label>
-			<button class={button}>Create token</button>
+			<button class={button}>{m.settings.tokens.create}</button>
 		</form>
 		{@render error('new-token')}
 	</section>
 
 	<section class="mt-12">
-		<h2 class={heading}>Spotify via YourSpotify</h2>
+		<h2 class={heading}>{m.settings.yourspotify.heading}</h2>
 		<p class="mb-3 text-sm text-stone-600">
-			<a class="underline" href="https://github.com/Yooooomi/your_spotify">YourSpotify</a> keeps the
-			history of a Spotify account. Connected to a profile, musicbanana imports its whole history,
-			then the new plays every 15 minutes. One Spotify account per profile. When YourSpotify has
-			imported an older Spotify export since, <em>Fetch all again</em> brings its plays; those already
-			here are skipped.
+			<Fill text={m.settings.yourspotify.intro}>
+				{#snippet yourspotify()}<a class="underline" href="https://github.com/Yooooomi/your_spotify"
+						>YourSpotify</a
+					>{/snippet}
+				{#snippet fetchAll()}<em>{m.settings.yourspotify.fetchAll}</em>{/snippet}
+			</Fill>
 		</p>
 		{#if data.connections.length > 0}
 			<ul class="divide-y divide-stone-200">
@@ -434,15 +452,17 @@
 							>{c.profile}</a
 						>
 						<span class="min-w-0 truncate text-stone-500">{c.url}</span>
-						<span class="text-stone-500 tabular-nums">{listenCount(c.imported)} so far</span>
+						<span class="text-stone-500 tabular-nums"
+							>{m.settings.yourspotify.soFar(listenCount(c.imported))}</span
+						>
 						<span class="ml-auto flex gap-2">
 							<button
 								class={button}
 								disabled={!!c.refetch_requested_at}
-								title="Fetch the whole history again, for plays YourSpotify has added from before"
-								onclick={() => refetch(c)}>Fetch all again</button
+								title={m.settings.yourspotify.fetchAllTitle}
+								onclick={() => refetch(c)}>{m.settings.yourspotify.fetchAll}</button
 							>
-							<button class={button} onclick={() => disconnect(c)}>Remove</button>
+							<button class={button} onclick={() => disconnect(c)}>{m.common.remove}</button>
 						</span>
 						<p class="w-full {c.error ? 'text-red-700' : 'text-stone-500'}">{connectionState(c)}</p>
 						{#if refetchState(c)}
@@ -456,8 +476,10 @@
 
 		{#if data.allowed.length === 0}
 			<p class="mt-4 text-sm text-stone-500">
-				This server takes YourSpotify connections from its command line only. Its admin can allow
-				addresses for this page with <code class="text-stone-700">YOURSPOTIFY_ALLOWED_URLS</code>.
+				<Fill text={m.settings.yourspotify.cliOnly}>
+					{#snippet variable()}<code class="text-stone-700">YOURSPOTIFY_ALLOWED_URLS</code
+						>{/snippet}
+				</Fill>
 			</p>
 		{:else}
 			<form
@@ -465,7 +487,7 @@
 				onsubmit={connect}
 			>
 				<label class="flex flex-col gap-1 text-sm">
-					<span>Profile</span>
+					<span>{m.settings.yourspotify.profile}</span>
 					<select class={select} bind:value={newConnection.profile}>
 						{#each me.profiles as profile (profile.slug)}
 							<option value={profile.slug}>{profile.name}</option>
@@ -473,7 +495,7 @@
 					</select>
 				</label>
 				<label class="flex flex-col gap-1 text-sm">
-					<span>YourSpotify API address</span>
+					<span>{m.settings.yourspotify.address}</span>
 					<input
 						class={input}
 						required
@@ -487,7 +509,7 @@
 					</datalist>
 				</label>
 				<label class="flex flex-col gap-1 text-sm">
-					<span>Public token</span>
+					<span>{m.settings.yourspotify.token}</span>
 					<input
 						class={input}
 						required
@@ -496,46 +518,55 @@
 						bind:value={newConnection.token}
 					/>
 				</label>
-				<button class={button} disabled={connecting}>{connecting ? 'Checking…' : 'Connect'}</button>
+				<button class={button} disabled={connecting}
+					>{connecting ? m.settings.yourspotify.checking : m.settings.yourspotify.connect}</button
+				>
 			</form>
 			<p class="mt-2 text-sm text-stone-500">
-				The address is YourSpotify's API (its API_ENDPOINT, not the web interface), as the
-				musicbanana server reaches it: {data.allowed.join(' or ')}, or below. The public token is in
-				YourSpotify's settings.
+				{m.settings.yourspotify.addressHelp(formatOrList(data.allowed))}
 			</p>
 		{/if}
 		{@render error('connection')}
 	</section>
 
 	<section class="mt-12">
-		<h2 class={heading}>Followers</h2>
+		<h2 class={heading}>{m.settings.followers.heading}</h2>
 		<p class="mb-3 text-sm text-stone-600">
-			Anybody logged in can follow a public profile. A profile for followers shows itself to those
-			you said yes to; removing someone hides it from them again.
+			{m.settings.followers.intro}
 		</p>
 		{#if data.followers.length === 0}
-			<p class="text-sm text-stone-500">Nobody follows your profiles yet.</p>
+			<p class="text-sm text-stone-500">{m.settings.followers.none}</p>
 		{:else}
 			<ul class="divide-y divide-stone-200 text-sm">
 				{#each data.followers as f (`${f.profile}/${f.username}`)}
 					<li class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2">
-						<span>
-							<a class="font-medium hover:underline" href={profilePath(f.username)}>{f.username}</a>
-							<span class="text-stone-500">
-								{f.state === 'requested' ? 'asks to follow' : 'follows'}
-								<a class="hover:underline" href={profilePath(me.username, f.profile)}
-									>{profilePath(me.username, f.profile)}</a
-								>
-								{f.state === 'requested' ? 'since' : 'as of'}
-								{formatDateTime(f.since)}
-							</span>
+						<span class="text-stone-500">
+							<Fill
+								text={f.state === 'requested'
+									? m.settings.followers.asks(formatDateTime(f.since))
+									: m.settings.followers.follows(formatDateTime(f.since))}
+							>
+								{#snippet user()}<a
+										class="font-medium text-stone-900 hover:underline"
+										href={profilePath(f.username)}>{f.username}</a
+									>{/snippet}
+								{#snippet profile()}<a
+										class="hover:underline"
+										href={profilePath(me.username, f.profile)}
+										>{profilePath(me.username, f.profile)}</a
+									>{/snippet}
+							</Fill>
 						</span>
 						<span class="flex gap-2">
 							{#if f.state === 'requested'}
-								<button class={button} onclick={() => answer(f, 'PUT')}>Say yes</button>
-								<button class={button} onclick={() => removeFollower(f)}>Say no</button>
+								<button class={button} onclick={() => answer(f, 'PUT')}
+									>{m.settings.followers.yes}</button
+								>
+								<button class={button} onclick={() => removeFollower(f)}
+									>{m.settings.followers.no}</button
+								>
 							{:else}
-								<button class={button} onclick={() => removeFollower(f)}>Remove</button>
+								<button class={button} onclick={() => removeFollower(f)}>{m.common.remove}</button>
 							{/if}
 						</span>
 					</li>
@@ -546,27 +577,26 @@
 	</section>
 
 	<section class="mt-12">
-		<h2 class={heading}>Time</h2>
+		<h2 class={heading}>{m.settings.time.heading}</h2>
 		<p class="mb-3 text-sm text-stone-600">
-			Days, weeks, years and the listening clock follow your time zone, on your profiles and on
-			everybody else's. Without one, they follow this browser's.
+			{m.settings.time.intro}
 		</p>
 		<form class="flex max-w-sm flex-col gap-3" onsubmit={changeTime}>
 			<label class="flex flex-col gap-1 text-sm">
-				<span>Time zone</span>
+				<span>{m.settings.time.zone}</span>
 				<select
 					class={select}
 					value={shownTime.zone}
 					onchange={(e) => (time = { ...shownTime, zone: e.currentTarget.value })}
 				>
-					<option value="">This browser's ({zoneName(browserTimeZone)})</option>
+					<option value="">{m.settings.time.browserZone(zoneName(browserTimeZone))}</option>
 					{#each zones as zone (zone)}
 						<option value={zone}>{zoneName(zone)}</option>
 					{/each}
 				</select>
 			</label>
 			<label class="flex flex-col gap-1 text-sm">
-				<span>Weeks start on</span>
+				<span>{m.settings.time.weekStart}</span>
 				<select
 					class={select}
 					value={shownTime.weekStart}
@@ -579,18 +609,36 @@
 			</label>
 			{@render error('time')}
 			{#if timeSaved}
-				<p class="text-sm text-green-800" role="status">Saved.</p>
+				<p class="text-sm text-green-800" role="status">{m.common.saved}</p>
 			{/if}
 			<button
 				class="{button} self-start"
 				disabled={time === null ||
-					(time.zone === (me.time_zone ?? '') && time.weekStart === me.week_start)}>Save</button
+					(time.zone === (me.time_zone ?? '') && time.weekStart === me.week_start)}
+				>{m.common.save}</button
 			>
 		</form>
 	</section>
 
 	<section class="mt-12">
-		<h2 class={heading}>Streaks</h2>
+		<h2 class={heading}>{m.settings.language.heading}</h2>
+		<p class="mb-3 text-sm text-stone-600">{m.settings.language.intro}</p>
+		<select
+			class="{select} max-w-sm"
+			aria-label={m.settings.language.heading}
+			value={me.language ?? ''}
+			onchange={(e) => setLanguage(e.currentTarget.value)}
+		>
+			<option value="">{m.settings.language.browser(browserLanguageName)}</option>
+			{#each languages as l (l.code)}
+				<option value={l.code} lang={l.code}>{l.name}</option>
+			{/each}
+		</select>
+		{@render error('language')}
+	</section>
+
+	<section class="mt-12">
+		<h2 class={heading}>{m.settings.streaks.heading}</h2>
 		<label class="flex items-start gap-2 text-sm">
 			<input
 				class="mt-0.5"
@@ -599,50 +647,51 @@
 				onchange={(e) => setStreaks(e.currentTarget.checked)}
 			/>
 			<span>
-				Show streaks, the days in a row with listens, under "This week" on profile pages. Turned
-				off, you don't see them on any profile, and nobody sees those of your profiles.
+				{m.settings.streaks.text}
 			</span>
 		</label>
 		{@render error('streaks')}
 	</section>
 
 	<section class="mt-12">
-		<h2 class={heading}>User name</h2>
+		<h2 class={heading}>{m.settings.username.heading}</h2>
 		<p class="mb-3 text-sm text-stone-600">
-			It is in the address of your profiles and logs you in, as does your email address. Links with
-			an old name lead to the new one, and nobody else can take it. Scrobble tokens and YourSpotify
-			connections stay as they are.
+			{m.settings.username.intro}
 		</p>
 		<form class="flex max-w-sm gap-2" onsubmit={changeUsername}>
 			<input
 				class="{input} min-w-0 flex-1"
-				aria-label="User name"
+				aria-label={m.settings.username.label}
 				autocomplete="username"
 				required
 				maxlength="32"
 				value={username ?? me.username}
 				oninput={(e) => (username = e.currentTarget.value)}
 			/>
-			<button class={button} disabled={username === null || username === me.username}>Rename</button
+			<button class={button} disabled={username === null || username === me.username}
+				>{m.settings.username.rename}</button
 			>
 		</form>
 		{@render error('username')}
 		{#if renamedFrom}
 			<p class="mt-2 text-sm text-green-800" role="status">
-				Renamed. Links with {renamedFrom} lead to
-				<a class="underline" href={profilePath(me.username)}>{profilePath(me.username)}</a>.
+				<Fill text={m.settings.username.renamed(renamedFrom)}>
+					{#snippet link()}<a class="underline" href={profilePath(me.username)}
+							>{profilePath(me.username)}</a
+						>{/snippet}
+				</Fill>
 			</p>
 		{/if}
 	</section>
 
 	<section class="mt-12">
-		<h2 class={heading}>Email address</h2>
+		<h2 class={heading}>{m.settings.email.heading}</h2>
 		<p class="mb-3 text-sm text-stone-600">
-			It logs you in, as does your user name. musicbanana sends no mail, so it is not checked.
+			{m.settings.email.intro}
 		</p>
 		<form class="flex max-w-sm flex-col gap-3" onsubmit={changeEmail}>
 			<label class="flex flex-col gap-1 text-sm">
-				<span>New address</span>
+				<span>{m.settings.email.new}</span>
 				<input
 					class={input}
 					type="email"
@@ -654,7 +703,7 @@
 				/>
 			</label>
 			<label class="flex flex-col gap-1 text-sm">
-				<span>Your password</span>
+				<span>{m.settings.email.password}</span>
 				<input
 					class={input}
 					type="password"
@@ -665,20 +714,21 @@
 			</label>
 			{@render error('email')}
 			{#if emailChanged}
-				<p class="text-sm text-green-800" role="status">Changed to {me.email}.</p>
+				<p class="text-sm text-green-800" role="status">{m.settings.email.changed(me.email)}</p>
 			{/if}
 			<button
 				class="{button} self-start"
-				disabled={email.address === null || email.address === me.email}>Change address</button
+				disabled={email.address === null || email.address === me.email}
+				>{m.settings.email.change}</button
 			>
 		</form>
 	</section>
 
 	<section class="mt-12">
-		<h2 class={heading}>Password</h2>
+		<h2 class={heading}>{m.settings.password.heading}</h2>
 		<form class="flex max-w-sm flex-col gap-3" onsubmit={changePassword}>
 			<label class="flex flex-col gap-1 text-sm">
-				<span>Current password</span>
+				<span>{m.settings.password.current}</span>
 				<input
 					class={input}
 					type="password"
@@ -688,7 +738,7 @@
 				/>
 			</label>
 			<label class="flex flex-col gap-1 text-sm">
-				<span>New password</span>
+				<span>{m.settings.password.new}</span>
 				<input
 					class={input}
 					type="password"
@@ -699,7 +749,7 @@
 				/>
 			</label>
 			<label class="flex flex-col gap-1 text-sm">
-				<span>New password again</span>
+				<span>{m.settings.password.again}</span>
 				<input
 					class={input}
 					type="password"
@@ -712,29 +762,25 @@
 			{@render error('password')}
 			{#if passwordChanged}
 				<p class="text-sm text-green-800" role="status">
-					Changed. Other browsers logged in with this account are logged out.
+					{m.settings.password.changed}
 				</p>
 			{/if}
-			<button class="{button} self-start">Change password</button>
+			<button class="{button} self-start">{m.settings.password.change}</button>
 		</form>
 	</section>
 
 	<section class="mt-12">
-		<h2 class={heading}>Your data</h2>
+		<h2 class={heading}>{m.settings.data.heading}</h2>
 		<p class="mb-3 text-sm text-stone-600">
-			One JSON file with everything musicbanana keeps about your account: the account, your profiles
-			with all their listens (in ListenBrainz's import format) and their trash, follows, scrobble
-			tokens, YourSpotify connections and logins. Passwords and tokens stay out.
+			{m.settings.data.intro}
 		</p>
-		<a class="{button} inline-block" href="/api/me/export" download>Download your data</a>
+		<a class="{button} inline-block" href="/api/me/export" download>{m.settings.data.download}</a>
 	</section>
 
 	<section class="mt-12">
-		<h2 class={heading}>Deleting a profile or the account</h2>
+		<h2 class={heading}>{m.settings.delete.heading}</h2>
 		<p class="text-sm text-stone-600">
-			Ask the admin of this server. A deleted profile takes its listens, scrobble tokens,
-			YourSpotify connection and followers along; a deleted account all its profiles and logins.
-			This can't be undone.
+			{m.settings.delete.text}
 		</p>
 	</section>
 </main>

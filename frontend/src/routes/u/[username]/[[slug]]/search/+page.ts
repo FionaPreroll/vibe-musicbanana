@@ -9,11 +9,14 @@ import {
 	type SearchResult,
 	type Source
 } from '#lib/api.ts';
+import { m } from '#lib/i18n/index.ts';
 import { sourceOf } from '#lib/source.ts';
 import type { PageLoad } from './$types';
 
 // /u/<username>/search?q=… searches the artists, albums and tracks the profile has heard.
-export const load: PageLoad = async ({ params, url, fetch }) => {
+export const load: PageLoad = async ({ params, url, fetch, parent }) => {
+	// For the viewer's language, in case of an error.
+	await parent();
 	const slug = params.slug ?? 'default';
 	const api = profileApi(params.username, slug);
 	const q = url.searchParams.get('q')?.trim() ?? '';
@@ -30,7 +33,7 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) {
 			await followRename(fetch, params.username, params.slug ?? 'default', url);
-			error(404, 'There is no such profile.');
+			error(404, m.errors.noProfile);
 		}
 		throw e;
 	}

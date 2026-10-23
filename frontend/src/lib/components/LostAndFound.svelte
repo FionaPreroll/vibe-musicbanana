@@ -9,7 +9,8 @@
 		type LostHidden,
 		type LostKind
 	} from '#lib/api.ts';
-	import { formatDate, formatNumber, listenCount, timeAgo } from '#lib/format.ts';
+	import { formatDate, listenCount, timeAgo } from '#lib/format.ts';
+	import { m } from '#lib/i18n/index.ts';
 	import { now } from '#lib/now.svelte.ts';
 	import { wallDay } from '#lib/zone.svelte.ts';
 
@@ -109,7 +110,7 @@
 	<div>
 		<h3 class="text-sm font-semibold text-stone-700">{title}</h3>
 		{#if entries.length === 0}
-			<p class="mt-1 text-sm text-stone-500">Nothing lost right now.</p>
+			<p class="mt-1 text-sm text-stone-500">{m.lost.nothing}</p>
 		{:else}
 			<ol class="mt-1 divide-y divide-stone-200">
 				{#each entries as entry (entry.id)}
@@ -125,19 +126,18 @@
 							</p>
 							<p
 								class="truncate text-sm text-stone-500"
-								title="Last heard {formatDate(entry.last_listened_at)}"
+								title={m.lost.lastHeardOn(formatDate(entry.last_listened_at))}
 							>
-								{listenCount(entry.listens)} · {years(entry)} · last heard {timeAgo(
-									new Date(entry.last_listened_at),
-									now()
+								{listenCount(entry.listens)} · {years(entry)} · {m.lost.lastHeard(
+									timeAgo(new Date(entry.last_listened_at), now())
 								)}
 							</p>
 						</div>
 						{#if me}
 							<button
 								class="shrink-0 rounded px-2 py-1 text-stone-400 hover:bg-stone-200 hover:text-stone-800"
-								title="Not interested any more"
-								aria-label="Dismiss {entry.name}"
+								title={m.lost.notInterested}
+								aria-label={m.lost.dismiss(entry.name)}
 								onclick={() => dismiss(kind, entry)}>✕</button
 							>
 						{/if}
@@ -149,17 +149,17 @@
 {/snippet}
 
 <section class="mt-12">
-	<h2 class="text-sm font-semibold tracking-wide text-stone-500 uppercase">Lost &amp; found</h2>
+	<h2 class="text-sm font-semibold tracking-wide text-stone-500 uppercase">{m.lost.heading}</h2>
 	<p class="text-sm text-stone-500">
-		Heard a lot, but not since {lost.since ? formatDate(lost.since) : 'a long time'}
+		{m.lost.notSince(lost.since ? formatDate(lost.since) : null)}
 	</p>
 
 	{#if undo}
 		<p class="mt-3 flex flex-wrap items-baseline gap-x-3 rounded bg-yellow-100 px-3 py-2 text-sm">
-			<span>Dismissed {undo.name}{undo.kind === 'artist' ? ' and its tracks' : ''}.</span>
+			<span>{m.lost.dismissed(undo.name, undo.kind === 'artist')}</span>
 			<button
 				class="font-medium underline hover:no-underline"
-				onclick={() => undo && showAgain(undo.kind, undo.id)}>Undo</button
+				onclick={() => undo && showAgain(undo.kind, undo.id)}>{m.common.undo}</button
 			>
 		</p>
 	{/if}
@@ -168,8 +168,8 @@
 	{/if}
 
 	<div class="mt-3 grid gap-x-8 gap-y-6 md:grid-cols-2">
-		{@render list('Artists', 'artist', artists)}
-		{@render list('Tracks', 'recording', tracks)}
+		{@render list(m.common.artists, 'artist', artists)}
+		{@render list(m.common.tracks, 'recording', tracks)}
 	</div>
 
 	<div class="mt-3 flex flex-wrap gap-2">
@@ -178,7 +178,7 @@
 				class="rounded border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-100"
 				onclick={() => (all = !all)}
 			>
-				{all ? 'Fewer' : 'More'}
+				{all ? m.common.fewer : m.common.more}
 			</button>
 		{/if}
 		{#if me && lost.hidden}
@@ -187,7 +187,7 @@
 				aria-expanded={showHidden}
 				onclick={toggleHidden}
 			>
-				{showHidden ? 'Hide dismissed' : `Dismissed (${formatNumber(lost.hidden)})`}
+				{showHidden ? m.lost.hideDismissed : m.lost.dismissedCount(lost.hidden)}
 			</button>
 		{/if}
 	</div>
@@ -199,7 +199,7 @@
 					<span class="min-w-0 flex-1 truncate">
 						<span class="font-medium">{entry.name}</span>
 						<span class="text-stone-500">
-							{#if entry.artist}· {entry.artist}{:else}· artist and its tracks{/if}
+							{#if entry.artist}· {entry.artist}{:else}· {m.lost.artistAndTracks}{/if}
 						</span>
 					</span>
 					<span class="hidden shrink-0 text-sm text-stone-500 sm:inline"
@@ -207,11 +207,11 @@
 					>
 					<button
 						class="shrink-0 rounded border border-stone-300 px-2 py-0.5 text-sm hover:bg-stone-100"
-						onclick={() => showAgain(entry.kind, entry.id)}>Show again</button
+						onclick={() => showAgain(entry.kind, entry.id)}>{m.lost.showAgain}</button
 					>
 				</li>
 			{:else}
-				<li class="py-1.5 text-sm text-stone-500">Nothing dismissed.</li>
+				<li class="py-1.5 text-sm text-stone-500">{m.lost.nothingDismissed}</li>
 			{/each}
 		</ol>
 	{/if}

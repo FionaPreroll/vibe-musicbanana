@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { EntityKind, OnThisDay } from '#lib/api.ts';
-	import { formatNumber, listenCount } from '#lib/format.ts';
+	import { dates, formatNumber, listenCount } from '#lib/format.ts';
+	import { m } from '#lib/i18n/index.ts';
 	import { parseDay } from '#lib/period.ts';
 
 	let {
@@ -15,14 +16,8 @@
 		dayHref: (day: string) => string;
 	} = $props();
 
-	const dayOfYear = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'long' });
-	const fullDay = new Intl.DateTimeFormat(undefined, {
-		weekday: 'short',
-		day: 'numeric',
-		month: 'short',
-		year: 'numeric'
-	});
-	const yearsAgo = (n: number) => (n === 1 ? 'A year ago' : `${formatNumber(n)} years ago`);
+	const dayOfYear = dates({ day: 'numeric', month: 'long' });
+	const fullDay = dates({ weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 
 	// One row of cards at first, so the charts stay close; years go back to 2007 for some.
 	const shown = 3;
@@ -31,17 +26,21 @@
 </script>
 
 <section class="mt-8">
-	<h2 class="text-sm font-semibold tracking-wide text-stone-500 uppercase">On this day</h2>
+	<h2 class="text-sm font-semibold tracking-wide text-stone-500 uppercase">
+		{m.onThisDay.heading}
+	</h2>
 	<p class="text-sm text-stone-500">
-		{dayOfYear.format(parseDay(onThisDay.day))} in earlier years
+		{m.onThisDay.sub(dayOfYear().format(parseDay(onThisDay.day)))}
 	</p>
 
 	<ol class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 		{#each years as year (year.date)}
 			<li class="rounded-lg border border-stone-200 p-3">
 				<a href={dayHref(year.date)} class="group flex items-baseline gap-2">
-					<span class="font-semibold group-hover:underline">{yearsAgo(year.years_ago)}</span>
-					<span class="text-sm text-stone-500">{fullDay.format(parseDay(year.date))}</span>
+					<span class="font-semibold group-hover:underline"
+						>{m.onThisDay.yearsAgo(year.years_ago)}</span
+					>
+					<span class="text-sm text-stone-500">{fullDay().format(parseDay(year.date))}</span>
 					<span class="ml-auto shrink-0 text-sm text-stone-500 tabular-nums"
 						>{listenCount(year.listens)}</span
 					>
@@ -78,7 +77,7 @@
 			class="mt-3 rounded border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-100"
 			onclick={() => (all = !all)}
 		>
-			{all ? 'Fewer years' : `All ${formatNumber(onThisDay.years.length)} years`}
+			{all ? m.onThisDay.fewerYears : m.onThisDay.allYears(onThisDay.years.length)}
 		</button>
 	{/if}
 </section>

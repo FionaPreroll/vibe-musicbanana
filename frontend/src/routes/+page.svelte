@@ -2,6 +2,7 @@
 	import { profilePath } from '#lib/api.ts';
 	import VisibilityBadge from '#lib/components/VisibilityBadge.svelte';
 	import { listenCount } from '#lib/format.ts';
+	import { m } from '#lib/i18n/index.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -12,11 +13,11 @@
 </svelte:head>
 
 <main class="mx-auto max-w-2xl px-4 pb-16 sm:px-8">
-	<p class="mt-6 text-stone-600">A free place for your listening history.</p>
+	<p class="mt-6 text-stone-600">{m.home.tagline}</p>
 
 	{#if data.following.length > 0}
 		<h2 class="mt-10 mb-2 text-sm font-semibold tracking-wide text-stone-500 uppercase">
-			You follow
+			{m.home.youFollow}
 		</h2>
 		<ul class="divide-y divide-stone-200">
 			{#each data.following as f (`${f.username}/${f.slug}`)}
@@ -36,7 +37,7 @@
 						<VisibilityBadge visibility={f.visibility} />
 					</span>
 					{#if f.state === 'requested'}
-						<span class="text-sm text-stone-500">Asked, no answer yet</span>
+						<span class="text-sm text-stone-500">{m.home.asked}</span>
 					{/if}
 				</li>
 			{/each}
@@ -44,10 +45,10 @@
 	{/if}
 
 	<h2 class="mt-10 mb-2 text-sm font-semibold tracking-wide text-stone-500 uppercase">
-		{data.following.length > 0 ? 'All profiles' : 'Profiles'}
+		{data.following.length > 0 ? m.home.allProfiles : m.home.profiles}
 	</h2>
 	{#if data.profiles.length === 0}
-		<p class="text-sm text-stone-500">No profiles to show yet.</p>
+		<p class="text-sm text-stone-500">{m.home.noProfiles}</p>
 	{:else}
 		<ul class="divide-y divide-stone-200">
 			{#each data.profiles as profile (`${profile.username}/${profile.slug}`)}

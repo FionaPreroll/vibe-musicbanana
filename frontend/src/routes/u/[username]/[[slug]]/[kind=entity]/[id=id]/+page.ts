@@ -11,6 +11,7 @@ import {
 	type EntityPage,
 	type Source
 } from '#lib/api.ts';
+import { m } from '#lib/i18n/index.ts';
 import { sourceOf } from '#lib/source.ts';
 import { timeZone } from '#lib/zone.svelte.ts';
 import type { PageLoad } from './$types';
@@ -42,7 +43,7 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	} catch (e) {
 		if (e instanceof ApiError && e.status === 404) {
 			await followRename(fetch, params.username, slug, url);
-			error(404, `There is no such profile or ${params.kind}.`);
+			error(404, m.errors.noEntity[params.kind]);
 		}
 		if (e instanceof ApiError && e.status === 400) error(400, e.message);
 		throw e;

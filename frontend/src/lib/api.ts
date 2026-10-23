@@ -1,4 +1,5 @@
 import { redirect } from '@sveltejs/kit';
+import { translateServerError } from '#lib/i18n/server-errors.ts';
 
 // Types and small fetch helpers for the backend's JSON API (backend/src/profiles.rs,
 // backend/src/entities.rs and backend/src/account.rs).
@@ -229,6 +230,8 @@ export type Me = {
 	week_start: number;
 	/** Whether the account sees streaks, and others see the streaks of its profiles. */
 	show_streaks: boolean;
+	/** The language of the pages, like "de"; the browser's when null. */
+	language: string | null;
 	/** Without their listens; GET /api/me/profiles has those. */
 	profiles: Omit<OwnProfile, 'listens'>[];
 };
@@ -412,10 +415,9 @@ export async function sendJson<T = null>(
 	return res.status === 204 ? (null as T) : res.json();
 }
 
-/** A message for the person in front of the screen, for any error. */
+/** A message for the person in front of the screen, for any error, in the page's language where known. */
 export function errorMessage(e: unknown) {
-	const message = e instanceof Error ? e.message : String(e);
-	return message.charAt(0).toUpperCase() + message.slice(1);
+	return translateServerError(e instanceof Error ? e.message : String(e));
 }
 
 /** Where the viewer stands with a profile they could follow. */

@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { listenCount } from '#lib/format.ts';
+	import { m } from '#lib/i18n/index.ts';
 	import {
 		isoDay,
 		periodDays,
@@ -67,7 +68,7 @@
 	}
 </script>
 
-<nav class="mt-8" aria-label="Period">
+<nav class="mt-8" aria-label={m.period.label}>
 	<div class="flex flex-wrap gap-1">
 		{#each presets as preset (periodSearch(preset))}
 			{@const selected = samePeriod(preset, period)}
@@ -85,7 +86,7 @@
 			aria-controls="custom-period"
 			onclick={() => (custom = !custom)}
 		>
-			{period.kind === 'range' ? periodLabel(period) : 'Custom'}
+			{period.kind === 'range' ? periodLabel(period) : m.period.custom}
 		</button>
 	</div>
 
@@ -97,7 +98,7 @@
 			class="mt-3 flex flex-wrap items-end gap-2 text-sm"
 		>
 			<label class="flex flex-col gap-0.5 text-stone-600">
-				From
+				{m.common.from}
 				<input
 					type="date"
 					name="from"
@@ -106,7 +107,7 @@
 				/>
 			</label>
 			<label class="flex flex-col gap-0.5 text-stone-600">
-				To
+				{m.common.to}
 				<input
 					type="date"
 					name="to"
@@ -115,7 +116,7 @@
 				/>
 			</label>
 			<button type="submit" class="rounded bg-stone-900 px-3 py-1.5 text-white hover:bg-stone-700">
-				Show
+				{m.common.show}
 			</button>
 		</form>
 	{/if}

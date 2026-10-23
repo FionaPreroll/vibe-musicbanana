@@ -3,6 +3,7 @@
 // where either end may be left out; with none of them it is all time.
 
 import { formatCalendarDay, formatDateRange } from '#lib/format.ts';
+import { m } from '#lib/i18n/index.ts';
 import { fromWallClock, today as zoneToday } from '#lib/zone.svelte.ts';
 
 export type Period =
@@ -97,27 +98,18 @@ export function comparisonLabel(period: Period, today = zoneToday()) {
 		case 'all':
 			return null;
 		case 'year':
-			return comparisonText.year(period.year - 1);
+			return m.chart.comparedWithYear(period.year - 1);
 		case 'days':
-			return comparisonText.days(period.days);
+			return m.chart.comparedWithDays(period.days);
 		case 'range': {
 			if (!period.from) return null;
 			const from = parseDay(period.from);
 			const to = period.to ? parseDay(period.to) : today;
 			const days = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
-			return days >= 1 ? comparisonText.days(days) : null;
+			return days >= 1 ? m.chart.comparedWithDays(days) : null;
 		}
 	}
 }
-
-// Together so that they can move to a translation later.
-const comparisonText = {
-	year: (year: number) => `Arrows compare each place with ${year}.`,
-	days: (days: number) =>
-		days === 1
-			? 'Arrows compare each place with the day before.'
-			: `Arrows compare each place with the ${days} days before.`
-};
 
 /** Midnight after the last day of the period in the viewer's time zone, or null when it runs up to now. */
 export function periodEnd(period: Period): Date | null {
@@ -131,18 +123,18 @@ export function periodEnd(period: Period): Date | null {
 export function periodLabel(period: Period) {
 	switch (period.kind) {
 		case 'all':
-			return 'All time';
+			return m.period.allTime;
 		case 'year':
 			return String(period.year);
 		case 'days':
-			return period.days === 1 ? 'Today' : `Last ${period.days} days`;
+			return period.days === 1 ? m.period.today : m.period.lastDays(period.days);
 		case 'range':
 			if (period.from && period.to) {
 				return formatDateRange(parseDay(period.from), parseDay(period.to));
 			}
 			return period.from
-				? `Since ${formatCalendarDay(parseDay(period.from))}`
-				: `Until ${formatCalendarDay(parseDay(period.to ?? ''))}`;
+				? m.period.since(formatCalendarDay(parseDay(period.from)))
+				: m.period.until(formatCalendarDay(parseDay(period.to ?? '')));
 	}
 }
 

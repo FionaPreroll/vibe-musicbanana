@@ -9,12 +9,16 @@
 	import Chart from '#lib/components/Chart.svelte';
 	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import {
+		dates,
 		formatDateTimeRange,
 		formatDuration,
 		formatNumber,
 		formatPercent,
-		listenCount
+		listenCount,
+		listParts
 	} from '#lib/format.ts';
+	import Fill from '#lib/i18n/Fill.svelte';
+	import { m } from '#lib/i18n/index.ts';
 	import { comparisonLabel, localDay, parseDay } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
 	import { coverUrl, coversShown } from '#lib/covers.svelte.ts';
@@ -44,13 +48,13 @@
 	const earlier = $derived(overview.years.findLast((y) => y.year < year)?.year ?? null);
 	const later = $derived(overview.years.find((y) => y.year > year)?.year ?? null);
 
-	const byNow = $derived(review.complete ? '' : ' by now');
+	// A running year compares with the year before up to the same day.
+	const partial = $derived(!review.complete);
 	const comparison = $derived.by(() => {
 		const before = review.last_year_so_far;
-		if (before === 0) return `none in ${year - 1}${byNow}`;
-		const change = review.listens / before - 1;
-		if (Math.abs(change) < 0.005) return `as many as in ${year - 1}${byNow}`;
-		return `${formatPercent(Math.abs(change))} ${change > 0 ? 'more' : 'fewer'} than in ${year - 1}${byNow}`;
+		const change = before === 0 ? 0 : review.listens / before - 1;
+		const rounded = Math.abs(change) < 0.005 ? 0 : change;
+		return m.review.compare(rounded, before, year - 1, partial, formatPercent(Math.abs(change)));
 	});
 
 	// The days of the year, or of it so far.
@@ -62,13 +66,13 @@
 
 	// Days within the year go without it. A string is an instant from the API, a
 	// Date a calendar day.
-	const dayMonth = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' });
+	const dayMonth = dates({ day: 'numeric', month: 'short' });
 	const dayOfYear = (when: string | Date) =>
-		dayMonth.format(typeof when === 'string' ? wallDay(when) : when);
+		dayMonth().format(typeof when === 'string' ? wallDay(when) : when);
 
-	const monthName = new Intl.DateTimeFormat(undefined, { month: 'long' });
-	const monthShort = new Intl.DateTimeFormat(undefined, { month: 'narrow' });
-	const month = (m: number, format = monthName) => format.format(localDay(year, m, 1));
+	const monthName = dates({ month: 'long' });
+	const monthShort = dates({ month: 'narrow' });
+	const month = (n: number, format = monthName) => format().format(localDay(year, n, 1));
 	const topMonth = $derived(
 		review.months.reduce((best, m) => (m.listens > best.listens ? m : best), review.months[0])
 	);
@@ -88,7 +92,7 @@
 </script>
 
 <svelte:head>
-	<title>{year} in review · {overview.username} · musicbanana</title>
+	<title>{m.review.title(year)} · {overview.username} · musicbanana</title>
 </svelte:head>
 
 <main class="mx-auto max-w-6xl px-4 pb-16 sm:px-8">
@@ -99,15 +103,15 @@
 				href={data.base + withSource(`?year=${year}`, data.source)}
 				>{overview.username}{#if overview.slug !== 'default'}&nbsp;/ {overview.name}{/if}</a
 			>
-			· Year in review
+			· {m.review.crumb}
 		</p>
 		<div class="mt-1 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
 			<h1 class="text-3xl font-bold">
-				{year} in review{#if !review.complete}{' '}<span class="font-normal text-stone-500"
-						>so far</span
+				{m.review.title(year)}{#if !review.complete}{' '}<span class="font-normal text-stone-500"
+						>{m.review.soFar}</span
 					>{/if}
 			</h1>
-			<nav class="flex gap-1 text-sm" aria-label="Other years">
+			<nav class="flex gap-1 text-sm" aria-label={m.review.otherYears}>
 				{#if earlier !== null}
 					<a class="rounded px-2 py-1 text-stone-600 hover:bg-stone-200" href={yearHref(earlier)}
 						>← {earlier}</a
@@ -125,51 +129,51 @@
 	<SourcePicker sources={data.sources} />
 
 	{#if review.listens === 0}
-		<p class="mt-8 text-stone-500">No listens in {year}{byNow}.</p>
+		<p class="mt-8 text-stone-500">{m.review.noListens(year, partial)}</p>
 	{:else}
 		<dl class="mt-8 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-6">
 			<div>
-				<dt class={label}>Listens</dt>
+				<dt class={label}>{m.entity.listens}</dt>
 				<dd class="text-2xl font-semibold tabular-nums">{formatNumber(review.listens)}</dd>
 				<dd class="text-sm text-stone-500">{comparison}</dd>
 			</div>
 			<div>
-				<dt class={label}>Artists</dt>
+				<dt class={label}>{m.common.artists}</dt>
 				<dd class="text-2xl font-semibold tabular-nums">{formatNumber(review.artists)}</dd>
 				<dd class="text-sm text-stone-500">
-					{formatNumber(review.new_artists)} new, {formatNumber(review.recordings)}
-					{review.recordings === 1 ? 'track' : 'tracks'}
+					{m.review.newAndTracks(review.new_artists, review.recordings)}
 				</dd>
 			</div>
 			<div>
-				<dt class={label}>Days with listens</dt>
+				<dt class={label}>{m.review.daysWithListens}</dt>
 				<dd class="text-2xl font-semibold tabular-nums">
 					{formatNumber(review.days)}<span class="text-base font-normal text-stone-500"
-						>{' '}of {formatNumber(daysInYear)}</span
+						>{' '}{m.week.of(daysInYear)}</span
 					>
 				</dd>
 			</div>
 			<div>
-				<dt class={label}>Busiest month</dt>
+				<dt class={label}>{m.review.busiestMonth}</dt>
 				<dd class="text-2xl font-semibold">{month(topMonth.month)}</dd>
 				<dd class="text-sm text-stone-500">{listenCount(topMonth.listens)}</dd>
 			</div>
 			{#if review.top_day}
 				<div>
-					<dt class={label}>Busiest day</dt>
+					<dt class={label}>{m.review.busiestDay}</dt>
 					<dd class="text-2xl font-semibold">{dayOfYear(parseDay(review.top_day.date))}</dd>
 					<dd class="text-sm text-stone-500">{listenCount(review.top_day.listens)}</dd>
 				</div>
 			{/if}
 			{#if session}
 				<div>
-					<dt class={label}>Longest session</dt>
+					<dt class={label}>{m.review.longestSession}</dt>
 					<dd class="text-2xl font-semibold tabular-nums">
 						{sessionLength >= 60_000 ? formatDuration(sessionLength) : listenCount(session.listens)}
 					</dd>
 					<dd class="text-sm text-stone-500">
-						{#if sessionLength >= 60_000}{listenCount(session.listens)} on{/if}
-						{dayOfYear(session.started_at)}
+						{sessionLength >= 60_000
+							? m.review.listensOn(listenCount(session.listens), dayOfYear(session.started_at))
+							: dayOfYear(session.started_at)}
 					</dd>
 				</div>
 			{/if}
@@ -216,20 +220,20 @@
 
 		<div class="mt-10 grid gap-8 md:grid-cols-3">
 			<Chart
-				title="Top artists"
+				title={m.common.topArtists}
 				entries={data.artists}
 				href={link('artist')}
 				more={more('artists')}
 			/>
 			<Chart
-				title="Top albums"
+				title={m.common.topAlbums}
 				entries={data.releases}
 				href={link('album')}
 				more={more('releases')}
 				cover={albumCover}
 			/>
 			<Chart
-				title="Top tracks"
+				title={m.common.topTracks}
 				entries={data.recordings}
 				href={link('track')}
 				more={more('recordings')}
@@ -239,14 +243,15 @@
 
 		<div class="mt-12 grid gap-8 md:grid-cols-2">
 			<section>
-				<h2 class={heading}>Discovered in {year}</h2>
+				<h2 class={heading}>{m.review.discovered(year)}</h2>
 				{#if review.discoveries.length === 0}
-					<p class="text-sm text-stone-500">No artists heard for the first time.</p>
+					<p class="text-sm text-stone-500">{m.review.noDiscoveries}</p>
 				{:else}
 					<p class="mb-2 text-sm text-stone-500">
-						{formatNumber(review.new_artists)}
-						{review.new_artists === 1 ? 'artist' : 'artists'} heard for the first time{#if review.new_artists > review.discoveries.length},
-							the most heard of them{/if}
+						{m.review.discoveries(
+							review.new_artists,
+							review.new_artists > review.discoveries.length
+						)}
 					</p>
 					<ol class="space-y-0.5">
 						{#each review.discoveries as artist (artist.id)}
@@ -263,7 +268,8 @@
 									>
 									<span class="ml-auto shrink-0 text-sm text-stone-600 tabular-nums">
 										{formatNumber(artist.listens)}
-										<span class="text-stone-400">· since {dayOfYear(artist.first_listened_at)}</span
+										<span class="text-stone-400"
+											>· {m.review.since(dayOfYear(artist.first_listened_at))}</span
 										>
 									</span>
 								</a>
@@ -274,14 +280,14 @@
 			</section>
 
 			<section>
-				<h2 class={heading}>Biggest risers</h2>
+				<h2 class={heading}>{m.review.risers}</h2>
 				{#if review.risers.length === 0}
 					<p class="text-sm text-stone-500">
-						No artist heard before got more listens than in {year - 1}{byNow}.
+						{m.review.noRisers(year - 1, partial)}
 					</p>
 				{:else}
 					<p class="mb-2 text-sm text-stone-500">
-						Artists heard before, with the most listens more than in {year - 1}{byNow}
+						{m.review.risersSub(year - 1, partial)}
 					</p>
 					<ol class="space-y-0.5">
 						{#each review.risers as artist (artist.id)}
@@ -304,12 +310,12 @@
 									{#if artist.last_rank === null}
 										<span
 											class="shrink-0 rounded border border-stone-400 px-1 text-xs leading-4 text-stone-600"
-											title="Not heard in {year - 1}{byNow}">back</span
+											title={m.review.notHeardIn(year - 1, partial)}>{m.review.back}</span
 										>
 									{:else if artist.last_rank > artist.rank}
 										<span
 											class="shrink-0 rounded border border-stone-400 px-1 text-xs leading-4 text-stone-600 tabular-nums"
-											title="Place in the artist charts of {year - 1}{byNow} and of {year}"
+											title={m.review.places(year - 1, year, partial)}
 											>#{artist.last_rank} → #{artist.rank}</span
 										>
 									{/if}
@@ -327,7 +333,7 @@
 
 		{#if session && session.listens > 1}
 			<section class="mt-12">
-				<h2 class={heading}>Longest session</h2>
+				<h2 class={heading}>{m.review.longestSession}</h2>
 				<p>
 					<span class="font-medium"
 						>{formatDateTimeRange(session.started_at, session.ended_at)}</span
@@ -337,15 +343,13 @@
 					</span>
 				</p>
 				<p class="mt-1 text-sm text-stone-500">
-					Mostly
-					{#each session.artists as artist, i (artist.id)}{#if i > 0}{i ===
-							session.artists.length - 1
-								? ' and '
-								: ', '}{/if}<a
-							class="text-stone-700 hover:underline"
-							href={entryHref('artist', artist.id, artist.name)}>{artist.name}</a
-						>&nbsp;({formatNumber(artist.listens)}){/each}. A session goes on while the next listen
-					starts at most 30 minutes after the end of the one before.
+					<Fill text={m.review.mostly}>
+						{#snippet artists()}{#each listParts(session.artists.length) as part, i (i)}{#if part.index < 0}{part.text}{:else}{@const artist =
+										session.artists[part.index]}<a
+										class="text-stone-700 hover:underline"
+										href={entryHref('artist', artist.id, artist.name)}>{artist.name}</a
+									>&nbsp;({formatNumber(artist.listens)}){/if}{/each}{/snippet}
+					</Fill>
 				</p>
 			</section>
 		{/if}

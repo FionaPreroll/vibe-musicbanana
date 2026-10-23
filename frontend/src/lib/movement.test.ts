@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { movement, movementText } from '#lib/movement.ts';
+import { m } from '#lib/i18n/index.ts';
+import { movement } from '#lib/movement.ts';
 
 const entry = (rank: number | undefined, previous_rank?: number | null) => ({
 	id: 1,
@@ -23,11 +24,11 @@ describe('movement', () => {
 	});
 });
 
-describe('movementText', () => {
+describe('the movement texts', () => {
 	it('counts places', () => {
-		expect(movementText.upTitle(1, 3)).toBe('Up 1 place, from 3');
-		expect(movementText.upTitle(4, 9)).toBe('Up 4 places, from 9');
-		expect(movementText.downTitle(1, 2)).toBe('Down 1 place, from 2');
-		expect(movementText.downTitle(2, 5)).toBe('Down 2 places, from 5');
+		expect(m.chart.upTitle(1, 3)).toBe('Up 1 place, from 3');
+		expect(m.chart.upTitle(4, 9)).toBe('Up 4 places, from 9');
+		expect(m.chart.downTitle(1, 2)).toBe('Down 1 place, from 2');
+		expect(m.chart.downTitle(2, 5)).toBe('Down 2 places, from 5');
 	});
 });

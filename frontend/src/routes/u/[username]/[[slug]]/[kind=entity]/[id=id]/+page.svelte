@@ -13,18 +13,14 @@
 	import { withSource } from '#lib/source.ts';
 	import { coverUrl, coversShown } from '#lib/covers.svelte.ts';
 	import Cover from '#lib/components/Cover.svelte';
+	import Fill from '#lib/i18n/Fill.svelte';
+	import { m } from '#lib/i18n/index.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
 	const entity = $derived(data.entity);
 	const profile = $derived(entity.profile);
-	const kindNames: Record<EntityKind, string> = {
-		artist: 'Artist',
-		album: 'Album',
-		track: 'Track'
-	};
-
 	// Where MusicBrainz has the artist, the album's release group or the track's recording.
 	const musicBrainzKinds: Record<EntityKind, string> = {
 		artist: 'artist',
@@ -57,7 +53,7 @@
 					src={coverUrl(data.api, entity.id)}
 					srcset="{coverUrl(data.api, entity.id)} 1x, {coverUrl(data.api, entity.id, 500)} 2x"
 					name={entity.name}
-					alt="Cover of {entity.name}"
+					alt={m.entity.coverOf(entity.name)}
 					class="size-40 text-6xl shadow-sm sm:size-48"
 				/>
 			{/if}
@@ -66,7 +62,7 @@
 					<a class="hover:text-stone-900 hover:underline" href={data.base + keep}
 						>{profile.username}{#if profile.slug !== 'default'}&nbsp;/ {profile.name}{/if}</a
 					>
-					· {kindNames[data.kind]}
+					· {m.entity.kinds[data.kind]}
 					{#if entity.mbids.length === 1}
 						· <a class="hover:text-stone-900 hover:underline" href={musicBrainz(entity.mbids[0])}
 							>MusicBrainz</a
@@ -77,7 +73,7 @@
 							<a
 								class="hover:text-stone-900 hover:underline"
 								href={musicBrainz(mbid)}
-								aria-label="MusicBrainz {i + 1} of {entity.mbids.length}">{i + 1}</a
+								aria-label={m.entity.musicBrainzOf(i + 1, entity.mbids.length)}>{i + 1}</a
 							>{i < entity.mbids.length - 1 ? ', ' : ''}
 						{/each}
 					{/if}
@@ -85,11 +81,13 @@
 				<h1 class="mt-1 text-3xl font-bold">{entity.name}</h1>
 				{#if entity.artist}
 					<p class="mt-1 text-lg text-stone-600">
-						by <a
-							class="font-medium text-stone-900 hover:underline"
-							href={entityPath(data.base, 'artist', entity.artist.id, entity.artist.name) + keep}
-							>{entity.artist.name}</a
-						>
+						<Fill text={m.entity.by}>
+							{#snippet artist()}<a
+									class="font-medium text-stone-900 hover:underline"
+									href={entityPath(data.base, 'artist', entity.artist!.id, entity.artist!.name) +
+										keep}>{entity.artist!.name}</a
+								>{/snippet}
+						</Fill>
 					</p>
 				{/if}
 			</div>
@@ -97,18 +95,24 @@
 		<SourcePicker sources={data.sources} />
 		<dl class="mt-5 flex flex-wrap gap-x-10 gap-y-3">
 			<div>
-				<dt class="text-xs font-semibold tracking-wide text-stone-500 uppercase">Listens</dt>
+				<dt class="text-xs font-semibold tracking-wide text-stone-500 uppercase">
+					{m.entity.listens}
+				</dt>
 				<dd class="text-xl tabular-nums">{formatNumber(entity.listens)}</dd>
 			</div>
 			{#if entity.first_listened_at && entity.last_listened_at}
 				<div>
-					<dt class="text-xs font-semibold tracking-wide text-stone-500 uppercase">First listen</dt>
+					<dt class="text-xs font-semibold tracking-wide text-stone-500 uppercase">
+						{m.entity.firstListen}
+					</dt>
 					<dd class="text-xl">
 						<time datetime={entity.first_listened_at}>{formatDate(entity.first_listened_at)}</time>
 					</dd>
 				</div>
 				<div>
-					<dt class="text-xs font-semibold tracking-wide text-stone-500 uppercase">Last listen</dt>
+					<dt class="text-xs font-semibold tracking-wide text-stone-500 uppercase">
+						{m.entity.lastListen}
+					</dt>
 					<dd class="text-xl">
 						<time datetime={entity.last_listened_at}>{formatDate(entity.last_listened_at)}</time>
 					</dd>
@@ -119,14 +123,14 @@
 
 	<section class="mt-10">
 		<h2 class="mb-2 text-sm font-semibold tracking-wide text-stone-500 uppercase">
-			Listens per month
+			{m.entity.perMonth}
 		</h2>
 		{#if entity.listens === 0}
-			<p class="text-sm text-stone-500">Not heard in this profile.</p>
+			<p class="text-sm text-stone-500">{m.entity.notHeard}</p>
 		{:else}
 			<MonthCurve months={entity.months} phases={entity.phases} />
 			{#if entity.phases.length > 0}
-				<h3 class="mt-4 text-sm font-medium">Heavy listening</h3>
+				<h3 class="mt-4 text-sm font-medium">{m.entity.heavy}</h3>
 				<ul class="mt-1 space-y-0.5">
 					{#each entity.phases as phase (phase.from)}
 						<li class="flex items-baseline gap-2">
@@ -149,23 +153,28 @@
 	<div class="mt-10 grid gap-8 md:grid-cols-2">
 		{#if data.kind === 'artist'}
 			<Chart
-				title="Albums"
+				title={m.common.albums}
 				entries={entity.releases}
 				href={albumHref}
 				hideArtist={entity.name}
 				cover={albumCover}
 			/>
-			<Chart title="Tracks" entries={entity.recordings} href={trackHref} hideArtist={entity.name} />
+			<Chart
+				title={m.common.tracks}
+				entries={entity.recordings}
+				href={trackHref}
+				hideArtist={entity.name}
+			/>
 		{:else if data.kind === 'album'}
 			<Chart
-				title="Tracks"
+				title={m.common.tracks}
 				entries={entity.recordings}
 				href={trackHref}
 				hideArtist={entity.artist?.name}
 			/>
 		{:else}
 			<Chart
-				title="On albums"
+				title={m.entity.onAlbums}
 				entries={entity.releases}
 				href={albumHref}
 				hideArtist={entity.artist?.name}
