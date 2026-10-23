@@ -8,6 +8,7 @@ import { vi } from 'vitest';
 export const page = $state({
 	url: new URL('http://localhost/'),
 	params: {} as Record<string, string>,
+	route: { id: null as string | null },
 	data: {} as Record<string, unknown>,
 	status: 200,
 	error: null as { message: string } | null

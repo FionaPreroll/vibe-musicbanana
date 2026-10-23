@@ -43,10 +43,12 @@ Checks (the same ones CI runs):
 
 ```sh
 cd backend && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
-cd frontend && pnpm lint && pnpm check && pnpm build
+cd frontend && pnpm lint && pnpm check && pnpm test && pnpm build
 ```
 
-CI runs the backend tests through [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) and uploads the coverage to [Codecov](https://codecov.io/gh/FionaPreroll/vibe-musicbanana) (secret `CODECOV_TOKEN`). The same report locally: `cargo install cargo-llvm-cov && cd backend && cargo llvm-cov --html`, then open `target/llvm-cov/html/index.html`. Coverage never fails a check (`codecov.yml`).
+The frontend tests (`*.test.ts` next to what they test) run with [Vitest](https://vitest.dev) in [happy-dom](https://github.com/capricorn86/happy-dom), components and pages through [Testing Library](https://testing-library.com/docs/svelte-testing-library/intro). They need no backend: `src/test/` has a fake API (`fakeApi`), stand-ins for `$app/state` and `$app/navigation`, and sample data. Tests run in Europe/Berlin and US English whatever the machine says, so dates and numbers come out the same everywhere. `pnpm test:watch` reruns them on every change.
+
+CI runs the backend tests through [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) and the frontend tests with `pnpm test:coverage`, and uploads both to [Codecov](https://codecov.io/gh/FionaPreroll/vibe-musicbanana) (secret `CODECOV_TOKEN`) under the flags `backend` and `frontend`. The same reports locally: `cargo install cargo-llvm-cov && cd backend && cargo llvm-cov --html`, then open `target/llvm-cov/html/index.html`; `cd frontend && pnpm test:coverage`, then `coverage/lcov-report/index.html`. Coverage never fails a check (`codecov.yml`).
 
 ## Pages and API
 

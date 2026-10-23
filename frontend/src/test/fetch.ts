@@ -5,7 +5,7 @@ type Answer = unknown | ((init: RequestInit | undefined, url: URL) => unknown);
 /**
  * A fake `fetch` for the API: routes as "GET /api/me" (the path without the
  * query) to JSON answers, or to functions that get the request. A Response
- * answer goes out as it is, `null` as 204. Unknown routes are a 404.
+ * answer goes out as it is, `undefined` as 204. Unknown routes are a 404.
  */
 export function fakeApi(routes: Record<string, Answer>) {
 	return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -15,7 +15,7 @@ export function fakeApi(routes: Record<string, Answer>) {
 		const route = routes[key];
 		const answer = typeof route === 'function' ? await route(init, url) : route;
 		if (answer instanceof Response) return answer;
-		if (answer === null || answer === undefined) return new Response(null, { status: 204 });
+		if (answer === undefined) return new Response(null, { status: 204 });
 		return Response.json(answer);
 	});
 }
