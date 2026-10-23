@@ -215,7 +215,7 @@ const de: Messages = {
 		firstTime: (count) => `${n(count)} zum ersten Mal gehört`,
 		noneYet: 'Diese Woche noch nichts gehört.',
 		new: 'neu',
-		lastWeekCount: (count) => `${n(count)} letzte Woche`
+		lastWeekCount: (count) => `${n(count)} in der Vorwoche`
 	},
 
 	lost: {
@@ -554,8 +554,8 @@ const de: Messages = {
 		hideTitle: 'Das sind verschiedene; nicht mehr vorschlagen',
 		byHand: 'Von Hand zusammenführen',
 		anyTwo: (kinds) => `Zwei beliebige ${kinds}, auch solche, die die Vorschläge nicht finden.`,
-		fromLabel: 'Zusammenführen (verschwindet)',
-		intoLabel: 'In (bleibt)',
+		fromLabel: 'Wird zusammengeführt (verschwindet)',
+		intoLabel: 'In diesen Eintrag (bleibt)',
 		swap: 'Tauschen',
 		preview: 'Vorschau',
 		wouldMerge: (kind) => `${kind} {from} würde in {into} aufgehen.`,
