@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { errorMessage, getJson, type CatalogEntry, type CatalogKind } from '#lib/api.ts';
 	import { listenCount } from '#lib/format.ts';
+	import { m } from '#lib/i18n/index.ts';
 
 	// Finds an entry of the catalog by name (or #id) for a merge by hand.
 	let {
@@ -56,7 +57,7 @@
 			</span>
 			<button
 				class="text-stone-500 hover:text-stone-900"
-				aria-label="Pick another"
+				aria-label={m.catalogPicker.pickAnother}
 				onclick={() => (picked = null)}>✕</button
 			>
 		</div>
@@ -65,7 +66,7 @@
 			<input
 				class="w-full rounded border border-stone-300 bg-white px-2 py-1.5"
 				type="search"
-				placeholder="Name or #id"
+				placeholder={m.catalogPicker.placeholder}
 				aria-label={label}
 				bind:value={query}
 				onfocus={() => (open = true)}

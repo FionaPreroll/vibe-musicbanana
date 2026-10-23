@@ -1,58 +1,54 @@
-// Numbers and dates in the viewer's locale. Instants from the API (strings, or
-// Dates of them) are shown in the viewer's time zone, calendar days (local
-// midnight, see period.ts) as they are; see zone.svelte.ts.
+// Numbers and dates in the page's locale (see i18n/locale.svelte.ts). Instants
+// from the API (strings, or Dates of them) are shown in the viewer's time zone,
+// calendar days (local midnight, see period.ts) as they are; see zone.svelte.ts.
 
+import { m } from '#lib/i18n/index.ts';
+import { formatNumber, localized } from '#lib/i18n/intl.ts';
 import { wallClock, wallDay, zoned } from '#lib/zone.svelte.ts';
 
-const number = new Intl.NumberFormat();
-const date = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
+export { formatList, formatNumber, listParts } from '#lib/i18n/intl.ts';
+
+/** A date formatter of `options` in the page's locale, for calendar days. */
+export const dates = (options: Intl.DateTimeFormatOptions) =>
+	localized((locale) => new Intl.DateTimeFormat(locale, options));
+
+const date = dates({ dateStyle: 'medium' });
 const zonedDate = zoned({ dateStyle: 'medium' });
 const dateTime = zoned({ dateStyle: 'medium', timeStyle: 'short' });
-const monthOfYear = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' });
-const percent = new Intl.NumberFormat(undefined, { style: 'percent' });
+const monthOfYear = dates({ month: 'short', year: 'numeric' });
+const percent = localized((locale) => new Intl.NumberFormat(locale, { style: 'percent' }));
 const time = zoned({ timeStyle: 'short' });
-const weekday = new Intl.DateTimeFormat(undefined, { weekday: 'long' });
-const dayThisYear = new Intl.DateTimeFormat(undefined, {
-	weekday: 'short',
-	day: 'numeric',
-	month: 'long'
-});
-const day = new Intl.DateTimeFormat(undefined, {
-	weekday: 'short',
-	day: 'numeric',
-	month: 'long',
-	year: 'numeric'
-});
-const relative = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+const weekday = dates({ weekday: 'long' });
+const dayThisYear = dates({ weekday: 'short', day: 'numeric', month: 'long' });
+const day = dates({ weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
+const relative = localized((locale) => new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }));
+const disjunction = localized((locale) => new Intl.ListFormat(locale, { type: 'disjunction' }));
 
-export const formatNumber = (n: number) => number.format(n);
 /** The day of an instant from the API, in the viewer's time zone. */
 export const formatDate = (iso: string) => zonedDate().format(new Date(iso));
 /** A calendar day (local midnight). */
-export const formatCalendarDay = (day: Date) => date.format(day);
-export const formatDateRange = (from: Date, to: Date) => date.formatRange(from, to);
+export const formatCalendarDay = (when: Date) => date().format(when);
+export const formatDateRange = (from: Date, to: Date) => date().formatRange(from, to);
 export const formatDateTime = (iso: string) => dateTime().format(new Date(iso));
 /** "1 Jul 2016, 20:00 – 23:56", with the day once when both are on the same one. */
 export const formatDateTimeRange = (from: string, to: string) =>
 	dateTime().formatRange(new Date(from), new Date(to));
-export const formatPercent = (share: number) => percent.format(share);
+export const formatPercent = (share: number) => percent().format(share);
+/** "A, B or C". */
+export const formatOrList = (items: string[]) => disjunction().format(items);
 
 /** "2009-03" as e.g. "Mar 2009". */
 export function formatMonth(month: string) {
-	const [year, m] = month.split('-').map(Number);
-	const date = new Date(2000, m - 1, 1);
-	date.setFullYear(year);
-	return monthOfYear.format(date);
+	const [year, mo] = month.split('-').map(Number);
+	const when = new Date(2000, mo - 1, 1);
+	when.setFullYear(year);
+	return monthOfYear().format(when);
 }
 
 /** A stretch of time in hours and minutes, e.g. "3 h 12 min" or "45 min". */
 export function formatDuration(ms: number) {
 	const minutes = Math.round(ms / 60_000);
-	const hours = Math.floor(minutes / 60);
-	if (hours === 0) return `${minutes} min`;
-	return minutes % 60 === 0
-		? `${formatNumber(hours)} h`
-		: `${formatNumber(hours)} h ${minutes % 60} min`;
+	return m.duration(Math.floor(minutes / 60), minutes % 60);
 }
 
 /** A calendar day (local midnight) like "2026-10-06". */
@@ -87,9 +83,9 @@ export function formatDay(when: Date, now: Date) {
 	const midnight = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
 	now = wallClock(now);
 	const daysAgo = Math.round((midnight(now) - midnight(when)) / 86_400_000);
-	if (daysAgo === 0 || daysAgo === 1) return capitalized(relative.format(-daysAgo, 'day'));
-	if (daysAgo > 1 && daysAgo < 7) return weekday.format(when);
-	return (when.getFullYear() === now.getFullYear() ? dayThisYear : day).format(when);
+	if (daysAgo === 0 || daysAgo === 1) return capitalized(relative().format(-daysAgo, 'day'));
+	if (daysAgo > 1 && daysAgo < 7) return weekday().format(when);
+	return (when.getFullYear() === now.getFullYear() ? dayThisYear : day)().format(when);
 }
 
 /** How long ago `then` was in one unit, e.g. "now", "5 minutes ago", "3 years ago". */
@@ -104,9 +100,9 @@ export function timeAgo(then: Date, now: Date) {
 		['minute', 60]
 	];
 	for (const [unit, length] of units) {
-		if (seconds >= length) return relative.format(-Math.floor(seconds / length), unit);
+		if (seconds >= length) return relative().format(-Math.floor(seconds / length), unit);
 	}
-	return relative.format(0, 'second');
+	return relative().format(0, 'second');
 }
 
 /** When a listen happened, under its day's heading: how long ago for the last hours, else the time. */
@@ -114,16 +110,8 @@ export function formatListenTime(then: Date, now: Date) {
 	return now.getTime() - then.getTime() < 6 * 3_600_000 ? timeAgo(then, now) : time().format(then);
 }
 
-export const listenCount = (n: number) => `${number.format(n)} ${n === 1 ? 'listen' : 'listens'}`;
-
-const sinceUnits = [
-	['year', 'years'],
-	['month', 'months'],
-	['week', 'weeks'],
-	['day', 'days'],
-	['hour', 'hours'],
-	['minute', 'minutes']
-] as const;
+/** "1 listen", "1,234 listens". */
+export const listenCount = (n: number) => m.listens(n);
 
 /**
  * How long ago `then` was, like Django's `timesince` filter: the largest unit
@@ -133,9 +121,9 @@ export function timeSince(then: Date, now = new Date()) {
 	// Whole calendar months first, so month lengths and leap years count right.
 	let months =
 		(now.getUTCFullYear() - then.getUTCFullYear()) * 12 + now.getUTCMonth() - then.getUTCMonth();
-	const shifted = (m: number) => {
+	const shifted = (k: number) => {
 		const d = new Date(then);
-		d.setUTCMonth(d.getUTCMonth() + m);
+		d.setUTCMonth(d.getUTCMonth() + k);
 		return d;
 	};
 	if (months > 0 && shifted(months) > now) months--;
@@ -147,10 +135,11 @@ export function timeSince(then: Date, now = new Date()) {
 	const hours = Math.floor(rest / 60);
 	const counts = [Math.floor(months / 12), months % 12, weeks, days, hours, rest - hours * 60];
 
-	const first = counts.findIndex((n) => n > 0);
-	if (first < 0) return '0 minutes';
-	const part = (i: number) => `${counts[i]} ${sinceUnits[i][counts[i] === 1 ? 0 : 1]}`;
+	const units = m.since.units;
+	const first = counts.findIndex((c) => c > 0);
+	if (first < 0) return units[5](0);
+	const part = (i: number) => units[i](counts[i]);
 	return first + 1 < counts.length && counts[first + 1] > 0
-		? `${part(first)}, ${part(first + 1)}`
+		? m.since.two(part(first), part(first + 1))
 		: part(first);
 }

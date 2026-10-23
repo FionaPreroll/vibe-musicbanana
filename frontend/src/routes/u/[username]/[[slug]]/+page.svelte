@@ -21,6 +21,7 @@
 	import WeekGlance from '#lib/components/WeekGlance.svelte';
 	import { byDay, formatCalendarDay, formatDate, formatDay, listenCount } from '#lib/format.ts';
 	import { timeZone } from '#lib/zone.svelte.ts';
+	import { m } from '#lib/i18n/index.ts';
 	import { now } from '#lib/now.svelte.ts';
 	import { parseDay, periodEnd, periodSearch, type Period } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
@@ -74,11 +75,11 @@
 	});
 
 	function listensTitle(period: Period) {
-		if (period.kind === 'year') return `Last listens of ${period.year}`;
+		if (period.kind === 'year') return m.profile.lastOfYear(period.year);
 		if (period.kind === 'range' && period.to) {
-			return `Last listens up to ${formatCalendarDay(parseDay(period.to))}`;
+			return m.profile.lastUpTo(formatCalendarDay(parseDay(period.to)));
 		}
-		return 'Recent listens';
+		return m.profile.recent;
 	}
 
 	// Start from the loaded page again whenever the profile or period changes.
@@ -190,7 +191,10 @@
 		<p class="mt-1 text-stone-600">
 			{listenCount(overview.listens)}
 			{#if overview.first_listened_at && overview.last_listened_at}
-				from {formatDate(overview.first_listened_at)} to {formatDate(overview.last_listened_at)}
+				{m.profile.span(
+					formatDate(overview.first_listened_at),
+					formatDate(overview.last_listened_at)
+				)}
 			{/if}
 		</p>
 		{#if nowPlaying}
@@ -201,7 +205,7 @@
 					></span>
 					<span class="relative inline-flex size-2.5 rounded-full bg-yellow-500"></span>
 				</span>
-				<span class="shrink-0 text-sm text-stone-500">Now playing</span>
+				<span class="shrink-0 text-sm text-stone-500">{m.profile.nowPlaying}</span>
 				<span class="min-w-0 truncate">
 					<span class="font-medium">{nowPlaying.track}</span>
 					<span class="text-stone-500">
@@ -238,15 +242,15 @@
 			<a
 				class="inline-flex items-baseline gap-1.5 rounded bg-yellow-200/70 px-2.5 py-1 text-sm font-medium hover:bg-yellow-300/70"
 				href="{data.base}/year/{data.period.year}{withSource('', data.source)}"
-				>{data.period.year} in review →</a
+				>{m.profile.inReview(data.period.year)}</a
 			>
 		</p>
 	{/if}
 
 	<div class="mt-8 grid gap-8 md:grid-cols-3">
-		<Chart title="Top artists" entries={data.artists} href={link('artist')} />
-		<Chart title="Top albums" entries={data.releases} href={link('album')} />
-		<Chart title="Top tracks" entries={data.recordings} href={link('track')} />
+		<Chart title={m.common.topArtists} entries={data.artists} href={link('artist')} />
+		<Chart title={m.common.topAlbums} entries={data.releases} href={link('album')} />
+		<Chart title={m.common.topTracks} entries={data.recordings} href={link('track')} />
 	</div>
 
 	{#await data.clock then clock}
@@ -284,7 +288,7 @@
 			{listensTitle(data.period)}
 		</h2>
 		{#if listens.length === 0}
-			<p class="text-sm text-stone-500">No listens.</p>
+			<p class="text-sm text-stone-500">{m.profile.noListens}</p>
 		{:else}
 			{#each days as day (day.key)}
 				<h3 class="mt-4 border-b border-stone-200 pb-1 text-sm font-semibold text-stone-700">
@@ -325,7 +329,7 @@
 					onclick={loadMore}
 					disabled={loadingMore}
 				>
-					{loadingMore ? 'Loading…' : 'Older listens'}
+					{loadingMore ? m.common.loading : m.profile.older}
 				</button>
 			{/if}
 		{/if}

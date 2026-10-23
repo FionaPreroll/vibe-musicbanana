@@ -3,6 +3,7 @@
 	import { profilePath, type FollowInfo } from '#lib/api.ts';
 	import FollowButton from '#lib/components/FollowButton.svelte';
 	import VisibilityBadge from '#lib/components/VisibilityBadge.svelte';
+	import { m } from '#lib/i18n/index.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -28,11 +29,10 @@
 		<VisibilityBadge visibility={info.visibility} />
 	</h1>
 	{#if open}
-		<p class="mt-4"><a class="underline" href={path}>Go to the profile</a></p>
+		<p class="mt-4"><a class="underline" href={path}>{m.follow.goToProfile}</a></p>
 	{:else}
 		<p class="mt-4 text-stone-600">
-			{info.username} shows this profile to followers only. It opens for you once {info.username} says
-			yes to your request.
+			{m.follow.followersOnly(info.username)}
 		</p>
 		<div class="mt-4"><FollowButton {info} onchange={changed} /></div>
 	{/if}

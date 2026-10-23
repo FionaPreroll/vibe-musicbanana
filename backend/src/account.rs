@@ -55,6 +55,7 @@ pub fn routes() -> Router<AppState> {
         .route("/me/email", put(change_email_address))
         .route("/me/time", put(change_time))
         .route("/me/streaks", put(change_streaks))
+        .route("/me/language", put(change_language))
         .route("/me/profiles", get(list_profiles).post(create_profile))
         .route("/me/profiles/{slug}", patch(update_profile))
         .route("/me/tokens", get(list_tokens).post(create_token))
@@ -317,6 +318,8 @@ struct Me {
     week_start: i16,
     /// Whether the account sees streaks, and others see the streaks of its profiles.
     show_streaks: bool,
+    /// The language of the pages, like "de"; the browser's when null.
+    language: Option<String>,
     /// Without their listens, which take a while to count: every page asks for
     /// this first. The settings get them from `GET /api/me/profiles`.
     profiles: Vec<MeProfile>,
@@ -354,7 +357,7 @@ async fn own_profiles(db: &PgPool, account: i64) -> sqlx::Result<Vec<OwnProfile>
 async fn me(State(state): State<AppState>, Account(id): Account) -> Result<Json<Me>, AppError> {
     let account = sqlx::query!(
         r#"SELECT username::text AS "username!", email::text AS "email!", is_admin,
-                  time_zone, week_start, show_streaks
+                  time_zone, week_start, show_streaks, language
              FROM account WHERE id = $1"#,
         id,
     )
@@ -367,6 +370,7 @@ async fn me(State(state): State<AppState>, Account(id): Account) -> Result<Json<
         time_zone: account.time_zone,
         week_start: account.week_start,
         show_streaks: account.show_streaks,
+        language: account.language,
         profiles: sqlx::query_as!(
             MeProfile,
             r#"SELECT slug::text AS "slug!", name, visibility::text AS "visibility!"
@@ -580,6 +584,46 @@ async fn change_streaks(
         if change.show_streaks { "on" } else { "off" }
     );
     Ok(Json(change))
+}
+
+#[derive(Deserialize, Serialize)]
+struct LanguageSettings {
+    /// A language code like "de", or null for the browser's.
+    language: Option<String>,
+}
+
+/// Whether `code` looks like a language code: two or three lower-case letters.
+/// Which languages there are is up to the frontend; one it lacks falls back to
+/// the browser's.
+pub fn check_language(code: &str) -> bool {
+    (2..=3).contains(&code.len()) && code.bytes().all(|b| b.is_ascii_lowercase())
+}
+
+/// Sets the language the account sees the pages in.
+async fn change_language(
+    State(state): State<AppState>,
+    Account(id): Account,
+    Json(change): Json<LanguageSettings>,
+) -> Result<Json<LanguageSettings>, AppError> {
+    let language = change.language.filter(|l| !l.is_empty());
+    if let Some(code) = &language
+        && !check_language(code)
+    {
+        return Err(AppError::BadRequest(format!("unknown language: {code}")));
+    }
+    sqlx::query!(
+        "UPDATE account SET language = $2 WHERE id = $1",
+        id,
+        language,
+    )
+    .execute(&state.db)
+    .await?;
+    tracing::info!(
+        "{} set the language to {}",
+        name_of(&state.db, id).await?,
+        language.as_deref().unwrap_or("the browser's")
+    );
+    Ok(Json(LanguageSettings { language }))
 }
 
 #[derive(Deserialize)]

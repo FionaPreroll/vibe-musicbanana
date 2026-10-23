@@ -5,6 +5,7 @@
 	import { profilePath, sendJson } from '#lib/api.ts';
 	import BananaEgg from '#lib/components/BananaEgg.svelte';
 	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
+	import { m } from '#lib/i18n/index.ts';
 	import favicon from '#lib/assets/favicon.svg';
 
 	let { data, children } = $props();
@@ -84,13 +85,13 @@
 					class="peer w-full rounded border border-stone-300 px-2 py-1 text-sm sm:pr-7"
 					type="search"
 					name="q"
-					placeholder="Search {page.params.username}"
-					aria-label="Search the artists, albums and tracks of this profile"
+					placeholder={m.nav.search(page.params.username ?? '')}
+					aria-label={m.nav.searchLabel}
 					aria-keyshortcuts="/"
 				/>
 				<kbd
 					class="pointer-events-none absolute top-1/2 right-2 hidden -translate-y-1/2 rounded border border-stone-300 px-1 font-mono text-xs leading-4 text-stone-400 peer-focus:hidden peer-[:not(:placeholder-shown)]:hidden sm:block"
-					title="Press / to search">/</kbd
+					title={m.nav.searchKey}>/</kbd
 				>
 				{#if page.url.searchParams.has('source')}
 					<input type="hidden" name="source" value={page.url.searchParams.get('source')} />
@@ -104,7 +105,7 @@
 					class="flex items-center rounded px-1.5 py-1 text-stone-600 hover:bg-stone-100 sm:hidden"
 					aria-expanded={menuOpen}
 					aria-controls="account-menu"
-					aria-label="Menu"
+					aria-label={m.nav.menu}
 					onclick={() => (menuOpen = !menuOpen)}
 				>
 					<svg class="size-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -123,16 +124,16 @@
 						>{data.me.username}</a
 					>
 					{#if data.me.admin}
-						<a class="text-stone-600 hover:underline" href="/status">Status</a>
-						<a class="text-stone-600 hover:underline" href="/merges">Merges</a>
+						<a class="text-stone-600 hover:underline" href="/status">{m.nav.status}</a>
+						<a class="text-stone-600 hover:underline" href="/merges">{m.nav.merges}</a>
 					{/if}
-					<a class="text-stone-600 hover:underline" href="/settings">Settings</a>
+					<a class="text-stone-600 hover:underline" href="/settings">{m.nav.settings}</a>
 					<button class="cursor-pointer text-stone-600 hover:underline" onclick={logOut}
-						>Log out</button
+						>{m.nav.logOut}</button
 					>
 				</div>
 			{:else}
-				<a class="text-stone-600 hover:underline" href={loginHref}>Log in</a>
+				<a class="text-stone-600 hover:underline" href={loginHref}>{m.nav.logIn}</a>
 			{/if}
 			<!-- On phones before the menu button, elsewhere at the end. -->
 			<span class="flex max-sm:order-first"><ThemeToggle /></span>

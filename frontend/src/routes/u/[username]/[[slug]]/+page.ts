@@ -17,6 +17,7 @@ import {
 	type Source,
 	type Week
 } from '#lib/api.ts';
+import { m } from '#lib/i18n/index.ts';
 import { parsePeriod, periodEnd, periodQuery } from '#lib/period.ts';
 import { sourceOf } from '#lib/source.ts';
 import { timeZone, weekStart } from '#lib/zone.svelte.ts';
@@ -32,7 +33,7 @@ import type { PageLoad } from './$types';
 export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const api = profileApi(params.username, params.slug ?? 'default');
 	const period = parsePeriod(url.searchParams);
-	if (!period) error(400, 'Invalid period');
+	if (!period) error(400, m.errors.invalidPeriod);
 
 	const source = sourceOf(url);
 	// The viewer's settings (see zone.svelte.ts) come with the login.
@@ -103,7 +104,7 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 				? await getJson<FollowInfo>(fetch, `${api}/follow`).catch(() => null)
 				: null;
 			if (follow) redirect(307, `${profilePath(follow.username, follow.slug)}/follow`);
-			error(404, 'There is no such profile.');
+			error(404, m.errors.noProfile);
 		}
 		if (e instanceof ApiError && e.status === 400) error(400, e.message);
 		throw e;

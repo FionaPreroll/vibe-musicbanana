@@ -3,6 +3,7 @@
 // where either end may be left out; with none of them it is all time.
 
 import { formatCalendarDay, formatDateRange } from '#lib/format.ts';
+import { m } from '#lib/i18n/index.ts';
 import { fromWallClock, today as zoneToday } from '#lib/zone.svelte.ts';
 
 export type Period =
@@ -100,18 +101,18 @@ export function periodEnd(period: Period): Date | null {
 export function periodLabel(period: Period) {
 	switch (period.kind) {
 		case 'all':
-			return 'All time';
+			return m.period.allTime;
 		case 'year':
 			return String(period.year);
 		case 'days':
-			return period.days === 1 ? 'Today' : `Last ${period.days} days`;
+			return period.days === 1 ? m.period.today : m.period.lastDays(period.days);
 		case 'range':
 			if (period.from && period.to) {
 				return formatDateRange(parseDay(period.from), parseDay(period.to));
 			}
 			return period.from
-				? `Since ${formatCalendarDay(parseDay(period.from))}`
-				: `Until ${formatCalendarDay(parseDay(period.to ?? ''))}`;
+				? m.period.since(formatCalendarDay(parseDay(period.from)))
+				: m.period.until(formatCalendarDay(parseDay(period.to ?? '')));
 	}
 }
 

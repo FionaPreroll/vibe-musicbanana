@@ -2,6 +2,7 @@
 	// The footer easter egg of musicbanana2, unfolded by the banana in the header.
 	import { slide } from 'svelte/transition';
 	import { timeSince } from '#lib/format.ts';
+	import { m } from '#lib/i18n/index.ts';
 
 	let { open = $bindable(false) } = $props();
 
@@ -22,7 +23,7 @@
 	});
 
 	const since = (key: keyof typeof birthdays) => timeSince(birthdays[key], now);
-	const title = (key: keyof typeof birthdays) => `since ${birthdays[key].toISOString()}`;
+	const title = (key: keyof typeof birthdays) => m.banana.sinceTitle(birthdays[key].toISOString());
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (open = false)} />
@@ -46,9 +47,9 @@ V  \
              `-.__  `----"""    __.-'
                   `--..____..--'
 
-<span title={title('musicbanana')}>musicbanana already lives {since('musicbanana')}</span>
-<span title={title('python')}>has been a happy python for {since('python')}</span>
-<span title={title('symfony')}>has been a happy ElePHPant for {since('symfony')}</span>
-<span title={title('rust')}>has been a happy Rustacean for {since('rust')}</span></pre>
+<span title={title('musicbanana')}>{m.banana.lives(since('musicbanana'))}</span>
+<span title={title('python')}>{m.banana.python(since('python'))}</span>
+<span title={title('symfony')}>{m.banana.elephpant(since('symfony'))}</span>
+<span title={title('rust')}>{m.banana.rustacean(since('rust'))}</span></pre>
 	</div>
 {/if}

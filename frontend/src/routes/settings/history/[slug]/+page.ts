@@ -1,6 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import { ApiError, getJson, profileApi, type HistoryPage, type Source } from '#lib/api.ts';
 import { filterQuery } from '#lib/history.ts';
+import { m } from '#lib/i18n/index.ts';
 import type { PageLoad } from './$types';
 
 // The listens of one of the viewer's profiles, narrowed by the filter in the
@@ -10,7 +11,7 @@ export const load: PageLoad = async ({ params, url, fetch, parent }) => {
 	const { me } = await parent();
 	if (!me) redirect(307, `/login?next=${encodeURIComponent(url.pathname + url.search)}`);
 	const profile = me.profiles.find((p) => p.slug === params.slug);
-	if (!profile) error(404, 'You have no such profile.');
+	if (!profile) error(404, m.errors.noOwnProfile);
 
 	const api = `/api/me/profiles/${encodeURIComponent(profile.slug)}`;
 	const trash = url.searchParams.has('trash');

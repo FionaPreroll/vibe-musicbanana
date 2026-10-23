@@ -2,6 +2,8 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { errorMessage, profilePath, sendJson } from '#lib/api.ts';
+	import Fill from '#lib/i18n/Fill.svelte';
+	import { m } from '#lib/i18n/index.ts';
 
 	let login = $state('');
 	let password = $state('');
@@ -34,14 +36,14 @@
 </script>
 
 <svelte:head>
-	<title>Log in · musicbanana</title>
+	<title>{m.login.title} · musicbanana</title>
 </svelte:head>
 
 <main class="mx-auto max-w-sm px-4 pb-16 sm:px-8">
-	<h1 class="mt-10 text-2xl font-bold">Log in</h1>
+	<h1 class="mt-10 text-2xl font-bold">{m.login.title}</h1>
 	<form class="mt-6 flex flex-col gap-4" onsubmit={submit}>
 		<label class="flex flex-col gap-1 text-sm">
-			<span class="font-medium">User name or email</span>
+			<span class="font-medium">{m.login.login}</span>
 			<input
 				class="rounded border border-stone-300 px-3 py-2 text-base"
 				autocomplete="username"
@@ -50,7 +52,7 @@
 			/>
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
-			<span class="font-medium">Password</span>
+			<span class="font-medium">{m.login.password}</span>
 			<input
 				class="rounded border border-stone-300 px-3 py-2 text-base"
 				type="password"
@@ -64,13 +66,15 @@
 			class="rounded bg-stone-900 px-4 py-2 font-medium text-white hover:bg-stone-700 disabled:opacity-50"
 			disabled={busy}
 		>
-			{busy ? 'Logging in…' : 'Log in'}
+			{busy ? m.login.busy : m.login.submit}
 		</button>
 	</form>
 	<p class="mt-6 text-sm text-stone-500">
-		The password of the old musicbanana still works. A new account comes from
-		<code class="text-stone-700">musicbanana account create</code> on the server, and a forgotten
-		password is replaced there with
-		<code class="text-stone-700">musicbanana account password &lt;username&gt;</code>.
+		<Fill text={m.login.help}>
+			{#snippet create()}<code class="text-stone-700">musicbanana account create</code>{/snippet}
+			{#snippet reset()}<code class="text-stone-700"
+					>musicbanana account password {m.login.usernameArg}</code
+				>{/snippet}
+		</Fill>
 	</p>
 </main>

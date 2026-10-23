@@ -1,4 +1,5 @@
 import { ApiError, getJson, type Me } from '#lib/api.ts';
+import { useLanguage } from '#lib/i18n/locale.svelte.ts';
 import { useTimeSettings } from '#lib/zone.svelte.ts';
 import type { LayoutLoad } from './$types';
 
@@ -6,7 +7,7 @@ import type { LayoutLoad } from './$types';
 export const ssr = false;
 
 // Who is logged in, if anybody. Logging in or out reloads this and every page with it,
-// as private profiles appear or go, and so do the time zone and first weekday.
+// as private profiles appear or go, and so do the language, time zone and first weekday.
 export const load: LayoutLoad = async ({ fetch }) => {
 	let me: Me | null;
 	try {
@@ -15,6 +16,7 @@ export const load: LayoutLoad = async ({ fetch }) => {
 		if (!(e instanceof ApiError && e.status === 401)) throw e;
 		me = null;
 	}
+	useLanguage(me?.language);
 	useTimeSettings(me);
 	return { me };
 };

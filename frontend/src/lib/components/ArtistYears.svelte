@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { entityPath, type YearTop } from '#lib/api.ts';
 	import { formatPercent, listenCount } from '#lib/format.ts';
+	import { m } from '#lib/i18n/index.ts';
 	import { sourceOf, withSource } from '#lib/source.ts';
 
 	let {
@@ -145,23 +146,20 @@
 			scroller.scrollLeft = x + layout.column - width + layout.gutter;
 	});
 
-	const gap = (i: number) => {
-		const [after, before] = [years[i - 1].year + 1, years[i].year - 1];
-		return after === before ? `No listens in ${after}` : `No listens from ${after} to ${before}`;
-	};
+	const gap = (i: number) => m.artistYears.gap(years[i - 1].year + 1, years[i].year - 1);
 </script>
 
 <section>
 	<h2 class="text-sm font-semibold tracking-wide text-stone-500 uppercase">
-		Top artists over the years
+		{m.artistYears.heading}
 	</h2>
 	<p class="mt-1 text-sm text-stone-500">
-		The most heard artists of each year. A line follows an artist from one year to the next.
+		{m.artistYears.sub}
 	</p>
 
 	{#if colors.size > 0}
 		<div class="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
-			<span class="text-stone-500">Longest at the top:</span>
+			<span class="text-stone-500">{m.artistYears.longest}</span>
 			{#each colors as [id, { name, color }] (id)}
 				<a
 					href={entityPath(base, 'artist', id, name) + withSource('', sourceOf(page.url))}
@@ -195,7 +193,7 @@
 			bind:clientWidth={width}
 			class="min-w-0 flex-1 overflow-x-auto pb-2"
 			role="region"
-			aria-label="Top artists of each year"
+			aria-label={m.artistYears.region}
 		>
 			<div class="relative" style:width="{layout.width}px" style:height="{layout.height + 4}px">
 				{#each years as y, i (y.year)}
@@ -263,9 +261,9 @@
 							class="block h-6 text-center text-xs leading-6 tabular-nums {y.year === selected
 								? 'font-semibold text-stone-900'
 								: 'text-stone-500 hover:text-stone-900'}"
-							title="Charts of {y.year}">{y.year}</a
+							title={m.artistYears.chartsOf(y.year)}>{y.year}</a
 						>
-						<ol class="mt-1 space-y-1" aria-label="Top artists of {y.year}">
+						<ol class="mt-1 space-y-1" aria-label={m.artistYears.topOf(y.year)}>
 							{#each y.artists as artist, rank (artist.id)}
 								<li>
 									<a
@@ -278,9 +276,12 @@
 											: active?.id === artist.id
 												? 'border-stone-500'
 												: 'border-stone-200 hover:border-stone-400'}"
-										aria-label="{artist.name}, number {rank + 1} in {y.year}, {listenCount(
-											artist.listens
-										)}"
+										aria-label={m.artistYears.place(
+											artist.name,
+											rank + 1,
+											y.year,
+											listenCount(artist.listens)
+										)}
 										onpointerenter={() => (active = { id: artist.id, column: i, rank })}
 										onpointerleave={() => (active = null)}
 										onfocus={() => (active = { id: artist.id, column: i, rank })}
@@ -306,7 +307,7 @@
 					>
 						<div class="font-medium">{tip.artist.name}</div>
 						<div class="text-stone-300 tabular-nums">
-							#{tip.rank + 1} in {tip.year.year} · {listenCount(tip.artist.listens)} · {formatPercent(
+							{m.artistYears.tip(tip.rank + 1, tip.year.year)} · {listenCount(tip.artist.listens)} · {formatPercent(
 								tip.artist.listens / tip.year.listens
 							)}
 						</div>

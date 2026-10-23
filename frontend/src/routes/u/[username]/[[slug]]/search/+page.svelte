@@ -4,6 +4,7 @@
 	import Chart from '#lib/components/Chart.svelte';
 	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import { withSource } from '#lib/source.ts';
+	import { m } from '#lib/i18n/index.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -33,7 +34,7 @@
 </script>
 
 <svelte:head>
-	<title>{data.q ? `${data.q} · ` : ''}Search · {overview.username} · musicbanana</title>
+	<title>{data.q ? `${data.q} · ` : ''}{m.search.title} · {overview.username} · musicbanana</title>
 </svelte:head>
 
 <main class="mx-auto max-w-6xl px-4 pb-16 sm:px-8">
@@ -41,7 +42,7 @@
 		<a class="hover:text-stone-900 hover:underline" href={data.base + withSource('', data.source)}
 			>{overview.username}{#if overview.slug !== 'default'}&nbsp;/ {overview.name}{/if}</a
 		>
-		· Search
+		· {m.search.title}
 	</p>
 	<form
 		class="mt-2"
@@ -55,8 +56,8 @@
 		<input
 			class="w-full rounded border border-stone-300 px-3 py-2 text-lg"
 			type="search"
-			placeholder="Artist, album or track"
-			aria-label="Search the artists, albums and tracks of {overview.username}"
+			placeholder={m.search.placeholder}
+			aria-label={m.search.label(overview.username)}
 			autofocus
 			bind:value={q}
 			oninput={typed}
@@ -65,16 +66,16 @@
 	<SourcePicker sources={data.sources} />
 
 	{#if data.q && nothing}
-		<p class="mt-8 text-stone-600">Nothing heard matches “{data.q}”.</p>
+		<p class="mt-8 text-stone-600">{m.search.nothing(data.q)}</p>
 	{:else if data.q}
 		<div class="mt-8 grid gap-8 md:grid-cols-3">
-			<Chart title="Artists" entries={data.found.artists} href={link('artist')} />
-			<Chart title="Albums" entries={data.found.releases} href={link('album')} />
-			<Chart title="Tracks" entries={data.found.recordings} href={link('track')} />
+			<Chart title={m.common.artists} entries={data.found.artists} href={link('artist')} />
+			<Chart title={m.common.albums} entries={data.found.releases} href={link('album')} />
+			<Chart title={m.common.tracks} entries={data.found.recordings} href={link('track')} />
 		</div>
 	{:else}
 		<p class="mt-8 text-sm text-stone-500">
-			Every word counts, in any case and with or without accents; “ärzte unrockbar” finds the track.
+			{m.search.hint}
 		</p>
 	{/if}
 </main>
