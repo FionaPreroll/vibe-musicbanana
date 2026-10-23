@@ -1,5 +1,11 @@
 <script lang="ts">
-	import { entityPath, type ChartEntry, type EntityKind } from '#lib/api.ts';
+	import {
+		entityPath,
+		getJson,
+		type ChartEntry,
+		type ChartKind,
+		type EntityKind
+	} from '#lib/api.ts';
 	import Chart from '#lib/components/Chart.svelte';
 	import SourcePicker from '#lib/components/SourcePicker.svelte';
 	import {
@@ -9,7 +15,7 @@
 		formatPercent,
 		listenCount
 	} from '#lib/format.ts';
-	import { localDay, parseDay } from '#lib/period.ts';
+	import { comparisonLabel, localDay, parseDay } from '#lib/period.ts';
 	import { withSource } from '#lib/source.ts';
 	import { wallClock, wallDay } from '#lib/zone.svelte.ts';
 	import type { PageProps } from './$types';
@@ -26,6 +32,9 @@
 	const entryHref = (kind: EntityKind, id: number, name: string) =>
 		entityPath(data.base, kind, id, name) + keep;
 	const link = (kind: EntityKind) => (entry: ChartEntry) => entryHref(kind, entry.id, entry.name);
+	// The next places of a chart, for "Show more".
+	const more = (kind: ChartKind) => (offset: number, limit: number) =>
+		getJson<ChartEntry[]>(fetch, `${data.api}/top/${kind}`, { ...data.query, offset, limit });
 
 	// The years before and after with listens.
 	const earlier = $derived(overview.years.findLast((y) => y.year < year)?.year ?? null);
@@ -202,10 +211,26 @@
 		</figure>
 
 		<div class="mt-10 grid gap-8 md:grid-cols-3">
-			<Chart title="Top artists" entries={data.artists} href={link('artist')} />
-			<Chart title="Top albums" entries={data.releases} href={link('album')} />
-			<Chart title="Top tracks" entries={data.recordings} href={link('track')} />
+			<Chart
+				title="Top artists"
+				entries={data.artists}
+				href={link('artist')}
+				more={more('artists')}
+			/>
+			<Chart
+				title="Top albums"
+				entries={data.releases}
+				href={link('album')}
+				more={more('releases')}
+			/>
+			<Chart
+				title="Top tracks"
+				entries={data.recordings}
+				href={link('track')}
+				more={more('recordings')}
+			/>
 		</div>
+		<p class="mt-3 text-xs text-stone-500">{comparisonLabel({ kind: 'year', year })}</p>
 
 		<div class="mt-12 grid gap-8 md:grid-cols-2">
 			<section>

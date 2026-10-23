@@ -1,0 +1,81 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH span AS (\n                       SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,\n                              coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi\n                   ), counted AS MATERIALIZED (\n                       SELECT l.release_id AS id, count(*) AS listens\n                         FROM span, listen l\n                        WHERE l.profile_id = $1 AND l.listened_at >= span.lo AND l.listened_at < span.hi\n                          AND ($6::text IS NULL OR listen_source(l.client) = $6)\n                          AND l.release_id IS NOT NULL\n                        GROUP BY 1\n                   ), top AS (\n                       SELECT *, 1 + (SELECT count(*) FROM counted c WHERE c.listens > t.listens) AS rank\n                         FROM counted t\n                        WHERE listens >= coalesce(\n                                  (SELECT listens FROM counted ORDER BY listens DESC\n                                   OFFSET $5::bigint + $7::bigint - 1 LIMIT 1), 0)\n                   ), before AS MATERIALIZED (\n                       SELECT l.release_id AS id, count(*) AS listens\n                         FROM listen l\n                        WHERE $8::date IS NOT NULL AND l.profile_id = $1\n                          AND l.listened_at >= $8::date::timestamp AT TIME ZONE $4\n                          AND l.listened_at < ($9::date + 1)::timestamp AT TIME ZONE $4\n                          AND ($6::text IS NULL OR listen_source(l.client) = $6)\n                          AND l.release_id IS NOT NULL\n                        GROUP BY 1\n                   )\n                   SELECT r.id, r.title AS name, a.name AS \"artist?\", t.listens AS \"listens!\", t.rank AS \"rank!\",\n                          CASE WHEN b.id IS NOT NULL\n                               THEN 1 + (SELECT count(*) FROM before c WHERE c.listens > b.listens)\n                          END AS previous_rank\n                     FROM top t\n                     JOIN release r ON r.id = t.id\n                     JOIN artist a ON a.id = r.artist_id\n                     LEFT JOIN before b ON b.id = t.id\n                    ORDER BY t.listens DESC, r.title\n                    LIMIT $5 OFFSET $7",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "release",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "release",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "artist?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "listens!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "rank!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "previous_rank",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Date",
+        "Date",
+        "Text",
+        "Int8",
+        "Text",
+        "Int8",
+        "Date",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "930c18b9480aef76be7063d64e89ddecdc52f60d330c810ebb040e0fad3f1807"
+}
