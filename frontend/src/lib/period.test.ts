@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+	comparisonLabel,
 	isoDay,
 	localDay,
 	parseDay,
@@ -129,5 +130,41 @@ describe('days', () => {
 	it('round-trips', () => {
 		expect(isoDay(parseDay('2026-02-28'))).toBe('2026-02-28');
 		expect(parseDay('2026-02-28')).toEqual(new Date(2026, 1, 28));
+	});
+});
+
+describe('comparisonLabel', () => {
+	const today = localDay(2026, 10, 23);
+
+	it('names what the chart arrows compare with', () => {
+		expect(comparisonLabel({ kind: 'all' }, today)).toBeNull();
+		expect(comparisonLabel({ kind: 'year', year: 2016 }, today)).toBe(
+			'Arrows compare each place with 2015.'
+		);
+		expect(comparisonLabel({ kind: 'days', days: 30 }, today)).toBe(
+			'Arrows compare each place with the 30 days before.'
+		);
+		expect(comparisonLabel({ kind: 'days', days: 1 }, today)).toBe(
+			'Arrows compare each place with the day before.'
+		);
+	});
+
+	it('counts the days of a range, up to today when open at the end', () => {
+		// Across the switch to summer time.
+		expect(comparisonLabel({ kind: 'range', from: '2026-03-01', to: '2026-03-31' }, today)).toBe(
+			'Arrows compare each place with the 31 days before.'
+		);
+		expect(comparisonLabel({ kind: 'range', from: '2026-10-17', to: null }, today)).toBe(
+			'Arrows compare each place with the 7 days before.'
+		);
+		expect(comparisonLabel({ kind: 'range', from: null, to: '2026-10-01' }, today)).toBeNull();
+		// Starting after today.
+		expect(comparisonLabel({ kind: 'range', from: '2026-11-01', to: null }, today)).toBeNull();
+	});
+
+	it('runs up to the real today by default', () => {
+		expect(comparisonLabel({ kind: 'range', from: isoDay(new Date()), to: null })).toBe(
+			'Arrows compare each place with the day before.'
+		);
 	});
 });
