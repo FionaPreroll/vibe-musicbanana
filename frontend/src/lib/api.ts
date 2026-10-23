@@ -93,8 +93,20 @@ export type Clock = { listens: number; weekdays: number[][] };
 
 export type ChartKind = 'artists' | 'releases' | 'recordings';
 
-/** `artist` is set for releases and recordings. */
-export type ChartEntry = { id: number; name: string; artist?: string; listens: number };
+/**
+ * `artist` is set for releases and recordings. The charts behind `/top/{kind}` also
+ * give the `rank` (entries with as many listens share it) and, asked with
+ * `compare`, the `previous_rank` in the period before: `null` when the entry was
+ * not heard then, missing when there is nothing to compare with (all time).
+ */
+export type ChartEntry = {
+	id: number;
+	name: string;
+	artist?: string;
+	listens: number;
+	rank?: number;
+	previous_rank?: number | null;
+};
 
 /**
  * Today's date in earlier years, in the viewer's time zone: one entry per year
@@ -365,7 +377,7 @@ export class ApiError extends Error {
 	}
 }
 
-type Params = Record<string, string | number | null | undefined>;
+type Params = Record<string, string | number | boolean | null | undefined>;
 
 export async function getJson<T>(
 	fetch: typeof globalThis.fetch,

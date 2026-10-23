@@ -502,3 +502,144 @@ async fn a_year_without_listens_is_left_out_of_the_months(db: PgPool) {
         ]
     );
 }
+
+/// `[name, rank, previous_rank]` per chart entry; `previous_rank` is `"-"` when missing.
+fn ranks(json: &Value) -> Vec<Value> {
+    json.as_array()
+        .unwrap()
+        .iter()
+        .map(|e| {
+            let previous = e.get("previous_rank").cloned().unwrap_or(json!("-"));
+            json!([e["name"], e["rank"], previous])
+        })
+        .collect()
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn charts_page_through_their_places(db: PgPool) {
+    let base = "/api/profiles/fiona/default/top/recordings";
+    // Entries with as many listens share a place.
+    assert_eq!(
+        ranks(&get_ok(&db, base).await),
+        [
+            json!(["Unrockbar", 1, "-"]),
+            json!(["Human Behaviour", 2, "-"]),
+            json!(["Adagio for Strings", 3, "-"]),
+            json!(["Deine Schuld", 3, "-"]),
+            json!(["Jóga", 3, "-"]),
+        ]
+    );
+    assert_eq!(
+        ranks(&get_ok(&db, &format!("{base}?offset=2&limit=2")).await),
+        [
+            json!(["Adagio for Strings", 3, "-"]),
+            json!(["Deine Schuld", 3, "-"]),
+        ]
+    );
+    assert_eq!(
+        ranks(&get_ok(&db, &format!("{base}?offset=4&limit=2")).await),
+        [json!(["Jóga", 3, "-"])]
+    );
+    assert_eq!(get_ok(&db, &format!("{base}?offset=5")).await, json!([]));
+    // A negative offset starts at the top.
+    assert_eq!(
+        get_ok(&db, &format!("{base}?offset=-3&limit=1")).await[0]["name"],
+        "Unrockbar"
+    );
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn charts_compare_a_year_with_the_year_before(db: PgPool) {
+    let base = "/api/profiles/fiona/default/top";
+    assert_eq!(
+        ranks(&get_ok(&db, &format!("{base}/artists?year=2016&compare=true")).await),
+        [json!(["Björk", 1, 2]), json!(["Die Ärzte", 1, 1])]
+    );
+    // In Berlin the listen at 2015-12-31 23:30 UTC moves Tiësto into 2016, new there.
+    assert_eq!(
+        ranks(
+            &get_ok(
+                &db,
+                &format!("{base}/artists?year=2016&compare=true&tz=Europe/Berlin")
+            )
+            .await
+        ),
+        [
+            json!(["Björk", 1, 2]),
+            json!(["Die Ärzte", 1, 1]),
+            json!(["Tiësto", 3, null])
+        ]
+    );
+    assert_eq!(
+        ranks(&get_ok(&db, &format!("{base}/releases?year=2016&compare=true")).await),
+        [json!(["Debut", 1, 2]), json!(["Geräusch", 1, 1])]
+    );
+    assert_eq!(
+        ranks(&get_ok(&db, &format!("{base}/recordings?year=2016&compare=true")).await),
+        [
+            json!(["Unrockbar", 1, 1]),
+            json!(["Human Behaviour", 2, 1]),
+            json!(["Jóga", 2, null])
+        ]
+    );
+    // Nothing in 2014 to compare with: everything is new.
+    assert_eq!(
+        ranks(&get_ok(&db, &format!("{base}/artists?year=2015&compare=true")).await),
+        [
+            json!(["Die Ärzte", 1, null]),
+            json!(["Björk", 2, null]),
+            json!(["Tiësto", 2, null])
+        ]
+    );
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn charts_compare_days_with_as_many_days_before(db: PgPool) {
+    let base = "/api/profiles/fiona/default/top/artists";
+    // 3 and 4 March against 1 and 2 March.
+    assert_eq!(
+        ranks(
+            &get_ok(
+                &db,
+                &format!("{base}?from=2016-03-03&to=2016-03-04&compare=true")
+            )
+            .await
+        ),
+        [json!(["Die Ärzte", 1, null])]
+    );
+    // 2 and 3 March against 29 February and 1 March.
+    assert_eq!(
+        ranks(
+            &get_ok(
+                &db,
+                &format!("{base}?from=2016-03-02&to=2016-03-03&compare=true")
+            )
+            .await
+        ),
+        [json!(["Björk", 1, 1]), json!(["Die Ärzte", 1, null])]
+    );
+    // Open at the end: up to today, against as many days before 3 March 2016,
+    // which reach back past all the earlier listens.
+    assert_eq!(
+        ranks(&get_ok(&db, &format!("{base}?from=2016-03-03&compare=true")).await),
+        [json!(["Die Ärzte", 1, 2])]
+    );
+    // The source filter applies to the period before as well.
+    assert_eq!(
+        ranks(
+            &get_ok(
+                &db,
+                &format!("{base}?from=2016-03-03&compare=true&source=navidrome")
+            )
+            .await
+        ),
+        Vec::<Value>::new()
+    );
+    // All time and a period open at the start have nothing before them.
+    for period in ["", "&to=2016-03-03"] {
+        assert_eq!(
+            ranks(&get_ok(&db, &format!("{base}?compare=true{period}")).await)[0][2],
+            "-"
+        );
+    }
+}

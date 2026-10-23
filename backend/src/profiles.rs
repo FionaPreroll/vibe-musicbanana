@@ -227,6 +227,10 @@ pub(crate) struct TopParams {
     to: Option<Date>,
     pub(crate) tz: Option<String>,
     pub(crate) limit: Option<i64>,
+    /// Places to skip, for the next page of a chart.
+    offset: Option<i64>,
+    /// Also give each entry its place in the period before, see `previous_period`.
+    compare: Option<bool>,
     /// Only the listens of this source, see `listen_source` in the migrations.
     pub(crate) source: Option<String>,
 }
@@ -272,26 +276,93 @@ pub(crate) struct ChartEntry {
     pub listens: i64,
 }
 
+/// An entry of the charts behind `/top/{kind}`.
+#[derive(Serialize)]
+struct TopEntry {
+    id: i64,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    artist: Option<String>,
+    listens: i64,
+    /// 1 for the most listens; entries with as many listens share a place.
+    rank: i64,
+    /// The place in the period just before, counted the same way: `null` when
+    /// the entry was not heard then, missing when there was nothing to compare
+    /// with (no `compare`, or all time).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    previous_rank: Option<Option<i64>>,
+}
+
+struct TopRow {
+    id: i64,
+    name: String,
+    artist: Option<String>,
+    listens: i64,
+    rank: i64,
+    previous_rank: Option<i64>,
+}
+
+/// The period of as many days just before `from..=to`, for the movement in the
+/// charts: the year before a calendar year, otherwise the same number of days
+/// ending the day before `from`. A period open at the end runs up to `today`;
+/// one open at the start has nothing before it.
+fn previous_period(
+    year: Option<i32>,
+    from: Option<Date>,
+    to: Option<Date>,
+    today: Date,
+) -> Option<(Date, Date)> {
+    if let Some(year) = year {
+        if year <= 1 {
+            return None;
+        }
+        let first = Date::from_calendar_date(year - 1, Month::January, 1).ok()?;
+        let last = Date::from_calendar_date(year - 1, Month::December, 31).ok()?;
+        return Some((first, last));
+    }
+    let from = from?;
+    let to = to.unwrap_or(today);
+    let days = (to - from).whole_days() + 1;
+    if days < 1 {
+        return None;
+    }
+    let last = from.previous_day()?;
+    let first = from.checked_sub(time::Duration::days(days))?;
+    (first.year() >= 1).then_some((first, last))
+}
+
 // All three charts count listens in [lo, hi): from midnight at the start of the
 // first day to midnight after the last one in the given time zone, without a
 // bound where the period is open. They count by id first and look up names only
-// for the entries that can make the chart: those with at least as many listens
-// as the one in the last place.
+// for the entries that can make the page of the chart: those with at least as
+// many listens as the one in its last place. With `compare` they count the
+// period before the same way and give each entry its place there.
 async fn top(
     State(state): State<AppState>,
     viewer: Viewer,
     Path((username, slug, kind)): Path<(String, String, String)>,
     Query(params): Query<TopParams>,
-) -> Result<Json<Vec<ChartEntry>>, AppError> {
+) -> Result<Json<Vec<TopEntry>>, AppError> {
     let (from, to) = params.days()?;
     let profile = find_profile(&state.db, viewer, &username, &slug).await?;
     let tz = time_zone(&state.db, params.tz).await?;
     let limit = params.limit.unwrap_or(10).clamp(1, 100);
+    let offset = params.offset.unwrap_or(0).clamp(0, 100_000);
+    let compare = params.compare.unwrap_or(false) && from.is_some();
+    let previous = if compare {
+        let today = sqlx::query_scalar!(r#"SELECT (now() AT TIME ZONE $1)::date AS "today!""#, tz)
+            .fetch_one(&state.db)
+            .await?;
+        previous_period(params.year, from, to, today)
+    } else {
+        None
+    };
+    let (prev_from, prev_to) = previous.unzip();
 
-    let entries = match kind.as_str() {
+    let rows = match kind.as_str() {
         "artists" => {
             sqlx::query_as!(
-                ChartEntry,
+                TopRow,
                 r#"WITH span AS (
                        SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,
                               coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi
@@ -302,29 +373,45 @@ async fn top(
                           AND ($6::text IS NULL OR listen_source(l.client) = $6)
                         GROUP BY 1
                    ), top AS (
-                       SELECT * FROM counted
+                       SELECT *, 1 + (SELECT count(*) FROM counted c WHERE c.listens > t.listens) AS rank
+                         FROM counted t
                         WHERE listens >= coalesce(
                                   (SELECT listens FROM counted ORDER BY listens DESC
-                                   OFFSET $5::bigint - 1 LIMIT 1), 0)
+                                   OFFSET $5::bigint + $7::bigint - 1 LIMIT 1), 0)
+                   ), before AS MATERIALIZED (
+                       SELECT l.artist_id AS id, count(*) AS listens
+                         FROM listen l
+                        WHERE $8::date IS NOT NULL AND l.profile_id = $1
+                          AND l.listened_at >= $8::date::timestamp AT TIME ZONE $4
+                          AND l.listened_at < ($9::date + 1)::timestamp AT TIME ZONE $4
+                          AND ($6::text IS NULL OR listen_source(l.client) = $6)
+                        GROUP BY 1
                    )
-                   SELECT a.id, a.name, NULL::text AS artist, t.listens AS "listens!"
+                   SELECT a.id, a.name, NULL::text AS artist, t.listens AS "listens!", t.rank AS "rank!",
+                          CASE WHEN b.id IS NOT NULL
+                               THEN 1 + (SELECT count(*) FROM before c WHERE c.listens > b.listens)
+                          END AS previous_rank
                      FROM top t
                      JOIN artist a ON a.id = t.id
+                     LEFT JOIN before b ON b.id = t.id
                     ORDER BY t.listens DESC, a.name
-                    LIMIT $5"#,
+                    LIMIT $5 OFFSET $7"#,
                 profile.id,
                 from,
                 to,
                 tz,
                 limit,
                 params.source,
+                offset,
+                prev_from,
+                prev_to,
             )
             .fetch_all(&state.db)
             .await
         }
         "releases" => {
             sqlx::query_as!(
-                ChartEntry,
+                TopRow,
                 r#"WITH span AS (
                        SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,
                               coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi
@@ -336,30 +423,47 @@ async fn top(
                           AND l.release_id IS NOT NULL
                         GROUP BY 1
                    ), top AS (
-                       SELECT * FROM counted
+                       SELECT *, 1 + (SELECT count(*) FROM counted c WHERE c.listens > t.listens) AS rank
+                         FROM counted t
                         WHERE listens >= coalesce(
                                   (SELECT listens FROM counted ORDER BY listens DESC
-                                   OFFSET $5::bigint - 1 LIMIT 1), 0)
+                                   OFFSET $5::bigint + $7::bigint - 1 LIMIT 1), 0)
+                   ), before AS MATERIALIZED (
+                       SELECT l.release_id AS id, count(*) AS listens
+                         FROM listen l
+                        WHERE $8::date IS NOT NULL AND l.profile_id = $1
+                          AND l.listened_at >= $8::date::timestamp AT TIME ZONE $4
+                          AND l.listened_at < ($9::date + 1)::timestamp AT TIME ZONE $4
+                          AND ($6::text IS NULL OR listen_source(l.client) = $6)
+                          AND l.release_id IS NOT NULL
+                        GROUP BY 1
                    )
-                   SELECT r.id, r.title AS name, a.name AS "artist?", t.listens AS "listens!"
+                   SELECT r.id, r.title AS name, a.name AS "artist?", t.listens AS "listens!", t.rank AS "rank!",
+                          CASE WHEN b.id IS NOT NULL
+                               THEN 1 + (SELECT count(*) FROM before c WHERE c.listens > b.listens)
+                          END AS previous_rank
                      FROM top t
                      JOIN release r ON r.id = t.id
                      JOIN artist a ON a.id = r.artist_id
+                     LEFT JOIN before b ON b.id = t.id
                     ORDER BY t.listens DESC, r.title
-                    LIMIT $5"#,
+                    LIMIT $5 OFFSET $7"#,
                 profile.id,
                 from,
                 to,
                 tz,
                 limit,
                 params.source,
+                offset,
+                prev_from,
+                prev_to,
             )
             .fetch_all(&state.db)
             .await
         }
         "recordings" => {
             sqlx::query_as!(
-                ChartEntry,
+                TopRow,
                 r#"WITH span AS (
                        SELECT coalesce($2::date::timestamp AT TIME ZONE $4, '-infinity') AS lo,
                               coalesce(($3::date + 1)::timestamp AT TIME ZONE $4, 'infinity') AS hi
@@ -370,23 +474,39 @@ async fn top(
                           AND ($6::text IS NULL OR listen_source(l.client) = $6)
                         GROUP BY 1
                    ), top AS (
-                       SELECT * FROM counted
+                       SELECT *, 1 + (SELECT count(*) FROM counted c WHERE c.listens > t.listens) AS rank
+                         FROM counted t
                         WHERE listens >= coalesce(
                                   (SELECT listens FROM counted ORDER BY listens DESC
-                                   OFFSET $5::bigint - 1 LIMIT 1), 0)
+                                   OFFSET $5::bigint + $7::bigint - 1 LIMIT 1), 0)
+                   ), before AS MATERIALIZED (
+                       SELECT l.recording_id AS id, count(*) AS listens
+                         FROM listen l
+                        WHERE $8::date IS NOT NULL AND l.profile_id = $1
+                          AND l.listened_at >= $8::date::timestamp AT TIME ZONE $4
+                          AND l.listened_at < ($9::date + 1)::timestamp AT TIME ZONE $4
+                          AND ($6::text IS NULL OR listen_source(l.client) = $6)
+                        GROUP BY 1
                    )
-                   SELECT r.id, r.title AS name, a.name AS "artist?", t.listens AS "listens!"
+                   SELECT r.id, r.title AS name, a.name AS "artist?", t.listens AS "listens!", t.rank AS "rank!",
+                          CASE WHEN b.id IS NOT NULL
+                               THEN 1 + (SELECT count(*) FROM before c WHERE c.listens > b.listens)
+                          END AS previous_rank
                      FROM top t
                      JOIN recording r ON r.id = t.id
                      JOIN artist a ON a.id = r.artist_id
+                     LEFT JOIN before b ON b.id = t.id
                     ORDER BY t.listens DESC, r.title
-                    LIMIT $5"#,
+                    LIMIT $5 OFFSET $7"#,
                 profile.id,
                 from,
                 to,
                 tz,
                 limit,
                 params.source,
+                offset,
+                prev_from,
+                prev_to,
             )
             .fetch_all(&state.db)
             .await
@@ -394,7 +514,18 @@ async fn top(
         _ => return Err(AppError::NotFound),
     }?;
 
-    Ok(Json(entries))
+    Ok(Json(
+        rows.into_iter()
+            .map(|row| TopEntry {
+                id: row.id,
+                name: row.name,
+                artist: row.artist,
+                listens: row.listens,
+                rank: row.rank,
+                previous_rank: previous.map(|_| row.previous_rank),
+            })
+            .collect(),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -629,5 +760,58 @@ pub(crate) async fn time_zone(db: &PgPool, tz: Option<String>) -> Result<String,
             Err(AppError::BadRequest(format!("unknown time zone: {tz}")))
         }
         Err(err) => Err(err.into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use time::macros::date;
+
+    use super::previous_period;
+
+    const TODAY: time::Date = date!(2026 - 10 - 23);
+
+    #[test]
+    fn a_year_compares_with_the_whole_year_before() {
+        assert_eq!(
+            previous_period(Some(2025), None, None, TODAY),
+            Some((date!(2024 - 01 - 01), date!(2024 - 12 - 31)))
+        );
+        assert_eq!(previous_period(Some(1), None, None, TODAY), None);
+    }
+
+    #[test]
+    fn days_compare_with_as_many_days_before() {
+        let (from, to) = (Some(date!(2026 - 03 - 01)), Some(date!(2026 - 03 - 31)));
+        assert_eq!(
+            previous_period(None, from, to, TODAY),
+            Some((date!(2026 - 01 - 29), date!(2026 - 02 - 28)))
+        );
+        // Open at the end: up to today.
+        assert_eq!(
+            previous_period(None, Some(date!(2026 - 10 - 17)), None, TODAY),
+            Some((date!(2026 - 10 - 10), date!(2026 - 10 - 16)))
+        );
+    }
+
+    #[test]
+    fn some_periods_have_nothing_before() {
+        assert_eq!(previous_period(None, None, None, TODAY), None);
+        assert_eq!(previous_period(None, None, Some(TODAY), TODAY), None);
+        // Starting after today.
+        assert_eq!(
+            previous_period(None, Some(date!(2026 - 11 - 01)), None, TODAY),
+            None
+        );
+        // Before the year 1.
+        assert_eq!(
+            previous_period(
+                None,
+                Some(date!(0001 - 01 - 02)),
+                Some(date!(0001 - 01 - 10)),
+                TODAY
+            ),
+            None
+        );
     }
 }
