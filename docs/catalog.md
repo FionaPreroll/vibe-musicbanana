@@ -45,6 +45,8 @@ Undoing puts back what the merge changed: the listens, spellings and MusicBrainz
 
 Admins (see [Accounts](accounts.md#accounts)) have a Merges link at the top that leads to `/merges`, which does the same as the commands:
 
+![The merges page with a suggestion](screenshots/merges.png)
+
 - the suggestions of artists, albums and tracks, each with a preview of what merging would change (the dry run) before it merges, the other way round, or hidden for good;
 - a merge by hand of any two entries, found by name or `#id`;
 - the log of all merges, also those from the command line, each with a preview before it is undone.

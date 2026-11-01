@@ -1,0 +1,2 @@
+# pnpm settings for the screenshot tools (a single package, not a workspace).
+engineStrict: true

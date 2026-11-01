@@ -2,6 +2,8 @@
 
 [Back to the README](../README.md)
 
+![An album page with its cover](screenshots/album.png)
+
 Albums can show their front cover from the [Cover Art Archive](https://coverartarchive.org/): on the album page, small in the album charts and in the recent listens. Albums without one get a banana-yellow tile with their first letter.
 
 It is **off by default**, since it means requests to the outside. While it is off, pages look as without covers and the server sends nothing anywhere.
