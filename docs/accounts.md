@@ -51,6 +51,8 @@ Logged-in accounts can follow a profile with the button next to its name; the st
 
 The page `/settings` has, for the account logged in:
 
+![The settings page](screenshots/settings.png)
+
 - its profiles (create, rename, who sees them) and their followers;
 - scrobble tokens (create, revoke), see [Scrobbling](scrobbling.md#tokens);
 - YourSpotify connections (connect, fetch all again, remove), see [Spotify](spotify.md);
@@ -65,6 +67,8 @@ Every page comes light or dark, the dark one in black and banana yellow. It foll
 ## Taking out wrong listens
 
 Wrong listens (a scrobbler that ran twice, a party on your account, a bad import) are taken out on the page "Edit listening history", linked from each profile in the settings. It lists the profile's listens, narrowed by words (artist, track or album, ignoring case and accents), a time span and a source, and moves the ones picked, or all that match, to the trash. Listens in the trash leave the charts and every page, and a player or an import sending them again doesn't bring them back. From the trash they can be restored, with an undo right after moving them, or deleted for good.
+
+![Editing the listening history](screenshots/history.png)
 
 ## Your data
 

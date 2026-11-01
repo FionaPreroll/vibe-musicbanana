@@ -9,6 +9,7 @@
 - [Tests](#tests)
 - [Coverage](#coverage)
 - [Texts and translations](#texts-and-translations)
+- [Screenshots](#screenshots)
 
 Design notes and decisions, with the data model: [design.md](design.md) (German).
 
@@ -24,7 +25,8 @@ Design notes and decisions, with the data model: [design.md](design.md) (German)
 | `frontend/src/lib/i18n/` | The English and German texts of the interface. |
 | `frontend/src/test/` | Helpers for the frontend tests. |
 | `Dockerfile`, `deploy/` | The image with server and frontend, and a compose file to run it with PostgreSQL ([Installation](installation.md)). |
-| `docs/` | These docs. |
+| `docs/` | These docs, with the screenshots in `docs/screenshots/`. |
+| `tools/screenshots/` | Made-up listening histories and the scripts that take the screenshots. |
 
 ## Setting up
 
@@ -86,3 +88,26 @@ The interface speaks English and German. Every text lives in `frontend/src/lib/i
 - **A new text** goes into `en.ts` and `de.ts`, never straight into a component. The German texts use "du".
 - **The backend's messages** stay English. `server-errors.ts` maps the ones users see to the catalog; a new error users can run into needs a pattern there and an entry in both languages.
 - **A new language:** copy `de.ts`, add its code to `languages` in `locale.svelte.ts` and to `catalogs` in `index.ts`. The account's choice (`account.language`) takes any two- or three-letter code; an account's language the interface lacks counts as no choice, and then the first browser language it speaks, or else English, is used.
+
+## Screenshots
+
+The screenshots in the README and these docs (`docs/screenshots/`) are taken from a fresh server filled with made-up listening histories, never real data. To take them again, run the workflow **Screenshots** from the repository's Actions tab ("Run workflow", on `main` or any branch). It builds the image, starts it with an empty database, fills it, takes the screenshots in Chromium and opens a pull request "Update the screenshots" with them, assigned to whoever started it, to look through and merge by hand. A run with nothing changed opens none; a later run replaces the branch of a pull request still open. Pull requests that change `tools/screenshots/` run the same, without the pull request at the end; their screenshots are in the run's artifacts.
+
+For the workflow to open pull requests, the repository needs *Settings → Actions → General → Allow GitHub Actions to create and approve pull requests*. Pull requests opened by a workflow start no other workflows, so CI does not run on them; they only change images.
+
+What is in `tools/screenshots/`:
+
+- `data.mjs`: the made-up histories: two accounts (`fiona`, admin, three years; `alex`, two years) with real artists and songs, drawn from a seeded random generator relative to today, so a run looks the same as another on the same day. Tastes change over time, so the charts move, an artist goes quiet for Lost & found, new ones arrive for the year in review, and a misspelled artist gives the merges page a suggestion.
+- `seed.mjs`: creates the accounts on the command line, sends the listens through the scrobble API as a player would, sets "now playing", and writes made-up album covers straight into the cover cache, so nothing is asked of the Cover Art Archive (their MusicBrainz IDs are invented).
+- `capture.mjs`: logs in and takes each screenshot, in Europe/Berlin and US English unless a shot picks German, a phone or the dark theme. Each shot is an entry in `SHOTS`; new ones go there and, when shown, into the README or the docs.
+
+Locally, against an empty database (screenshots go to `docs/screenshots/`):
+
+```sh
+export DATABASE_URL=postgres://…/screenshots    # an empty database, for both commands
+cd backend && cargo build && COVER_ART=on COVER_ART_CACHE=/tmp/mb-covers cargo run
+cd tools/screenshots && pnpm install && pnpm exec playwright install chromium
+MUSICBANANA=../../backend/target/debug/musicbanana COVER_CACHE=/tmp/mb-covers pnpm run all
+```
+
+`ONLY=profile,compare pnpm run capture` takes just those shots again; `BASE_URL` and `OUT_DIR` point elsewhere.

@@ -1,0 +1,14 @@
+{
+	"name": "musicbanana-screenshots",
+	"private": true,
+	"type": "module",
+	"packageManager": "pnpm@12.8.1",
+	"scripts": {
+		"seed": "node seed.mjs",
+		"capture": "node capture.mjs",
+		"all": "node seed.mjs && node capture.mjs"
+	},
+	"dependencies": {
+		"playwright": "1.63.0"
+	}
+}

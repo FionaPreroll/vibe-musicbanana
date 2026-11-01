@@ -23,6 +23,8 @@ Profiles of other accounts than the default one have their slug after the user n
 
 `/u/<username>` shows a profile's listens per year, top artists, albums and tracks, the top artists of each year, recent listens, and what is playing now. New listens and "now playing" show up right away while the page is open.
 
+![A profile page](screenshots/profile.png)
+
 **This week** opens the page when no period is picked: listens against the week before up to the same weekday and time, days with listens, the current and the longest streak of days in a row with listens (left out when the viewer or the profile's owner turned streaks off), listens per day of both weeks and the five artists of the week, marked when heard for the first time. The week runs Monday to Sunday, or from the first weekday picked in the settings. It is left out when the profile had no listens this week or last and no running streak.
 
 **On this day**, below it: today's date in each earlier year with listens on it, the latest first, each with its listens, three most heard artists and five most heard tracks, linking to the profile page for that day. 29 February looks back to the 28th in other years. Left out when there is none.
@@ -37,9 +39,13 @@ Profiles of other accounts than the default one have their slug after the user n
 
 `/u/<username>/year/2016`, linked from the year view of the profile page: listens against the year before, artists and how many were new, days with listens, the busiest month and day, listens per month of both years, the top artists, albums and tracks, the most heard artists heard for the first time, the biggest risers (artists heard before with the most listens more than in the year before, and their places in both years' charts) and the longest listening session (it goes on while the next listen starts at most 30 minutes after the end of the one before). A running year counts up to now and is compared with the year before up to the same day and time.
 
+![A year in review](screenshots/year-in-review.png)
+
 ## Artist, album and track pages
 
 `/u/<username>/artist/<id>-<name>`, `…/album/…` and `…/track/…`, e.g. `/u/fiona/artist/1-die-arzte`: listens per month, first and last listen, phases of heavy listening, the albums and tracks heard, and a link to MusicBrainz when the entry has an ID. The album page shows the cover when covers are on.
+
+![An artist page](screenshots/artist.png)
 
 Only the id in the address counts; the name after it is for the reader, and the page moves to the current one when it differs, as after a rename or for links with the id alone. An entry that was merged into another one leads to that one. The months run from the profile's first listen of the entry to its last, leaving out a year or more without any listens (shown as a break).
 
@@ -47,9 +53,13 @@ Only the id in the address counts; the name after it is for the reader, and the 
 
 `/u/<username>/search?q=`, also from the search field in the header of a profile's pages (`/` jumps into it): the artists, albums and tracks the profile has heard whose names hold every word, ignoring case and accents, the most heard first. A word may also be the artist's name of an album or track ("ärzte unrockbar").
 
+![Search results for "ra"](screenshots/search.png)
+
 ## Comparing two profiles
 
 `/u/<username>/compare/<other>` (with slugs after either name for other profiles), from "Compare" on a profile page: straight against the viewer's own default profile, or else to `/u/<username>/compare` to pick one. It shows two profiles side by side for a period:
+
+![Two profiles compared](screenshots/compare.png)
 
 - the **overlap**: each profile's listens of an artist as a share of all its listens, the smaller share summed over all artists. 100 % means the same artists equally often, 0 % none in common;
 - the artists, albums and tracks **both** heard, ranked by what they add to the overlap;

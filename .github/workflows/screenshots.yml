@@ -1,0 +1,109 @@
+name: Screenshots
+
+# Takes the screenshots in docs/screenshots/ again and opens a pull request
+# with them, to look at and merge by hand. Run it from the Actions tab
+# ("Run workflow"). The app is built from the chosen branch and filled with
+# made-up listening histories (tools/screenshots/), never with real data.
+#
+# Pull requests that change the screenshot tools run it too, without the pull
+# request at the end; the screenshots are in the run's artifacts.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - tools/screenshots/**
+      - .github/workflows/screenshots.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: screenshots-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same image CI builds, mostly from its cache.
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: musicbanana:screenshots
+          load: true
+          build-args: GIT_COMMIT=${{ github.sha }}
+          cache-from: type=gha
+
+      # Covers come from files seed.mjs writes into the cache, so nothing is
+      # asked of the Cover Art Archive.
+      - name: Start musicbanana
+        run: |
+          mkdir -p "$RUNNER_TEMP/covers" && chmod 777 "$RUNNER_TEMP/covers"
+          docker run -d --name musicbanana --network host \
+            -e DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres \
+            -e LISTEN_ADDR=127.0.0.1:3000 -e COVER_ART=on \
+            -v "$RUNNER_TEMP/covers:/var/cache/musicbanana/covers" \
+            musicbanana:screenshots
+          for _ in $(seq 30); do
+            curl -sf http://127.0.0.1:3000/api/health && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:3000/api/health
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the screenshot tools
+        working-directory: tools/screenshots
+        run: |
+          npm install --global "$(node -p 'require("./package.json").packageManager')"
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Seed and capture
+        working-directory: tools/screenshots
+        env:
+          MUSICBANANA: docker exec -i musicbanana musicbanana
+          COVER_CACHE: ${{ runner.temp }}/covers
+        run: pnpm run all
+
+      - name: Container log
+        if: always()
+        run: docker logs musicbanana || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: docs/screenshots
+
+      - if: github.event_name == 'workflow_dispatch'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: screenshots/update
+          delete-branch: true
+          add-paths: docs/screenshots
+          commit-message: Update the screenshots
+          title: Update the screenshots
+          body: |
+            New screenshots for the README and docs, taken by the [Screenshots workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) from `${{ github.ref_name }}` (${{ github.sha }}) with made-up data.
+
+            Look through them in the "Files changed" tab (the rich diff shows old and new side by side) and merge when they look right.
+          assignees: ${{ github.actor }}
+          reviewers: ${{ github.actor }}
