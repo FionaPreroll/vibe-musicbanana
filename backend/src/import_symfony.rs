@@ -12,7 +12,11 @@
 //! already there, including at a whole hour or two off, which would mean one of
 //! the imports stored local time.
 
-use std::{collections::HashMap, fmt, str::FromStr};
+use std::{
+    collections::{BTreeSet, HashMap, hash_map::Entry},
+    fmt,
+    str::FromStr,
+};
 
 use anyhow::{Context, bail};
 use sqlx::PgPool;
@@ -20,14 +24,17 @@ use time::{Date, OffsetDateTime, Time};
 
 use crate::{
     account::check_slug,
-    catalog::{Mbids, repair_mojibake},
+    catalog::{Mbids, name_key, repair_mojibake},
     scrobble::{self, Listen},
 };
 
 pub const CLIENT: &str = "import:symfony-2022";
 const LISTEN_BATCH: usize = 1_000;
-/// Listens within this many seconds of one already there count as "close".
-const CLOSE_SECS: i64 = 240;
+/// A listen of the same track closer than half its length, at most this many
+/// seconds, to one already there is the same play (as in [`scrobble::record`]).
+const MAX_GAP_SECS: f64 = 240.0;
+/// The gap when the length is unknown.
+const UNKNOWN_GAP_SECS: f64 = 15.0;
 
 /// The old database as far as the import needs it.
 #[derive(Debug, Default)]
@@ -259,13 +266,17 @@ pub struct ProfileReport {
     pub target: Target,
     /// Old listens in the chosen time range.
     pub listens: usize,
-    /// Of these, those with a listen at the same second already.
+    /// Of these, those with a listen at the same second in any profile of the
+    /// account, left out.
     pub same_second: usize,
-    /// Those with one less than four minutes away (but not at the same second).
-    pub close: usize,
-    /// Those with one exactly one or two hours away and none closer: a sign
-    /// that one of the two sides stored local time.
+    /// Those with a listen of the same track a few moments away in any profile
+    /// of the account, left out.
+    pub same_track: usize,
+    /// Those with a listen exactly one or two hours away: a sign that one of
+    /// the two sides stored local time. They count as new.
     pub hours_off: usize,
+    /// Those that are new.
+    pub new: usize,
     /// Listens without artist or title, left out.
     pub incomplete: usize,
     /// Stored as new listens (0 in a dry run).
@@ -294,12 +305,13 @@ impl fmt::Display for Report {
             writeln!(f, "  same second:    {} (left out)", p.same_second)?;
             writeln!(
                 f,
-                "  < 4 min apart:  {} (left out if the same track)",
-                p.close
+                "  same track:     {} (moments apart, left out)",
+                p.same_track
             )?;
+            writeln!(f, "  new:            {}", p.new)?;
             writeln!(
                 f,
-                "  1 or 2 h off:   {} (time zone? see docs/import-symfony.md)",
+                "  1 or 2 h off:   {} of the new ones (time zone? see docs/import-symfony.md)",
                 p.hours_off
             )?;
             if p.incomplete > 0 {
@@ -367,6 +379,9 @@ pub async fn import(db: &PgPool, source: &Source, options: &Options) -> anyhow::
             .push(listen);
     }
 
+    // Per account: its listens in all profiles, and those taken from the old
+    // database so far, so that a play in two old profiles counts once as well.
+    let mut seen: HashMap<i64, Seen> = HashMap::new();
     for old in &source.profiles {
         let listens = by_profile.remove(&old.id).unwrap_or_default();
         let siblings = source
@@ -398,14 +413,39 @@ pub async fn import(db: &PgPool, source: &Source, options: &Options) -> anyhow::
             }
         }
 
-        let existing = match &target {
-            Target::Profile(id, _) => existing_times(db, *id).await?,
-            _ => Vec::new(),
+        let account_id = match &target {
+            Target::Profile(id, _) => Some(
+                sqlx::query_scalar!("SELECT account_id FROM profile WHERE id = $1", id)
+                    .fetch_one(db)
+                    .await?,
+            ),
+            Target::NewProfile(account_id, ..) => Some(*account_id),
+            Target::NoAccount | Target::Skipped => None,
         };
-        let overlap = Overlap::count(&existing, converted.iter().map(|l| l.listened_at));
+        let mut counts = Counts::default();
+        let mut accepted = Vec::new();
+        if let Some(account_id) = account_id {
+            let seen = match seen.entry(account_id) {
+                Entry::Occupied(e) => e.into_mut(),
+                Entry::Vacant(e) => e.insert(Seen::of_account(db, account_id).await?),
+            };
+            for listen in converted {
+                let key = Seen::key(&listen);
+                let at = listen.listened_at.unix_timestamp();
+                match seen.judge(at, &key, gap_secs(listen.duration_ms)) {
+                    Verdict::SameSecond => counts.same_second += 1,
+                    Verdict::SameTrack => counts.same_track += 1,
+                    verdict => {
+                        counts.hours_off += usize::from(verdict == Verdict::HoursOff);
+                        seen.add(at, key);
+                        accepted.push(listen);
+                    }
+                }
+            }
+        }
 
         let mut imported = 0;
-        if !options.dry_run && !converted.is_empty() {
+        if !options.dry_run && !accepted.is_empty() {
             let profile_id = match &target {
                 Target::Profile(id, _) => Some(*id),
                 Target::NewProfile(account_id, _, slug) => {
@@ -414,7 +454,7 @@ pub async fn import(db: &PgPool, source: &Source, options: &Options) -> anyhow::
                 Target::NoAccount | Target::Skipped => None,
             };
             if let Some(profile_id) = profile_id {
-                for batch in converted.chunks(LISTEN_BATCH) {
+                for batch in accepted.chunks(LISTEN_BATCH) {
                     imported += scrobble::record(db, profile_id, batch).await?;
                 }
             }
@@ -424,9 +464,10 @@ pub async fn import(db: &PgPool, source: &Source, options: &Options) -> anyhow::
             old: format!("{}/{}", old.user, old.name),
             target,
             listens: listens.len(),
-            same_second: overlap.same_second,
-            close: overlap.close,
-            hours_off: overlap.hours_off,
+            same_second: counts.same_second,
+            same_track: counts.same_track,
+            hours_off: counts.hours_off,
+            new: accepted.len(),
             incomplete,
             imported,
         });
@@ -558,49 +599,90 @@ async fn create_profile(
     Ok(id)
 }
 
-/// The times of the profile's listens, in unix seconds, sorted.
-async fn existing_times(db: &PgPool, profile_id: i64) -> sqlx::Result<Vec<i64>> {
-    sqlx::query_scalar!(
-        r#"SELECT extract(epoch FROM listened_at)::int8 AS "at!"
-             FROM listen WHERE profile_id = $1 ORDER BY listened_at"#,
-        profile_id
-    )
-    .fetch_all(db)
-    .await
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-struct Overlap {
+#[derive(Debug, Default)]
+struct Counts {
     same_second: usize,
-    close: usize,
+    same_track: usize,
     hours_off: usize,
 }
 
-impl Overlap {
-    fn count(existing: &[i64], times: impl Iterator<Item = OffsetDateTime>) -> Self {
-        let has = |t: i64| existing.binary_search(&t).is_ok();
-        let nearest = |t: i64| {
-            let i = existing.partition_point(|&e| e < t);
-            [i.checked_sub(1), Some(i)]
-                .into_iter()
-                .flatten()
-                .filter_map(|i| existing.get(i))
-                .map(|&e| (e - t).abs())
-                .min()
-        };
-        let mut overlap = Self::default();
-        for t in times.map(OffsetDateTime::unix_timestamp) {
-            match nearest(t) {
-                Some(0) => overlap.same_second += 1,
-                Some(d) if d < CLOSE_SECS => overlap.close += 1,
-                _ if [3600, 7200].iter().any(|h| has(t - h) || has(t + h)) => {
-                    overlap.hours_off += 1
-                }
-                _ => {}
-            }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Verdict {
+    SameSecond,
+    SameTrack,
+    HoursOff,
+    New,
+}
+
+/// Artist and title as the alias tables compare them.
+type TrackKey = (String, String);
+
+/// The listens of one account, all its profiles together, as far as telling
+/// a second copy of a play goes.
+#[derive(Debug, Default)]
+struct Seen {
+    times: BTreeSet<i64>,
+    tracks: HashMap<TrackKey, BTreeSet<i64>>,
+}
+
+impl Seen {
+    async fn of_account(db: &PgPool, account_id: i64) -> sqlx::Result<Self> {
+        let rows = sqlx::query!(
+            r#"SELECT extract(epoch FROM l.listened_at)::int8 AS "at!", l.artist_raw, l.track_raw
+                 FROM listen l JOIN profile p ON p.id = l.profile_id
+                WHERE p.account_id = $1"#,
+            account_id
+        )
+        .fetch_all(db)
+        .await?;
+        let mut seen = Self::default();
+        for row in rows {
+            seen.add(
+                row.at,
+                (name_key(&row.artist_raw), name_key(&row.track_raw)),
+            );
         }
-        overlap
+        Ok(seen)
     }
+
+    fn key(listen: &Listen) -> TrackKey {
+        (name_key(&listen.artist), name_key(&listen.track))
+    }
+
+    fn add(&mut self, at: i64, key: TrackKey) {
+        self.times.insert(at);
+        self.tracks.entry(key).or_default().insert(at);
+    }
+
+    /// Whether a listen of `key` at `at` is one already there.
+    fn judge(&self, at: i64, key: &TrackKey, gap_secs: f64) -> Verdict {
+        if self.times.contains(&at) {
+            return Verdict::SameSecond;
+        }
+        let reach = gap_secs.ceil() as i64;
+        if self.tracks.get(key).is_some_and(|times| {
+            times
+                .range(at - reach..=at + reach)
+                .any(|&t| ((t - at).abs() as f64) < gap_secs)
+        }) {
+            return Verdict::SameTrack;
+        }
+        if [3600, 7200]
+            .iter()
+            .any(|h| self.times.contains(&(at - h)) || self.times.contains(&(at + h)))
+        {
+            return Verdict::HoursOff;
+        }
+        Verdict::New
+    }
+}
+
+/// How far apart two listens of a track must be to be two plays: half its
+/// length, at most four minutes, 15 seconds when the length is unknown.
+fn gap_secs(duration_ms: Option<i32>) -> f64 {
+    duration_ms.map_or(UNKNOWN_GAP_SECS, |ms| {
+        (f64::from(ms) / 2000.0).min(MAX_GAP_SECS)
+    })
 }
 
 /// The old listen as a scrobble, or None without artist or title.
@@ -718,23 +800,26 @@ mod tests {
     }
 
     #[test]
-    fn counts_the_overlap() {
-        let existing = [1_000, 2_000, 10_000];
-        let at = |t: i64| OffsetDateTime::from_unix_timestamp(t).unwrap();
-        let overlap = Overlap::count(
-            &existing,
-            [1_000, 1_100, 2_239, 2_240, 4_600, 13_600, 50_000]
-                .into_iter()
-                .map(at),
-        );
+    fn tells_second_copies_of_plays() {
+        let key = |a: &str, t: &str| (name_key(a), name_key(t));
+        let mut seen = Seen::default();
+        seen.add(1_000, key("Die Ärzte", "Westerland"));
+        seen.add(2_000, key("Björk", "Hyperballad"));
+        let westerland = key("die ärzte ", "WESTERLAND");
+        assert_eq!(seen.judge(1_000, &key("x", "y"), 15.0), Verdict::SameSecond);
+        assert_eq!(seen.judge(1_100, &westerland, 115.0), Verdict::SameTrack);
+        assert_eq!(seen.judge(1_115, &westerland, 115.0), Verdict::New);
         assert_eq!(
-            overlap,
-            Overlap {
-                same_second: 1,
-                close: 2,
-                hours_off: 2,
-            }
+            seen.judge(1_100, &key("Björk", "Joga"), 115.0),
+            Verdict::New
         );
+        assert_eq!(seen.judge(4_600, &westerland, 115.0), Verdict::HoursOff);
+        assert_eq!(seen.judge(9_200, &westerland, 115.0), Verdict::HoursOff);
+        assert_eq!(seen.judge(50_000, &westerland, 115.0), Verdict::New);
+
+        assert_eq!(gap_secs(None), 15.0);
+        assert_eq!(gap_secs(Some(230_000)), 115.0);
+        assert_eq!(gap_secs(Some(900_000)), 240.0);
         assert_eq!(
             day_start(datetime!(2016-05-31 13:00 UTC).date()).unix_timestamp(),
             1_464_652_800

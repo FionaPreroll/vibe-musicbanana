@@ -143,15 +143,22 @@ async fn dry_run_matches_profiles_and_writes_nothing(db: PgPool) {
         (
             fiona.listens,
             fiona.same_second,
-            fiona.close,
+            fiona.same_track,
+            fiona.new,
             fiona.hours_off
         ),
-        (4, 1, 1, 0)
+        (4, 1, 1, 2, 0)
     );
     let emma = &report.profiles[3];
     assert_eq!(
-        (emma.listens, emma.same_second, emma.close, emma.hours_off),
-        (2, 0, 0, 1)
+        (
+            emma.listens,
+            emma.same_second,
+            emma.same_track,
+            emma.new,
+            emma.hours_off
+        ),
+        (2, 0, 0, 2, 1)
     );
     assert_eq!(report.imported(), 0);
 
@@ -346,4 +353,65 @@ async fn follows_renamed_accounts(db: PgPool) {
             .unwrap_err();
         assert_eq!(err.to_string(), error);
     }
+}
+
+#[sqlx::test]
+async fn leaves_out_plays_another_profile_has(db: PgPool) {
+    let (fiona, _) = existing(&db).await;
+    let work: i64 = sqlx::query_scalar(
+        "INSERT INTO profile (account_id, slug, name)
+         SELECT account_id, 'work', 'Work' FROM profile WHERE id = $1 RETURNING id",
+    )
+    .bind(fiona)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    // The two plays of the old profile Arbeit, scrobbled to another profile:
+    // one at the same second, one a few seconds later.
+    listen(
+        &db,
+        work,
+        1_620_000_000,
+        "Björk",
+        "Hyperballad",
+        "Navidrome 0.58.0",
+    )
+    .await;
+    listen(
+        &db,
+        work,
+        1_620_000_410,
+        "björk",
+        "hyperballad",
+        "Navidrome 0.58.0",
+    )
+    .await;
+    let source = import_symfony::read(&load_fixture().await).await.unwrap();
+
+    let dry = Options {
+        dry_run: true,
+        ..Options::default()
+    };
+    let report = import_symfony::import(&db, &source, &dry).await.unwrap();
+    let arbeit = &report.profiles[1];
+    assert_eq!(
+        (
+            arbeit.listens,
+            arbeit.same_second,
+            arbeit.same_track,
+            arbeit.new
+        ),
+        (2, 1, 1, 0)
+    );
+
+    let report = import_symfony::import(&db, &source, &Options::default())
+        .await
+        .unwrap();
+    assert_eq!(report.profiles[1].imported, 0);
+    assert_eq!(report.imported(), 4);
+    // Nothing new for Arbeit, so no profile for it.
+    assert_eq!(
+        count(&db, "SELECT count(*) FROM profile WHERE slug = 'arbeit'").await,
+        0
+    );
 }
