@@ -139,6 +139,13 @@ struct SymfonyArgs {
     /// OLD_USER/OLD_PROFILE=USER/SLUG, e.g. fiona/Arbeit=fiona/work. Repeatable.
     #[arg(long = "profile", value_name = "OLD=NEW")]
     profiles: Vec<import_symfony::Mapping>,
+    /// The account the profiles of an old account go to, when it has another
+    /// name now: OLD_USER=USER, e.g. fi=fiona. Repeatable.
+    #[arg(long = "user", value_name = "OLD=NEW")]
+    users: Vec<import_symfony::UserMapping>,
+    /// An old profile to leave out: OLD_USER/OLD_PROFILE. Repeatable.
+    #[arg(long, value_name = "OLD")]
+    skip: Vec<import_symfony::OldName>,
 }
 
 fn parse_day(text: &str) -> Result<time::Date, String> {
@@ -446,6 +453,8 @@ async fn main() -> anyhow::Result<()> {
                 since: args.since.map(import_symfony::day_start),
                 until: args.until.map(import_symfony::day_start),
                 mappings: args.profiles,
+                users: args.users,
+                skip: args.skip,
             };
             let report = import_symfony::import(&db, &source, &options).await?;
             println!("{report}");

@@ -112,7 +112,7 @@ async fn count(db: &PgPool, sql: &str) -> i64 {
 async fn dry_run_matches_profiles_and_writes_nothing(db: PgPool) {
     existing(&db).await;
     let source = import_symfony::read(&load_fixture().await).await.unwrap();
-    assert_eq!(source.profiles.len(), 4);
+    assert_eq!(source.profiles.len(), 5);
     assert_eq!(source.listens.len(), 9);
 
     let options = Options {
@@ -131,10 +131,11 @@ async fn dry_run_matches_profiles_and_writes_nothing(db: PgPool) {
     assert_eq!(
         targets,
         [
-            ("fiona/Default", "fiona/default".to_owned()),
+            ("fiona/_", "fiona/default".to_owned()),
             ("fiona/Arbeit", "fiona/arbeit (new profile)".to_owned()),
+            ("fiona/leer", "fiona/leer (new profile)".to_owned()),
             ("Emma/emma", "emma/default".to_owned()),
-            ("ghost/ghost", "nowhere, no account of that name".to_owned()),
+            ("ghost/_", "nowhere, no account of that name".to_owned()),
         ]
     );
     let fiona = &report.profiles[0];
@@ -147,7 +148,7 @@ async fn dry_run_matches_profiles_and_writes_nothing(db: PgPool) {
         ),
         (4, 1, 1, 0)
     );
-    let emma = &report.profiles[2];
+    let emma = &report.profiles[3];
     assert_eq!(
         (emma.listens, emma.same_second, emma.close, emma.hours_off),
         (2, 0, 0, 1)
@@ -169,9 +170,9 @@ async fn adds_what_is_new_and_only_once(db: PgPool) {
         .unwrap();
     let imported: Vec<u64> = report.profiles.iter().map(|p| p.imported).collect();
     // fiona: the same second and Navidrome's copy are left out.
-    assert_eq!(imported, [2, 2, 2, 0]);
+    assert_eq!(imported, [2, 2, 0, 2, 0]);
     assert_eq!(report.repaired_names, 2);
-    assert_eq!(report.profiles[3].target, Target::NoAccount);
+    assert_eq!(report.profiles[4].target, Target::NoAccount);
 
     let fiona_listens: Vec<(i64, String, String, Option<i32>, String)> = sqlx::query_as(
         "SELECT extract(epoch FROM listened_at)::int8, artist_raw, track_raw, duration_ms, client
@@ -254,7 +255,8 @@ async fn takes_a_time_range_and_explicit_profiles(db: PgPool) {
     let options = Options {
         since: Some(datetime!(2016-05-31 0:00 UTC)),
         until: Some(datetime!(2021-01-01 0:00 UTC)),
-        mappings: vec!["ghost/ghost=emma/default".parse().unwrap()],
+        mappings: vec!["ghost/_=emma/default".parse().unwrap()],
+        skip: vec!["fiona/Arbeit".parse().unwrap()],
         ..Options::default()
     };
     let report = import_symfony::import(&db, &source, &options)
@@ -265,13 +267,14 @@ async fn takes_a_time_range_and_explicit_profiles(db: PgPool) {
         .iter()
         .map(|p| (p.listens, p.imported))
         .collect();
-    // fiona: only 2020's Hyperballad; Arbeit is all 2021; emma: only 2017; ghost: 2021.
-    assert_eq!(listens, [(1, 1), (0, 0), (1, 1), (0, 0)]);
+    // fiona: only 2020's Hyperballad; Arbeit is all 2021; leer is empty; emma: only 2017; ghost: 2021.
+    assert_eq!(listens, [(1, 1), (0, 0), (0, 0), (1, 1), (0, 0)]);
+    assert_eq!(report.profiles[1].target, Target::Skipped);
     assert_eq!(
-        report.profiles[3].target,
+        report.profiles[4].target,
         Target::Profile(emma, "emma/default".into())
     );
-    // Nothing to put in, so no profile for Arbeit either.
+    // Nothing to put in, so no new profile for leer.
     assert_eq!(count(&db, "SELECT count(*) FROM profile").await, 2);
 
     let unknown = Options {
@@ -292,11 +295,55 @@ async fn takes_a_time_range_and_explicit_profiles(db: PgPool) {
     );
 
     let missing = Options {
-        mappings: vec!["ghost/ghost=emma/work".parse().unwrap()],
+        mappings: vec!["ghost/_=emma/work".parse().unwrap()],
         ..Options::default()
     };
     let err = import_symfony::import(&db, &source, &missing)
         .await
         .unwrap_err();
     assert_eq!(err.to_string(), "user emma has no profile work");
+
+    let skip_unknown = Options {
+        skip: vec!["fiona/Zuhause".parse().unwrap()],
+        ..Options::default()
+    };
+    let err = import_symfony::import(&db, &source, &skip_unknown)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "the old database has no profile fiona/Zuhause"
+    );
+}
+
+#[sqlx::test]
+async fn follows_renamed_accounts(db: PgPool) {
+    let (_, emma) = existing(&db).await;
+    let source = import_symfony::read(&load_fixture().await).await.unwrap();
+
+    let options = Options {
+        users: vec!["ghost=emma".parse().unwrap()],
+        ..Options::default()
+    };
+    let report = import_symfony::import(&db, &source, &options)
+        .await
+        .unwrap();
+    let ghost = &report.profiles[4];
+    assert_eq!(ghost.old, "ghost/_");
+    assert_eq!(ghost.target, Target::Profile(emma, "emma/default".into()));
+    assert_eq!(ghost.imported, 1);
+
+    for (user, error) in [
+        ("nobody=emma", "the old database has no profiles of nobody"),
+        ("ghost=zoe", "there is no account zoe"),
+    ] {
+        let options = Options {
+            users: vec![user.parse().unwrap()],
+            ..Options::default()
+        };
+        let err = import_symfony::import(&db, &source, &options)
+            .await
+            .unwrap_err();
+        assert_eq!(err.to_string(), error);
+    }
 }

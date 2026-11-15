@@ -39,7 +39,7 @@ pub struct Source {
 #[derive(Debug, Clone)]
 pub struct OldProfile {
     pub id: i64,
-    /// `usr.name` of the account it belongs to.
+    /// `users.name` of the account it belongs to.
     pub user: String,
     pub name: String,
     pub is_public: bool,
@@ -53,7 +53,7 @@ pub struct OldListen {
     pub artist: Option<String>,
     pub track: Option<String>,
     pub album: Option<String>,
-    /// Seconds, in some rows milliseconds (see [`duration_ms`]).
+    /// Seconds, in some rows milliseconds, 0 when unknown (see [`duration_ms`]).
     pub length: Option<i64>,
     pub track_number: Option<i64>,
 }
@@ -65,12 +65,12 @@ pub async fn read(url: &str) -> anyhow::Result<Source> {
 
     let profiles = sqlx::query_as::<_, (i64, String, String, bool)>(
         "SELECT p.id::int8, u.name::text, p.name::text, p.is_public
-           FROM profile p JOIN usr u ON u.id = p.usr
+           FROM profile p JOIN users u ON u.id = p.user_id
           ORDER BY u.id, p.id",
     )
     .fetch_all(&old)
     .await
-    .context("reading the profiles (tables profile and usr)")?
+    .context("reading the profiles (tables profile and users)")?
     .into_iter()
     .map(|(id, user, name, is_public)| OldProfile {
         id,
@@ -95,12 +95,13 @@ pub async fn read(url: &str) -> anyhow::Result<Source> {
     >(
         r#"SELECT profile_id::int8, "timestamp"::int8, artist_name::text, track_title::text,
                   album_title::text, length::int8, tracknumber::int8
-             FROM listen
+             FROM scrobble
+            WHERE profile_id IS NOT NULL
             ORDER BY profile_id, "timestamp""#,
     )
     .fetch_all(&old)
     .await
-    .context("reading the listens (table listen)")?
+    .context("reading the listens (table scrobble)")?
     .into_iter()
     .map(
         |(profile_id, timestamp, artist, track, album, length, track_number)| OldListen {
@@ -117,6 +118,60 @@ pub async fn read(url: &str) -> anyhow::Result<Source> {
 
     old.close().await;
     Ok(Source { profiles, listens })
+}
+
+/// `--user OLD_USER=USER`: the account the profiles of an old account go to,
+/// when it has another name now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserMapping {
+    pub old_user: String,
+    pub user: String,
+}
+
+impl FromStr for UserMapping {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        match text.split_once('=') {
+            Some((old, new))
+                if !old.trim().is_empty()
+                    && !new.trim().is_empty()
+                    && !old.contains('/')
+                    && !new.contains('/') =>
+            {
+                Ok(Self {
+                    old_user: old.trim().to_owned(),
+                    user: new.trim().to_owned(),
+                })
+            }
+            _ => Err(format!("\"{text}\" is not OLD_USER=USER, e.g. fi=fiona")),
+        }
+    }
+}
+
+/// `--skip OLD_USER/OLD_PROFILE`: an old profile to leave out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OldName {
+    pub user: String,
+    pub profile: String,
+}
+
+impl FromStr for OldName {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        match text.split_once('/') {
+            Some((user, profile)) if !user.trim().is_empty() && !profile.trim().is_empty() => {
+                Ok(Self {
+                    user: user.trim().to_owned(),
+                    profile: profile.trim().to_owned(),
+                })
+            }
+            _ => Err(format!(
+                "\"{text}\" is not OLD_USER/OLD_PROFILE, e.g. fiona/Arbeit"
+            )),
+        }
+    }
 }
 
 /// `--profile OLD_USER/OLD_PROFILE=USER/SLUG`: where an old profile goes, when
@@ -163,6 +218,8 @@ pub struct Options {
     /// Only listens before this time.
     pub until: Option<OffsetDateTime>,
     pub mappings: Vec<Mapping>,
+    pub users: Vec<UserMapping>,
+    pub skip: Vec<OldName>,
 }
 
 /// Midnight UTC at the start of `day`, for `--since` and `--until`.
@@ -179,6 +236,8 @@ pub enum Target {
     NewProfile(i64, String, String),
     /// The new musicbanana has no account of the name.
     NoAccount,
+    /// Left out with `--skip`.
+    Skipped,
 }
 
 impl fmt::Display for Target {
@@ -187,6 +246,7 @@ impl fmt::Display for Target {
             Self::Profile(_, name) => write!(f, "{name}"),
             Self::NewProfile(_, user, slug) => write!(f, "{user}/{slug} (new profile)"),
             Self::NoAccount => write!(f, "nowhere, no account of that name"),
+            Self::Skipped => write!(f, "nowhere, skipped"),
         }
     }
 }
@@ -264,17 +324,32 @@ pub async fn import(db: &PgPool, source: &Source, options: &Options) -> anyhow::
         ..Report::default()
     };
 
-    for m in &options.mappings {
+    for u in &options.users {
+        if !source.profiles.iter().any(|p| p.user == u.old_user) {
+            bail!("the old database has no profiles of {}", u.old_user);
+        }
+        let exists = sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT FROM account WHERE username = $1::text::citext) AS "exists!""#,
+            u.user
+        )
+        .fetch_one(db)
+        .await?;
+        if !exists {
+            bail!("there is no account {}", u.user);
+        }
+    }
+    let named = options
+        .mappings
+        .iter()
+        .map(|m| (&m.old_user, &m.old_profile))
+        .chain(options.skip.iter().map(|s| (&s.user, &s.profile)));
+    for (user, profile) in named {
         if !source
             .profiles
             .iter()
-            .any(|p| p.user == m.old_user && p.name == m.old_profile)
+            .any(|p| &p.user == user && &p.name == profile)
         {
-            bail!(
-                "the old database has no profile {}/{}",
-                m.old_user,
-                m.old_profile
-            );
+            bail!("the old database has no profile {user}/{profile}");
         }
     }
 
@@ -299,7 +374,20 @@ pub async fn import(db: &PgPool, source: &Source, options: &Options) -> anyhow::
             .iter()
             .filter(|p| p.user == old.user)
             .count();
-        let target = target(db, old, siblings, &options.mappings).await?;
+        let skipped = options
+            .skip
+            .iter()
+            .any(|s| s.user == old.user && s.profile == old.name);
+        let target = if skipped {
+            Target::Skipped
+        } else {
+            let username = options
+                .users
+                .iter()
+                .find(|u| u.old_user == old.user)
+                .map_or(old.user.as_str(), |u| u.user.as_str());
+            target(db, old, username, siblings, &options.mappings).await?
+        };
 
         let mut converted = Vec::with_capacity(listens.len());
         let mut incomplete = 0;
@@ -323,7 +411,7 @@ pub async fn import(db: &PgPool, source: &Source, options: &Options) -> anyhow::
                 Target::NewProfile(account_id, _, slug) => {
                     Some(create_profile(db, *account_id, slug, old).await?)
                 }
-                Target::NoAccount => None,
+                Target::NoAccount | Target::Skipped => None,
             };
             if let Some(profile_id) = profile_id {
                 for batch in converted.chunks(LISTEN_BATCH) {
@@ -348,12 +436,14 @@ pub async fn import(db: &PgPool, source: &Source, options: &Options) -> anyhow::
 }
 
 /// Picks the profile for `old`: the one named by `--profile`, else the profile
-/// of the same name (or address) of the account of the same name, else that
+/// of the same name (or address) of the account `username` (the old account's
+/// name unless `--user` gives another), else that
 /// account's default profile when the old account had only this one profile,
 /// else a new profile of the old name.
 async fn target(
     db: &PgPool,
     old: &OldProfile,
+    username: &str,
     siblings: usize,
     mappings: &[Mapping],
 ) -> anyhow::Result<Target> {
@@ -374,7 +464,7 @@ async fn target(
 
     let Some(account) = sqlx::query!(
         r#"SELECT id, username::text AS "username!" FROM account WHERE username = $1::text::citext"#,
-        old.user
+        username
     )
     .fetch_optional(db)
     .await?
@@ -407,8 +497,13 @@ async fn target(
 }
 
 /// The address for a new profile of the old name: "Arbeit" becomes "arbeit",
-/// "Zu Hause" "zu-hause". A name that gives no usable address gets "old-<id>".
+/// "Zu Hause" "zu-hause". "_", the name of each account's first profile in the
+/// old version, is the default profile. A name that gives no usable address
+/// gets "old-<id>".
 pub fn slug_for(name: &str, old_id: i64) -> String {
+    if name.trim() == "_" {
+        return "default".to_owned();
+    }
     let mut slug = String::new();
     for c in name.trim().to_lowercase().chars() {
         let c = match c {
@@ -577,11 +672,36 @@ mod tests {
         ] {
             assert!(wrong.parse::<Mapping>().is_err(), "{wrong}");
         }
+        assert_eq!(
+            " fi = fiona ".parse(),
+            Ok(UserMapping {
+                old_user: "fi".into(),
+                user: "fiona".into(),
+            })
+        );
+        for wrong in ["fi", "fi=", "fi/_=fiona", "fi=fiona/default"] {
+            assert!(wrong.parse::<UserMapping>().is_err(), "{wrong}");
+        }
+        assert_eq!(
+            "fiona/_".parse(),
+            Ok(OldName {
+                user: "fiona".into(),
+                profile: "_".into(),
+            })
+        );
+        for wrong in ["fiona", "fiona/", " /x"] {
+            assert!(wrong.parse::<OldName>().is_err(), "{wrong}");
+        }
     }
 
     #[test]
     fn makes_addresses_from_names() {
         assert_eq!(slug_for("Arbeit", 2), "arbeit");
+        assert_eq!(slug_for("_", 1), "default");
+        assert_eq!(
+            slug_for("spotify_with_scrobbler", 3),
+            "spotify-with-scrobbler"
+        );
         assert_eq!(slug_for("  Zu Hause!  ", 2), "zu-hause");
         assert_eq!(slug_for("Büro", 2), "buero");
         assert_eq!(slug_for("Artist", 7), "old-7", "taken by the profile pages");
