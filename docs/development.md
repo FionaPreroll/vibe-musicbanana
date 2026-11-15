@@ -17,7 +17,7 @@ Design notes and decisions, with the data model: [design.md](design.md) (German)
 
 | Path | What |
 |---|---|
-| `backend/` | Rust: Axum HTTP server, sqlx + PostgreSQL. Serves `/api/*` and the built frontend; the same binary has the command line (`musicbanana account …`, `merge …`, `import-php` and so on). |
+| `backend/` | Rust: Axum HTTP server, sqlx + PostgreSQL. Serves `/api/*` and the built frontend; the same binary has the command line (`musicbanana account …`, `merge …`, `import-php`, `import-symfony` and so on). |
 | `backend/migrations/` | SQL migrations, applied automatically on startup. |
 | `backend/.sqlx/` | Offline query cache so the crate builds without a database (`cargo sqlx prepare`). |
 | `backend/tests/` | Integration tests against PostgreSQL, with fixtures in `tests/fixtures/`. |

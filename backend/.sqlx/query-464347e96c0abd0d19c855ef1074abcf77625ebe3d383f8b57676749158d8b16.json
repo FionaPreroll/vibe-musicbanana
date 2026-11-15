@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.username::text || '/' || p.slug::text AS \"name!\"\n                 FROM profile p JOIN account a ON a.id = p.account_id WHERE p.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "464347e96c0abd0d19c855ef1074abcf77625ebe3d383f8b57676749158d8b16"
+}

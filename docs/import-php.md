@@ -13,3 +13,5 @@ DATABASE_URL=postgres://postgres@127.0.0.1:5432/musicbanana \
 It prints a summary (accounts, artists, listens, skipped rows, repaired names). Afterwards the history is at `/u/<old username>`, with the source `import:php-2016`. To run it on a server with Docker, import into a local database first and [move it in](installation.md#moving-existing-data-in).
 
 The import test (`tests/import_php.rs`) runs against a MySQL server named by `LEGACY_MYSQL_URL` and is skipped without it.
+
+The newer Symfony database (2021-2022) is added on top afterwards, see [Importing the Symfony database](import-symfony.md).

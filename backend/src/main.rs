@@ -9,7 +9,7 @@ use std::{
 use anyhow::{Context, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum, builder::NonEmptyStringValueParser};
 use musicbanana::{
-    AppState, account, auth, connections, delete, edit, import_php, live,
+    AppState, account, auth, connections, delete, edit, import_php, import_symfony, live,
     merge::{self, Kind, Suggestion},
     router, tokens, yourspotify,
 };
@@ -42,6 +42,10 @@ enum Command {
         #[arg(long)]
         from: String,
     },
+    /// Add the listens of the musicbanana-symfony database (2021-2022) to the
+    /// profiles of the same names, leaving out those already there. Try it with
+    /// --dry-run first.
+    ImportSymfony(SymfonyArgs),
     /// Import Spotify plays from YourSpotify: the whole history the first time,
     /// then only the plays since.
     ImportYourspotify(YourSpotifyArgs),
@@ -107,6 +111,42 @@ struct YourSpotifyArgs {
     /// Keep running and import the new plays every so often, e.g. 15m or 1h.
     #[arg(long, value_parser = parse_interval)]
     every: Option<Duration>,
+}
+
+#[derive(Args)]
+struct SymfonyArgs {
+    /// PostgreSQL URL of the old database, e.g.
+    /// postgres://USER:PASSWORD@db2022:5432/musicbanana. Better set as
+    /// SYMFONY_DATABASE_URL, so the password stays out of the shell history.
+    #[arg(
+        long,
+        env = "SYMFONY_DATABASE_URL",
+        hide_env_values = true,
+        value_parser = NonEmptyStringValueParser::new()
+    )]
+    from: String,
+    /// Only show where the old profiles would go and how their listens line up
+    /// with those already there; write nothing.
+    #[arg(long)]
+    dry_run: bool,
+    /// Only listens from this day on (UTC), e.g. 2016-05-31.
+    #[arg(long, value_parser = parse_day)]
+    since: Option<time::Date>,
+    /// Only listens before this day (UTC).
+    #[arg(long, value_parser = parse_day)]
+    until: Option<time::Date>,
+    /// Where an old profile goes when the names do not tell:
+    /// OLD_USER/OLD_PROFILE=USER/SLUG, e.g. fiona/Arbeit=fiona/work. Repeatable.
+    #[arg(long = "profile", value_name = "OLD=NEW")]
+    profiles: Vec<import_symfony::Mapping>,
+}
+
+fn parse_day(text: &str) -> Result<time::Date, String> {
+    time::Date::parse(
+        text,
+        time::macros::format_description!("[year]-[month]-[day]"),
+    )
+    .map_err(|_| format!("\"{text}\" is not a day like 2016-05-31"))
 }
 
 #[derive(Subcommand)]
@@ -396,6 +436,18 @@ async fn main() -> anyhow::Result<()> {
         Command::ImportPhp { from } => {
             let data = import_php::read_mysql(&from).await?;
             let report = import_php::write(&db, &data).await?;
+            println!("{report}");
+            Ok(())
+        }
+        Command::ImportSymfony(args) => {
+            let source = import_symfony::read(&args.from).await?;
+            let options = import_symfony::Options {
+                dry_run: args.dry_run,
+                since: args.since.map(import_symfony::day_start),
+                until: args.until.map(import_symfony::day_start),
+                mappings: args.profiles,
+            };
+            let report = import_symfony::import(&db, &source, &options).await?;
             println!("{report}");
             Ok(())
         }
