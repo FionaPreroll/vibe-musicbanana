@@ -22,6 +22,7 @@ describe('sourceLabel', () => {
 		expect(sourceLabel('Spotify via YourSpotify')).toBe('Spotify');
 		expect(sourceLabel('import:php:2016')).toBe('Old musicbanana');
 		expect(sourceLabel('import:symfony-2022')).toBe('Old musicbanana (2022)');
+		expect(sourceLabel('import:symfony-2022/gonic')).toBe('Old musicbanana (2022) · gonic');
 		expect(sourceLabel('Navidrome')).toBe('Navidrome');
 	});
 });

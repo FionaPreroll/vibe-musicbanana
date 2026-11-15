@@ -20,6 +20,10 @@ export function sourceLabel(source: string) {
 	if (source === '') return m.source.unknown;
 	if (source === 'Spotify via YourSpotify') return 'Spotify';
 	if (source.startsWith('import:php')) return m.source.oldMusicbanana;
-	if (source.startsWith('import:symfony')) return m.source.oldMusicbanana2022;
+	if (source.startsWith('import:symfony')) {
+		// One source per profile of the old version: import:symfony-2022/gonic.
+		const profile = source.split('/').slice(1).join('/');
+		return profile ? `${m.source.oldMusicbanana2022} · ${profile}` : m.source.oldMusicbanana2022;
+	}
 	return source;
 }

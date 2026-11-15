@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE listen SET client = $2 WHERE id = ANY($1) AND client = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "160f3425042a6d7c2389cdf8eb21c21e2701e008f231d6e2b1b5ecb6e40d43f7"
+}
