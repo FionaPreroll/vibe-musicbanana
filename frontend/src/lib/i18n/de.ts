@@ -135,7 +135,8 @@ const de: Messages = {
 		from: 'Quelle',
 		all: 'Alle Quellen',
 		unknown: 'Unbekannter Player',
-		oldMusicbanana: 'Altes musicbanana'
+		oldMusicbanana: 'Altes musicbanana',
+		oldMusicbanana2022: 'Altes musicbanana (2022)'
 	},
 
 	banana: {

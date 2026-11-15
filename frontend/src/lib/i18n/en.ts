@@ -137,7 +137,8 @@ const en = {
 		from: 'From',
 		all: 'All sources',
 		unknown: 'Unknown player',
-		oldMusicbanana: 'Old musicbanana'
+		oldMusicbanana: 'Old musicbanana',
+		oldMusicbanana2022: 'Old musicbanana (2022)'
 	},
 
 	banana: {

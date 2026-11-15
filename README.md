@@ -17,6 +17,7 @@ One small server (Rust, PostgreSQL) takes the plays of your players and of Spoti
 - **Several accounts and profiles**, each public, for followers or private, with follows, a trash for wrong listens and a download of all your data. → [Accounts and profiles](docs/accounts.md)
 - **A tidy catalog**: suggestions for merging spellings of the same artist, album or track (with undo), MusicBrainz IDs from Picard-tagged files, editions such as "Remastered 2009" counted for the plain title. → [Catalog](docs/catalog.md)
 - **The old musicbanana's history**: the 2016 PHP database imports with its accounts and passwords. → [Importing the PHP database](docs/import-php.md)
+- **The 2021-2022 Symfony database** adds its listens to a running musicbanana, leaving out those already there. → [Importing the Symfony database](docs/import-symfony.md)
 
 ## Screenshots
 
@@ -64,6 +65,7 @@ Then open `http://<server>:3000`, log in, make a scrobble token in the settings 
 | [Album covers](docs/covers.md) | How covers are fetched and kept, and what leaves the server |
 | [Catalog](docs/catalog.md) | Merging duplicates, editions, renaming, MusicBrainz IDs by hand |
 | [Importing the PHP database](docs/import-php.md) | The 2016 musicbanana-php database |
+| [Importing the Symfony database](docs/import-symfony.md) | The 2021-2022 musicbanana-symfony database, next to the new one as `db2022` |
 | [API](docs/api.md) | Every route of `/api`, with its parameters |
 | [Development](docs/development.md) | Layout, local setup, SQL, checks, tests, coverage, translations |
 | [Design notes](docs/design.md) | Data model and decisions (German) |

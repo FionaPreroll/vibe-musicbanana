@@ -12,6 +12,7 @@ mod export;
 mod follows;
 mod history;
 pub mod import_php;
+pub mod import_symfony;
 mod listenbrainz;
 pub mod live;
 mod lost_found;

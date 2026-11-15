@@ -1,0 +1,44 @@
+# The musicbanana database from 2022 (Symfony, PostgreSQL 12), next to the new
+# one, for `musicbanana import-symfony`. Either copy the parts below into
+# compose.yaml, or start it alongside:
+#
+#   docker compose -f compose.yaml -f compose.db2022.yaml up -d db2022
+#
+# On its first start the container restores the backup in ./db2022/backup
+# (see db2022/restore.sh). It publishes no ports: only the containers of this
+# stack reach it, as db2022:5432 on the stack's network.
+# docs/import-symfony.md has the whole import.
+
+services:
+  db2022:
+    image: postgres:12
+    restart: unless-stopped
+    secrets: [db2022_user, db2022_password, db2022_dbname]
+    environment:
+      POSTGRES_USER_FILE: /run/secrets/db2022_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/db2022_password
+      POSTGRES_DB_FILE: /run/secrets/db2022_dbname
+    volumes:
+      - ./db2022/restore.sh:/docker-entrypoint-initdb.d/restore.sh:ro
+      - ./db2022/backup:/backup:ro
+      - db2022:/var/lib/postgresql/data
+    healthcheck:
+      # Over TCP, so it only turns healthy once the restore is done; as the
+      # backup's user, since there is no role "root".
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$(cat /run/secrets/db2022_user)\" -d \"$$(cat /run/secrets/db2022_dbname)\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+# The secret files of the old stack (its ./secrets/db_user, db_password and
+# db_dbname), so the user the backup's tables belong to exists again.
+secrets:
+  db2022_user:
+    file: ./db2022/secrets/db_user
+  db2022_password:
+    file: ./db2022/secrets/db_password
+  db2022_dbname:
+    file: ./db2022/secrets/db_dbname
+
+volumes:
+  db2022:

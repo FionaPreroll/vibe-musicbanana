@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO profile (account_id, slug, name, visibility)\n         VALUES ($1, $2, $3, $4::text::visibility)\n         ON CONFLICT (account_id, slug) DO UPDATE SET slug = excluded.slug\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "profile",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        {
+          "Custom": {
+            "name": "citext",
+            "kind": "Simple"
+          }
+        },
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "62fce5d9800867bbf68a7e5b1ff21cceceda9c0eb61dbcbaf12a2b3cc77ed8b2"
+}
