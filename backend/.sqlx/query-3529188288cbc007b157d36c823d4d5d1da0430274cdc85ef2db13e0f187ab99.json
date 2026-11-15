@@ -1,0 +1,67 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.id, extract(epoch FROM l.listened_at)::int8 AS \"at!\",\n                      l.artist_raw, l.track_raw, l.client = $2 AS \"php!\"\n                 FROM listen l JOIN profile p ON p.id = l.profile_id\n                WHERE p.account_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "at!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "artist_raw",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "artist_raw"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "track_raw",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listen",
+            "name": "track_raw"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "php!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "3529188288cbc007b157d36c823d4d5d1da0430274cdc85ef2db13e0f187ab99"
+}

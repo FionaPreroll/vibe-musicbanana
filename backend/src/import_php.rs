@@ -15,7 +15,7 @@ use crate::{
     catalog::{name_key, repair_mojibake},
 };
 
-const CLIENT: &str = "import:php-2016";
+pub const CLIENT: &str = "import:php-2016";
 const LISTEN_BATCH: usize = 5_000;
 
 #[derive(Debug, Default)]

@@ -132,10 +132,21 @@ async fn dry_run_matches_profiles_and_writes_nothing(db: PgPool) {
         targets,
         [
             ("fiona/_", "fiona/default".to_owned()),
-            ("fiona/Arbeit", "fiona/arbeit (new profile)".to_owned()),
-            ("fiona/leer", "fiona/leer (new profile)".to_owned()),
+            ("fiona/Arbeit", "fiona/default".to_owned()),
+            ("fiona/leer", "fiona/default".to_owned()),
             ("Emma/emma", "emma/default".to_owned()),
             ("ghost/_", "nowhere, no account of that name".to_owned()),
+        ]
+    );
+    let sources: Vec<&str> = report.profiles.iter().map(|p| p.source.as_str()).collect();
+    assert_eq!(
+        sources,
+        [
+            "import:symfony-2022",
+            "import:symfony-2022/Arbeit",
+            "import:symfony-2022/leer",
+            "import:symfony-2022/emma",
+            "import:symfony-2022",
         ]
     );
     let fiona = &report.profiles[0];
@@ -176,7 +187,8 @@ async fn adds_what_is_new_and_only_once(db: PgPool) {
         .await
         .unwrap();
     let imported: Vec<u64> = report.profiles.iter().map(|p| p.imported).collect();
-    // fiona: the same second and Navidrome's copy are left out.
+    // fiona: the same second and Navidrome's copy are left out. Arbeit goes to
+    // her default profile as well.
     assert_eq!(imported, [2, 2, 0, 2, 0]);
     assert_eq!(report.repaired_names, 2);
     assert_eq!(report.profiles[4].target, Target::NoAccount);
@@ -214,6 +226,20 @@ async fn adds_what_is_new_and_only_once(db: PgPool) {
                 "import:symfony-2022".into()
             ),
             (
+                1_620_000_000,
+                "Björk".into(),
+                "Hyperballad".into(),
+                Some(321_000),
+                "import:symfony-2022/Arbeit".into()
+            ),
+            (
+                1_620_000_400,
+                "Björk".into(),
+                "Hyperballad".into(),
+                Some(321_000),
+                "import:symfony-2022/Arbeit".into()
+            ),
+            (
                 1_650_000_030,
                 "Die Ärzte".into(),
                 "Westerland".into(),
@@ -225,18 +251,8 @@ async fn adds_what_is_new_and_only_once(db: PgPool) {
     // The repaired spelling found the artist of the PHP import.
     assert_eq!(count(&db, "SELECT count(*) FROM artist").await, 2);
 
-    let (slug, name, visibility): (String, String, String) = sqlx::query_as(
-        "SELECT slug::text, name, visibility::text FROM profile
-          WHERE account_id = (SELECT account_id FROM profile WHERE id = $1) AND slug <> 'default'",
-    )
-    .bind(fiona)
-    .fetch_one(&db)
-    .await
-    .unwrap();
-    assert_eq!(
-        (slug.as_str(), name.as_str(), visibility.as_str()),
-        ("arbeit", "Arbeit", "private")
-    );
+    // No profiles are created; the old ones are sources now.
+    assert_eq!(count(&db, "SELECT count(*) FROM profile").await, 2);
 
     let emma_count: i64 = sqlx::query_scalar("SELECT count(*) FROM listen WHERE profile_id = $1")
         .bind(emma)
@@ -245,13 +261,12 @@ async fn adds_what_is_new_and_only_once(db: PgPool) {
         .unwrap();
     assert_eq!(emma_count, 3);
 
-    // A second run finds everything there already, the new profile included.
+    // A second run finds everything there already.
     let again = import_symfony::import(&db, &source, &Options::default())
         .await
         .unwrap();
     assert_eq!(again.imported(), 0);
-    assert_eq!(again.profiles[1].target.to_string(), "fiona/arbeit");
-    assert_eq!(count(&db, "SELECT count(*) FROM profile").await, 3);
+    assert_eq!(count(&db, "SELECT count(*) FROM listen").await, 9);
 }
 
 #[sqlx::test]
@@ -281,7 +296,6 @@ async fn takes_a_time_range_and_explicit_profiles(db: PgPool) {
         report.profiles[4].target,
         Target::Profile(emma, "emma/default".into())
     );
-    // Nothing to put in, so no new profile for leer.
     assert_eq!(count(&db, "SELECT count(*) FROM profile").await, 2);
 
     let unknown = Options {
@@ -409,9 +423,90 @@ async fn leaves_out_plays_another_profile_has(db: PgPool) {
         .unwrap();
     assert_eq!(report.profiles[1].imported, 0);
     assert_eq!(report.imported(), 4);
-    // Nothing new for Arbeit, so no profile for it.
+    // Navidrome's listens keep their source.
+    assert_eq!(report.profiles[1].resourced, 0);
     assert_eq!(
-        count(&db, "SELECT count(*) FROM profile WHERE slug = 'arbeit'").await,
-        0
+        count(
+            &db,
+            "SELECT count(*) FROM listen WHERE client LIKE 'Navidrome%'"
+        )
+        .await,
+        3
     );
+}
+
+#[sqlx::test]
+async fn named_profiles_take_over_php_listens(db: PgPool) {
+    let (fiona, _) = existing(&db).await;
+    // The PHP import has the two plays of the old profile Arbeit already.
+    listen(
+        &db,
+        fiona,
+        1_620_000_000,
+        "Björk",
+        "Hyperballad",
+        "import:php-2016",
+    )
+    .await;
+    listen(
+        &db,
+        fiona,
+        1_620_000_420,
+        "Björk",
+        "Hyperballad",
+        "import:php-2016",
+    )
+    .await;
+    let source = import_symfony::read(&load_fixture().await).await.unwrap();
+    let clients = async || -> Vec<(i64, String)> {
+        sqlx::query_as(
+            "SELECT extract(epoch FROM listened_at)::int8, client FROM listen
+              WHERE listened_at >= to_timestamp(1620000000) AND listened_at < to_timestamp(1630000000)
+              ORDER BY listened_at",
+        )
+        .fetch_all(&db)
+        .await
+        .unwrap()
+    };
+
+    let dry = Options {
+        dry_run: true,
+        ..Options::default()
+    };
+    let report = import_symfony::import(&db, &source, &dry).await.unwrap();
+    let arbeit = &report.profiles[1];
+    assert_eq!(
+        (
+            arbeit.same_second,
+            arbeit.same_track,
+            arbeit.resourced,
+            arbeit.new
+        ),
+        (1, 1, 2, 0)
+    );
+    assert!(
+        report
+            .to_string()
+            .contains("2 of these take the source import:symfony-2022/Arbeit")
+    );
+    assert_eq!(clients().await[0].1, "import:php-2016");
+
+    import_symfony::import(&db, &source, &Options::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        clients().await,
+        [
+            (1_620_000_000, "import:symfony-2022/Arbeit".into()),
+            (1_620_000_420, "import:symfony-2022/Arbeit".into()),
+        ]
+    );
+    // "_" is the old version itself: its matches stay with the PHP import.
+    let first: String = sqlx::query_scalar(
+        "SELECT client FROM listen WHERE listened_at = to_timestamp(1400000000)",
+    )
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(first, "import:php-2016");
 }

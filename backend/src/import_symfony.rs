@@ -1,19 +1,26 @@
 //! Import of the musicbanana-symfony database (2021-2022, PostgreSQL).
 //!
-//! Unlike the PHP import this one adds to a musicbanana that is in use: the old
-//! profiles are matched to the accounts and profiles of the same names, and their
-//! listens go in through [`scrobble::record`], like those of a scrobbler. So a
-//! listen the profile has at the same second (the PHP import of the same years)
-//! or a few moments apart (Navidrome, YourSpotify) is left out, and so is one the
-//! owner moved to the trash. That also makes a second run harmless.
+//! Unlike the PHP import this one adds to a musicbanana that is in use. The old
+//! version showed all profiles of an account together, as the players they came
+//! from; here they are sources. So all old profiles of an account go into its
+//! default profile, each under its own source ("import:symfony-2022/gonic"; the
+//! first profile, called "_", as plain "import:symfony-2022").
+//!
+//! A play the account already has, in any of its profiles, is left out: a
+//! listen at the same second (the PHP import of the same years) or one of the
+//! same track a few moments apart (Navidrome, YourSpotify). The same holds
+//! between the old profiles. Where such a play came from the PHP import and the
+//! old profile has a name, the PHP listen takes that profile's source instead,
+//! as the old version knew where it came from. The rest goes in through
+//! [`scrobble::record`], like the listens of a scrobbler, which also keeps out
+//! what the owner moved to the trash. A second run adds nothing.
 //!
 //! [`read`] loads the old database, [`import`] matches and writes. With
-//! `dry_run` it only matches and counts how the old listens line up with those
-//! already there, including at a whole hour or two off, which would mean one of
-//! the imports stored local time.
+//! `dry_run` it only counts, including listens a whole hour or two off from one
+//! already there, which would mean one of the imports stored local time.
 
 use std::{
-    collections::{BTreeSet, HashMap, hash_map::Entry},
+    collections::{BTreeMap, HashMap, HashSet, hash_map::Entry},
     fmt,
     str::FromStr,
 };
@@ -23,8 +30,8 @@ use sqlx::PgPool;
 use time::{Date, OffsetDateTime, Time};
 
 use crate::{
-    account::check_slug,
     catalog::{Mbids, name_key, repair_mojibake},
+    import_php,
     scrobble::{self, Listen},
 };
 
@@ -50,6 +57,17 @@ pub struct OldProfile {
     pub user: String,
     pub name: String,
     pub is_public: bool,
+}
+
+impl OldProfile {
+    /// The source its listens get: "_" is the old version itself, any other
+    /// profile was a player or an import of its own.
+    pub fn client(&self) -> String {
+        match self.name.trim() {
+            "_" => CLIENT.to_owned(),
+            name => format!("{CLIENT}/{name}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -237,10 +255,8 @@ pub fn day_start(day: Date) -> OffsetDateTime {
 /// Where the listens of an old profile go.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
-    /// A profile that exists: its id and `user/slug`.
+    /// A profile: its id and `user/slug`.
     Profile(i64, String),
-    /// A profile of this account that the import creates: account id, user, slug.
-    NewProfile(i64, String, String),
     /// The new musicbanana has no account of the name.
     NoAccount,
     /// Left out with `--skip`.
@@ -251,7 +267,6 @@ impl fmt::Display for Target {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Profile(_, name) => write!(f, "{name}"),
-            Self::NewProfile(_, user, slug) => write!(f, "{user}/{slug} (new profile)"),
             Self::NoAccount => write!(f, "nowhere, no account of that name"),
             Self::Skipped => write!(f, "nowhere, skipped"),
         }
@@ -264,6 +279,8 @@ pub struct ProfileReport {
     /// `user/profile` in the old database.
     pub old: String,
     pub target: Target,
+    /// The source its listens get.
+    pub source: String,
     /// Old listens in the chosen time range.
     pub listens: usize,
     /// Of these, those with a listen at the same second in any profile of the
@@ -272,6 +289,9 @@ pub struct ProfileReport {
     /// Those with a listen of the same track a few moments away in any profile
     /// of the account, left out.
     pub same_track: usize,
+    /// Listens from the PHP import among those two kinds that take this
+    /// profile's source.
+    pub resourced: usize,
     /// Those with a listen exactly one or two hours away: a sign that one of
     /// the two sides stored local time. They count as new.
     pub hours_off: usize,
@@ -300,7 +320,7 @@ impl Report {
 impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for p in &self.profiles {
-            writeln!(f, "{} -> {}", p.old, p.target)?;
+            writeln!(f, "{} -> {} as {}", p.old, p.target, p.source)?;
             writeln!(f, "  listens:        {}", p.listens)?;
             writeln!(f, "  same second:    {} (left out)", p.same_second)?;
             writeln!(
@@ -308,6 +328,13 @@ impl fmt::Display for Report {
                 "  same track:     {} (moments apart, left out)",
                 p.same_track
             )?;
+            if p.resourced > 0 {
+                writeln!(
+                    f,
+                    "  PHP import:     {} of these take the source {}",
+                    p.resourced, p.source
+                )?;
+            }
             writeln!(f, "  new:            {}", p.new)?;
             writeln!(
                 f,
@@ -384,11 +411,6 @@ pub async fn import(db: &PgPool, source: &Source, options: &Options) -> anyhow::
     let mut seen: HashMap<i64, Seen> = HashMap::new();
     for old in &source.profiles {
         let listens = by_profile.remove(&old.id).unwrap_or_default();
-        let siblings = source
-            .profiles
-            .iter()
-            .filter(|p| p.user == old.user)
-            .count();
         let skipped = options
             .skip
             .iter()
@@ -401,30 +423,27 @@ pub async fn import(db: &PgPool, source: &Source, options: &Options) -> anyhow::
                 .iter()
                 .find(|u| u.old_user == old.user)
                 .map_or(old.user.as_str(), |u| u.user.as_str());
-            target(db, old, username, siblings, &options.mappings).await?
+            target(db, old, username, &options.mappings).await?
         };
+        let client = old.client();
 
         let mut converted = Vec::with_capacity(listens.len());
         let mut incomplete = 0;
         for listen in &listens {
-            match convert(listen, &mut report.repaired_names)? {
+            match convert(listen, &client, &mut report.repaired_names)? {
                 Some(l) => converted.push(l),
                 None => incomplete += 1,
             }
         }
 
-        let account_id = match &target {
-            Target::Profile(id, _) => Some(
-                sqlx::query_scalar!("SELECT account_id FROM profile WHERE id = $1", id)
-                    .fetch_one(db)
-                    .await?,
-            ),
-            Target::NewProfile(account_id, ..) => Some(*account_id),
-            Target::NoAccount | Target::Skipped => None,
-        };
         let mut counts = Counts::default();
         let mut accepted = Vec::new();
-        if let Some(account_id) = account_id {
+        let mut resource = Vec::new();
+        if let Target::Profile(profile_id, _) = &target {
+            let account_id =
+                sqlx::query_scalar!("SELECT account_id FROM profile WHERE id = $1", profile_id)
+                    .fetch_one(db)
+                    .await?;
             let seen = match seen.entry(account_id) {
                 Entry::Occupied(e) => e.into_mut(),
                 Entry::Vacant(e) => e.insert(Seen::of_account(db, account_id).await?),
@@ -432,12 +451,23 @@ pub async fn import(db: &PgPool, source: &Source, options: &Options) -> anyhow::
             for listen in converted {
                 let key = Seen::key(&listen);
                 let at = listen.listened_at.unix_timestamp();
-                match seen.judge(at, &key, gap_secs(listen.duration_ms)) {
-                    Verdict::SameSecond => counts.same_second += 1,
-                    Verdict::SameTrack => counts.same_track += 1,
-                    verdict => {
+                let (verdict, php) = seen.judge(at, &key, gap_secs(listen.duration_ms));
+                match verdict {
+                    Verdict::SameSecond | Verdict::SameTrack => {
+                        if verdict == Verdict::SameSecond {
+                            counts.same_second += 1;
+                        } else {
+                            counts.same_track += 1;
+                        }
+                        // Only a named profile says more than the PHP import.
+                        if let Some(id) = php.filter(|_| client != CLIENT) {
+                            seen.claim(id);
+                            resource.push(id);
+                        }
+                    }
+                    Verdict::HoursOff | Verdict::New => {
                         counts.hours_off += usize::from(verdict == Verdict::HoursOff);
-                        seen.add(at, key);
+                        seen.add(at, key, None);
                         accepted.push(listen);
                     }
                 }
@@ -445,27 +475,30 @@ pub async fn import(db: &PgPool, source: &Source, options: &Options) -> anyhow::
         }
 
         let mut imported = 0;
-        if !options.dry_run && !accepted.is_empty() {
-            let profile_id = match &target {
-                Target::Profile(id, _) => Some(*id),
-                Target::NewProfile(account_id, _, slug) => {
-                    Some(create_profile(db, *account_id, slug, old).await?)
-                }
-                Target::NoAccount | Target::Skipped => None,
-            };
-            if let Some(profile_id) = profile_id {
-                for batch in accepted.chunks(LISTEN_BATCH) {
-                    imported += scrobble::record(db, profile_id, batch).await?;
-                }
+        if let (false, Target::Profile(profile_id, _)) = (options.dry_run, &target) {
+            for batch in accepted.chunks(LISTEN_BATCH) {
+                imported += scrobble::record(db, *profile_id, batch).await?;
+            }
+            if !resource.is_empty() {
+                sqlx::query!(
+                    "UPDATE listen SET client = $2 WHERE id = ANY($1) AND client = $3",
+                    &resource,
+                    client,
+                    import_php::CLIENT,
+                )
+                .execute(db)
+                .await?;
             }
         }
 
         report.profiles.push(ProfileReport {
             old: format!("{}/{}", old.user, old.name),
             target,
+            source: client,
             listens: listens.len(),
             same_second: counts.same_second,
             same_track: counts.same_track,
+            resourced: resource.len(),
             hours_off: counts.hours_off,
             new: accepted.len(),
             incomplete,
@@ -476,127 +509,42 @@ pub async fn import(db: &PgPool, source: &Source, options: &Options) -> anyhow::
     Ok(report)
 }
 
-/// Picks the profile for `old`: the one named by `--profile`, else the profile
-/// of the same name (or address) of the account `username` (the old account's
-/// name unless `--user` gives another), else that
-/// account's default profile when the old account had only this one profile,
-/// else a new profile of the old name.
+/// Picks the profile for `old`: the one named by `--profile`, else the default
+/// profile of the account `username` (the old account's name unless `--user`
+/// gives another), or its first one if it has none called default.
 async fn target(
     db: &PgPool,
     old: &OldProfile,
     username: &str,
-    siblings: usize,
     mappings: &[Mapping],
 ) -> anyhow::Result<Target> {
-    if let Some(m) = mappings
+    let found = if let Some(m) = mappings
         .iter()
         .find(|m| m.old_user == old.user && m.old_profile == old.name)
     {
         let id = crate::yourspotify::profile_id(db, &m.user, &m.slug).await?;
-        let name = sqlx::query_scalar!(
-            r#"SELECT a.username::text || '/' || p.slug::text AS "name!"
-                 FROM profile p JOIN account a ON a.id = p.account_id WHERE p.id = $1"#,
-            id
+        Some(id)
+    } else {
+        sqlx::query_scalar!(
+            "SELECT p.id FROM profile p JOIN account a ON a.id = p.account_id
+              WHERE a.username = $1::text::citext
+              ORDER BY p.slug <> 'default', p.id LIMIT 1",
+            username
         )
-        .fetch_one(db)
-        .await?;
-        return Ok(Target::Profile(id, name));
-    }
-
-    let Some(account) = sqlx::query!(
-        r#"SELECT id, username::text AS "username!" FROM account WHERE username = $1::text::citext"#,
-        username
-    )
-    .fetch_optional(db)
-    .await?
-    else {
+        .fetch_optional(db)
+        .await?
+    };
+    let Some(id) = found else {
         return Ok(Target::NoAccount);
     };
-    let profiles = sqlx::query!(
-        r#"SELECT id, slug::text AS "slug!", name FROM profile WHERE account_id = $1 ORDER BY id"#,
-        account.id
-    )
-    .fetch_all(db)
-    .await?;
-
-    let slug = slug_for(&old.name, old.id);
-    let same_name = profiles
-        .iter()
-        .find(|p| p.slug == slug || p.name.to_lowercase() == old.name.trim().to_lowercase());
-    let only = (siblings == 1)
-        .then(|| {
-            profiles
-                .iter()
-                .find(|p| p.slug == "default")
-                .or((profiles.len() == 1).then(|| &profiles[0]))
-        })
-        .flatten();
-    Ok(match same_name.or(only) {
-        Some(p) => Target::Profile(p.id, format!("{}/{}", account.username, p.slug)),
-        None => Target::NewProfile(account.id, account.username, slug),
-    })
-}
-
-/// The address for a new profile of the old name: "Arbeit" becomes "arbeit",
-/// "Zu Hause" "zu-hause". "_", the name of each account's first profile in the
-/// old version, is the default profile. A name that gives no usable address
-/// gets "old-<id>".
-pub fn slug_for(name: &str, old_id: i64) -> String {
-    if name.trim() == "_" {
-        return "default".to_owned();
-    }
-    let mut slug = String::new();
-    for c in name.trim().to_lowercase().chars() {
-        let c = match c {
-            'ä' => "ae",
-            'ö' => "oe",
-            'ü' => "ue",
-            'ß' => "ss",
-            c if c.is_ascii_alphanumeric() => {
-                slug.push(c);
-                continue;
-            }
-            _ => "-",
-        };
-        if c == "-" {
-            if !slug.is_empty() && !slug.ends_with('-') {
-                slug.push('-');
-            }
-        } else {
-            slug.push_str(c);
-        }
-    }
-    let slug = slug.trim_end_matches('-');
-    let slug: String = slug.chars().take(32).collect();
-    let slug = slug.trim_end_matches('-').to_owned();
-    if check_slug(&slug).is_ok() {
-        slug
-    } else {
-        format!("old-{old_id}")
-    }
-}
-
-async fn create_profile(
-    db: &PgPool,
-    account_id: i64,
-    slug: &str,
-    old: &OldProfile,
-) -> anyhow::Result<i64> {
-    let visibility = if old.is_public { "public" } else { "private" };
-    let id = sqlx::query_scalar!(
-        "INSERT INTO profile (account_id, slug, name, visibility)
-         VALUES ($1, $2, $3, $4::text::visibility)
-         ON CONFLICT (account_id, slug) DO UPDATE SET slug = excluded.slug
-         RETURNING id",
-        account_id,
-        slug,
-        old.name.trim(),
-        visibility,
+    let name = sqlx::query_scalar!(
+        r#"SELECT a.username::text || '/' || p.slug::text AS "name!"
+             FROM profile p JOIN account a ON a.id = p.account_id WHERE p.id = $1"#,
+        id
     )
     .fetch_one(db)
-    .await
-    .with_context(|| format!("creating the profile {slug}"))?;
-    Ok(id)
+    .await?;
+    Ok(Target::Profile(id, name))
 }
 
 #[derive(Debug, Default)]
@@ -618,20 +566,24 @@ enum Verdict {
 type TrackKey = (String, String);
 
 /// The listens of one account, all its profiles together, as far as telling
-/// a second copy of a play goes.
+/// a second copy of a play goes. Each time keeps the id of its listen if that
+/// came from the PHP import and may take another source.
 #[derive(Debug, Default)]
 struct Seen {
-    times: BTreeSet<i64>,
-    tracks: HashMap<TrackKey, BTreeSet<i64>>,
+    times: BTreeMap<i64, Option<i64>>,
+    tracks: HashMap<TrackKey, BTreeMap<i64, Option<i64>>>,
+    claimed: HashSet<i64>,
 }
 
 impl Seen {
     async fn of_account(db: &PgPool, account_id: i64) -> sqlx::Result<Self> {
         let rows = sqlx::query!(
-            r#"SELECT extract(epoch FROM l.listened_at)::int8 AS "at!", l.artist_raw, l.track_raw
+            r#"SELECT l.id, extract(epoch FROM l.listened_at)::int8 AS "at!",
+                      l.artist_raw, l.track_raw, l.client = $2 AS "php!"
                  FROM listen l JOIN profile p ON p.id = l.profile_id
                 WHERE p.account_id = $1"#,
-            account_id
+            account_id,
+            import_php::CLIENT,
         )
         .fetch_all(db)
         .await?;
@@ -640,6 +592,7 @@ impl Seen {
             seen.add(
                 row.at,
                 (name_key(&row.artist_raw), name_key(&row.track_raw)),
+                row.php.then_some(row.id),
             );
         }
         Ok(seen)
@@ -649,31 +602,40 @@ impl Seen {
         (name_key(&listen.artist), name_key(&listen.track))
     }
 
-    fn add(&mut self, at: i64, key: TrackKey) {
-        self.times.insert(at);
-        self.tracks.entry(key).or_default().insert(at);
+    fn add(&mut self, at: i64, key: TrackKey, php: Option<i64>) {
+        self.times.entry(at).or_insert(php);
+        self.tracks.entry(key).or_default().entry(at).or_insert(php);
     }
 
-    /// Whether a listen of `key` at `at` is one already there.
-    fn judge(&self, at: i64, key: &TrackKey, gap_secs: f64) -> Verdict {
-        if self.times.contains(&at) {
-            return Verdict::SameSecond;
+    /// The PHP listen `id` takes the source of one old profile, so no other.
+    fn claim(&mut self, id: i64) {
+        self.claimed.insert(id);
+    }
+
+    /// Whether a listen of `key` at `at` is one already there, and the PHP
+    /// listen it matches, if any is still free.
+    fn judge(&self, at: i64, key: &TrackKey, gap_secs: f64) -> (Verdict, Option<i64>) {
+        let free = |php: &Option<i64>| php.filter(|id| !self.claimed.contains(id));
+        if let Some(php) = self.times.get(&at) {
+            return (Verdict::SameSecond, free(php));
         }
         let reach = gap_secs.ceil() as i64;
-        if self.tracks.get(key).is_some_and(|times| {
+        let near = self.tracks.get(key).and_then(|times| {
             times
                 .range(at - reach..=at + reach)
-                .any(|&t| ((t - at).abs() as f64) < gap_secs)
-        }) {
-            return Verdict::SameTrack;
+                .filter(|&(&t, _)| ((t - at).abs() as f64) < gap_secs)
+                .min_by_key(|&(&t, _)| (t - at).abs())
+        });
+        if let Some((_, php)) = near {
+            return (Verdict::SameTrack, free(php));
         }
         if [3600, 7200]
             .iter()
-            .any(|h| self.times.contains(&(at - h)) || self.times.contains(&(at + h)))
+            .any(|h| self.times.contains_key(&(at - h)) || self.times.contains_key(&(at + h)))
         {
-            return Verdict::HoursOff;
+            return (Verdict::HoursOff, None);
         }
-        Verdict::New
+        (Verdict::New, None)
     }
 }
 
@@ -686,7 +648,11 @@ fn gap_secs(duration_ms: Option<i32>) -> f64 {
 }
 
 /// The old listen as a scrobble, or None without artist or title.
-fn convert(listen: &OldListen, repaired: &mut usize) -> anyhow::Result<Option<Listen>> {
+fn convert(
+    listen: &OldListen,
+    client: &str,
+    repaired: &mut usize,
+) -> anyhow::Result<Option<Listen>> {
     let mut fix = |s: &Option<String>| -> Option<String> {
         let s = s.as_deref()?.trim();
         if s.is_empty() {
@@ -711,7 +677,7 @@ fn convert(listen: &OldListen, repaired: &mut usize) -> anyhow::Result<Option<Li
             .filter(|&n| n > 0)
             .and_then(|n| n.try_into().ok()),
         duration_ms: duration_ms(listen.length),
-        client: Some(CLIENT.to_owned()),
+        client: Some(client.to_owned()),
         mbids: Mbids::default(),
         extra: None,
     }))
@@ -777,18 +743,15 @@ mod tests {
     }
 
     #[test]
-    fn makes_addresses_from_names() {
-        assert_eq!(slug_for("Arbeit", 2), "arbeit");
-        assert_eq!(slug_for("_", 1), "default");
-        assert_eq!(
-            slug_for("spotify_with_scrobbler", 3),
-            "spotify-with-scrobbler"
-        );
-        assert_eq!(slug_for("  Zu Hause!  ", 2), "zu-hause");
-        assert_eq!(slug_for("Büro", 2), "buero");
-        assert_eq!(slug_for("Artist", 7), "old-7", "taken by the profile pages");
-        assert_eq!(slug_for("♫", 8), "old-8");
-        assert_eq!(slug_for(&"a".repeat(40), 9).len(), 32);
+    fn names_sources_after_profiles() {
+        let profile = |name: &str| OldProfile {
+            id: 1,
+            user: "fiona".into(),
+            name: name.into(),
+            is_public: true,
+        };
+        assert_eq!(profile("_").client(), "import:symfony-2022");
+        assert_eq!(profile("gonic").client(), "import:symfony-2022/gonic");
     }
 
     #[test]
@@ -803,19 +766,41 @@ mod tests {
     fn tells_second_copies_of_plays() {
         let key = |a: &str, t: &str| (name_key(a), name_key(t));
         let mut seen = Seen::default();
-        seen.add(1_000, key("Die Ärzte", "Westerland"));
-        seen.add(2_000, key("Björk", "Hyperballad"));
+        seen.add(1_000, key("Die Ärzte", "Westerland"), Some(7));
+        seen.add(2_000, key("Björk", "Hyperballad"), None);
         let westerland = key("die ärzte ", "WESTERLAND");
-        assert_eq!(seen.judge(1_000, &key("x", "y"), 15.0), Verdict::SameSecond);
-        assert_eq!(seen.judge(1_100, &westerland, 115.0), Verdict::SameTrack);
-        assert_eq!(seen.judge(1_115, &westerland, 115.0), Verdict::New);
+        assert_eq!(
+            seen.judge(1_000, &key("x", "y"), 15.0),
+            (Verdict::SameSecond, Some(7))
+        );
+        assert_eq!(
+            seen.judge(1_100, &westerland, 115.0),
+            (Verdict::SameTrack, Some(7))
+        );
+        assert_eq!(seen.judge(1_115, &westerland, 115.0), (Verdict::New, None));
+        assert_eq!(
+            seen.judge(2_010, &key("Björk", "Hyperballad"), 15.0),
+            (Verdict::SameTrack, None)
+        );
         assert_eq!(
             seen.judge(1_100, &key("Björk", "Joga"), 115.0),
-            Verdict::New
+            (Verdict::New, None)
         );
-        assert_eq!(seen.judge(4_600, &westerland, 115.0), Verdict::HoursOff);
-        assert_eq!(seen.judge(9_200, &westerland, 115.0), Verdict::HoursOff);
-        assert_eq!(seen.judge(50_000, &westerland, 115.0), Verdict::New);
+        assert_eq!(
+            seen.judge(4_600, &westerland, 115.0),
+            (Verdict::HoursOff, None)
+        );
+        assert_eq!(
+            seen.judge(9_200, &westerland, 115.0),
+            (Verdict::HoursOff, None)
+        );
+        assert_eq!(seen.judge(50_000, &westerland, 115.0), (Verdict::New, None));
+        // Once claimed, the PHP listen takes no second source.
+        seen.claim(7);
+        assert_eq!(
+            seen.judge(1_000, &key("x", "y"), 15.0),
+            (Verdict::SameSecond, None)
+        );
 
         assert_eq!(gap_secs(None), 15.0);
         assert_eq!(gap_secs(Some(230_000)), 115.0);
