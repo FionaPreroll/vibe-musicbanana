@@ -85,25 +85,35 @@ enum Command {
 #[derive(Args)]
 struct YourSpotifyArgs {
     /// Address of YourSpotify's API (its API_ENDPOINT, not the web interface),
-    /// e.g. http://yourspotify-server:8080
+    /// e.g. http://yourspotify-server:8080. Taken from the user's connection
+    /// when left out.
     #[arg(long, env = "YOURSPOTIFY_URL", value_parser = NonEmptyStringValueParser::new())]
-    from: String,
+    from: Option<String>,
     /// The public token from YourSpotify's settings. Better set as
     /// YOURSPOTIFY_TOKEN, so that it stays out of the shell history and the
-    /// process list.
+    /// process list. Taken from the user's connection when left out.
     #[arg(
         long,
         env = "YOURSPOTIFY_TOKEN",
         hide_env_values = true,
         value_parser = NonEmptyStringValueParser::new()
     )]
-    token: String,
+    token: Option<String>,
     /// Account the plays go to.
-    #[arg(long, value_parser = NonEmptyStringValueParser::new())]
-    user: String,
-    /// Profile the plays go to.
-    #[arg(long, default_value = "default")]
-    profile: String,
+    #[arg(
+        long,
+        value_parser = NonEmptyStringValueParser::new(),
+        required_unless_present = "connection"
+    )]
+    user: Option<String>,
+    /// Profile the plays go to: the default one, or the one of the user's
+    /// connection when --from and --token are left out.
+    #[arg(long)]
+    profile: Option<String>,
+    /// The connection to import from, when the user has several
+    /// (`musicbanana yourspotify list` shows them).
+    #[arg(long)]
+    connection: Option<i64>,
     /// Fetch the whole history again, e.g. after YourSpotify has imported an
     /// older Spotify export. Plays already in the profile are skipped.
     #[arg(long)]
@@ -600,8 +610,28 @@ async fn profile_command(db: &PgPool, command: ProfileCommand) -> anyhow::Result
 }
 
 async fn import_yourspotify(db: &PgPool, args: YourSpotifyArgs) -> anyhow::Result<()> {
-    let source = yourspotify::Source::new(&args.from, &args.token)?;
-    let profile = yourspotify::profile_id(db, &args.user, &args.profile).await?;
+    let (source, profile) = match (args.from, args.token, args.connection) {
+        // A YourSpotify of one's own choosing, as before connections.
+        (Some(from), Some(token), None) => {
+            let profile = args.profile.as_deref().unwrap_or("default");
+            let user = args.user.as_deref().unwrap_or_default();
+            (
+                yourspotify::Source::new(&from, &token)?,
+                yourspotify::profile_id(db, user, profile).await?,
+            )
+        }
+        (from, token, id) => {
+            let stored =
+                connections::pick(db, args.user.as_deref(), args.profile.as_deref(), id).await?;
+            if from.is_none() && token.is_none() {
+                return import_connection(db, &stored, args.all, args.every).await;
+            }
+            // Its profile, with an address or token in place of the stored one.
+            let from = from.unwrap_or(stored.url);
+            let token = token.unwrap_or(stored.token);
+            (yourspotify::Source::new(&from, &token)?, stored.profile_id)
+        }
+    };
     let Some(every) = args.every else {
         let report = yourspotify::import(db, &source, profile, args.all).await?;
         println!("{report}");
@@ -623,6 +653,33 @@ async fn import_yourspotify(db: &PgPool, args: YourSpotifyArgs) -> anyhow::Resul
             () = &mut shutdown => return Ok(()),
         }
     }
+}
+
+/// Imports from a stored connection, keeping its state as the server does.
+async fn import_connection(
+    db: &PgPool,
+    stored: &connections::Stored,
+    all: bool,
+    every: Option<Duration>,
+) -> anyhow::Result<()> {
+    if every.is_some() {
+        bail!(
+            "the server imports from YourSpotify connection {} every 15 minutes already; \
+             --every is for a YourSpotify given with --from and --token",
+            stored.id
+        );
+    }
+    println!(
+        "Importing from YourSpotify connection {} ({}/{}, {}){}.",
+        stored.id,
+        stored.username,
+        stored.profile,
+        stored.url,
+        if all { ", the whole history again" } else { "" }
+    );
+    let report = connections::import_now(db, stored.id, all, shutdown_signal()).await?;
+    println!("{report}");
+    Ok(())
 }
 
 async fn mbid_command(db: &PgPool, command: MbidCommand) -> anyhow::Result<()> {

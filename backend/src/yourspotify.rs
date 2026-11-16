@@ -544,7 +544,7 @@ impl fmt::Display for Report {
 }
 
 /// "2026-10-03 14:30 UTC"
-fn minutes(at: OffsetDateTime) -> String {
+pub(crate) fn minutes(at: OffsetDateTime) -> String {
     let at = at.to_offset(time::UtcOffset::UTC);
     format!("{} {:02}:{:02} UTC", at.date(), at.hour(), at.minute())
 }

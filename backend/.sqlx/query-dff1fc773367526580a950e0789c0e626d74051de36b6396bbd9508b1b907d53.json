@@ -1,0 +1,80 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.id, a.username::text AS \"username!\", p.slug::text AS \"profile!\",\n                  p.id AS profile_id, c.api_url AS url, c.token\n             FROM yourspotify_connection c\n             JOIN profile p ON p.id = c.profile_id\n             JOIN account a ON a.id = p.account_id\n            WHERE ($1::text IS NULL OR a.username = $1::text::citext)\n              AND ($2::text IS NULL OR p.slug = $2::text::citext)\n              AND ($3::bigint IS NULL OR c.id = $3)\n            ORDER BY p.slug, c.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "username!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "profile!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "profile_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "profile",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "api_url"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "token",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "token"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "dff1fc773367526580a950e0789c0e626d74051de36b6396bbd9508b1b907d53"
+}

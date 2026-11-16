@@ -715,6 +715,179 @@ async fn fetching_everything_again_goes_on_where_it_stopped(db: PgPool) {
 }
 
 #[sqlx::test(fixtures("profiles"))]
+async fn the_command_line_finds_the_connection(db: PgPool) {
+    let server = Arc::new(YourSpotify::default());
+    let api = serve(&server).await;
+    let none = connections::pick(&db, Some("alex"), None, None)
+        .await
+        .err()
+        .unwrap();
+    assert!(
+        none.to_string()
+            .starts_with("there is no YourSpotify connection of alex:"),
+        "{none}"
+    );
+    assert!(none.to_string().contains("yourspotify add"), "{none}");
+
+    // The only one of the account, whatever the profile.
+    let default = connections::add(&db, 1, &api, TOKEN).await.unwrap();
+    let found = connections::pick(&db, Some("fiona"), None, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        (found.id, found.profile.as_str(), found.profile_id),
+        (default, "default", 1)
+    );
+    assert_eq!(
+        (found.url.as_str(), found.token.as_str()),
+        (api.trim_end_matches('/'), TOKEN)
+    );
+
+    // With two, one has to be picked.
+    let work = connections::add(&db, 2, &api, TOKEN).await.unwrap();
+    let two = connections::pick(&db, Some("Fiona"), None, None)
+        .await
+        .err()
+        .unwrap()
+        .to_string();
+    assert!(
+        two.starts_with(
+            "there are 2 YourSpotify connections of Fiona; pick one with --connection:"
+        ),
+        "{two}"
+    );
+    assert!(two.contains(&format!("{work}  Fiona/arbeit  ")), "{two}");
+    assert!(
+        two.contains(&format!("{default}  Fiona/default  ")),
+        "{two}"
+    );
+    assert!(!two.contains(TOKEN), "{two}");
+    let by_profile = connections::pick(&db, Some("fiona"), Some("arbeit"), None)
+        .await
+        .unwrap();
+    assert_eq!(by_profile.id, work);
+    let by_id = connections::pick(&db, Some("fiona"), None, Some(default))
+        .await
+        .unwrap();
+    assert_eq!(by_id.id, default);
+    let by_id_alone = connections::pick(&db, None, None, Some(work))
+        .await
+        .unwrap();
+    assert_eq!(by_id_alone.username, "Fiona");
+
+    // Not another account's.
+    let theirs = connections::pick(&db, Some("alex"), None, Some(work))
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(
+        theirs.to_string(),
+        format!("there is no YourSpotify connection {work} of alex")
+    );
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn the_command_line_imports_from_a_connection(db: PgPool) {
+    let server = Arc::new(YourSpotify::default());
+    *server.plays.lock().unwrap() = plays(3);
+    let api = serve(&server).await;
+    let id = connections::add(&db, 1, &api, TOKEN).await.unwrap();
+
+    // The first time the whole history, noted as the server's imports are.
+    let report = connections::import_now(&db, id, false, std::future::pending())
+        .await
+        .unwrap();
+    assert_eq!((report.plays, report.recorded), (3, 3));
+    let listed = &connections::list(&db, None).await.unwrap()[0];
+    assert_eq!((listed.imported, &listed.error), (3, &None));
+    assert!(listed.finished_at >= listed.started_at);
+    // So the server's next round is 15 minutes on.
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 0);
+
+    // Then the new plays only.
+    server
+        .plays
+        .lock()
+        .unwrap()
+        .insert(0, play(at(3), "Jóga", &["Björk"], Some("Homogenic")));
+    let report = connections::import_now(&db, id, false, std::future::pending())
+        .await
+        .unwrap();
+    assert_eq!((report.since, report.plays), (Some(at(2)), 1));
+
+    // With --all the whole history again, as when asked in the settings.
+    server.plays.lock().unwrap().extend(older_export(10, 1));
+    let report = connections::import_now(&db, id, true, std::future::pending())
+        .await
+        .unwrap();
+    assert_eq!((report.plays, report.recorded), (14, 10));
+    let listed = &connections::list(&db, None).await.unwrap()[0];
+    assert_eq!(
+        (listed.imported, listed.refetch_plays, listed.refetch_new),
+        (14, 14, 10)
+    );
+    assert!(listed.refetched_at.is_some());
+    assert_eq!(listed.refetch_requested_at, None);
+    assert_eq!(imported(&db).await, 14);
+
+    // Not while the server imports from it.
+    sqlx::query(
+        "UPDATE yourspotify_connection
+            SET started_at = now(), finished_at = now() - interval '1 minute'",
+    )
+    .execute(&db)
+    .await
+    .unwrap();
+    let busy = connections::import_now(&db, id, false, std::future::pending())
+        .await
+        .err()
+        .unwrap();
+    assert!(
+        busy.to_string().starts_with(&format!(
+            "the server is importing from YourSpotify connection {id} right now (since "
+        )),
+        "{busy}"
+    );
+    let missing = connections::import_now(&db, id + 1, false, std::future::pending())
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(
+        missing.to_string(),
+        format!("there is no YourSpotify connection {}", id + 1)
+    );
+}
+
+#[sqlx::test(fixtures("profiles"))]
+async fn the_server_goes_on_after_ctrl_c(db: PgPool) {
+    let server = Arc::new(YourSpotify::default());
+    *server.plays.lock().unwrap() = plays(3);
+    let api = serve(&server).await;
+    let id = connections::add(&db, 1, &api, TOKEN).await.unwrap();
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 1);
+    server.plays.lock().unwrap().extend(older_export(5, 1));
+    later(&db).await;
+
+    let stopped = connections::import_now(&db, id, true, std::future::ready(()))
+        .await
+        .err()
+        .unwrap();
+    assert!(stopped.to_string().starts_with("stopped;"), "{stopped}");
+    let listed = &connections::list(&db, None).await.unwrap()[0];
+    assert_eq!(listed.error.as_deref(), Some("stopped on the command line"));
+    assert!(listed.finished_at >= listed.started_at);
+    assert!(listed.refetch_requested_at.is_some());
+
+    // The server takes it again in a later round and fetches everything.
+    later(&db).await;
+    assert_eq!(connections::sync_due(&db).await.unwrap(), 1);
+    let listed = &connections::list(&db, None).await.unwrap()[0];
+    assert_eq!((listed.refetch_new, &listed.error), (5, &None));
+    assert!(listed.refetch_requested_at.is_none());
+    assert_eq!(imported(&db).await, 8);
+}
+
+#[sqlx::test(fixtures("profiles"))]
 async fn connections_in_the_settings(db: PgPool) {
     use axum::{
         body::Body,
