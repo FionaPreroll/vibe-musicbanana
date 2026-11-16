@@ -28,6 +28,17 @@ The token is tried before the connection is kept. From then on `musicbanana serv
 
 ## The importer
 
+**From a connection:** when the account has a connection (see above), the importer takes address, token and profile from there, so neither needs to be given again:
+
+```sh
+musicbanana import-yourspotify --user <username>         # the new plays now, instead of within 15 minutes
+musicbanana import-yourspotify --user <username> --all   # the whole history again, as "Fetch all again"
+```
+
+It does what the server would do in its next round and keeps the connection's state the same way, so the settings page and `yourspotify list` show it; the server does not import from the connection while the command runs, and the command refuses while the server does. With `--all` it fetches the whole history again as **Fetch all again** does; one that was asked for and not done yet goes on where it stopped. Ctrl+C stops it, and the server goes on from there within 15 minutes. With several connections, it lists them and asks for one with `--connection <id>` (or `--profile <slug>`). `--from` or `--token` given as well take the place of the stored ones for this run, which then leaves the connection's state alone; with both and no `--connection` the importer works without a connection, as below. `--every` is only for the latter, since the server keeps connections up to date by itself.
+
+**Without a connection:**
+
 ```sh
 export YOURSPOTIFY_TOKEN=…    # the public token from YourSpotify's settings
 musicbanana import-yourspotify --from http://192.168.1.10:8080 --user <username>

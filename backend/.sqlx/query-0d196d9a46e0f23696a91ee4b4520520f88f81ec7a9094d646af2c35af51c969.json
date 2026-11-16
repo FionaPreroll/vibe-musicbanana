@@ -1,0 +1,158 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE yourspotify_connection c\n              SET started_at = now(),\n                  refetch_requested_at = CASE WHEN $2 THEN COALESCE(c.refetch_requested_at, now())\n                                              ELSE c.refetch_requested_at END,\n                  refetch_at = CASE WHEN $2 AND c.refetch_requested_at IS NULL THEN NULL\n                                    ELSE c.refetch_at END,\n                  refetch_plays = CASE WHEN $2 AND c.refetch_requested_at IS NULL THEN 0\n                                       ELSE c.refetch_plays END,\n                  refetch_new = CASE WHEN $2 AND c.refetch_requested_at IS NULL THEN 0\n                                     ELSE c.refetch_new END,\n                  refetch_left_out = CASE WHEN $2 AND c.refetch_requested_at IS NULL THEN 0\n                                          ELSE c.refetch_left_out END\n             FROM profile p\n             JOIN account a ON a.id = p.account_id\n            WHERE p.id = c.profile_id AND c.id = $1\n              AND (c.started_at IS NULL\n                   OR c.finished_at >= c.started_at\n                   OR c.started_at < now() - interval '1 day')\n           RETURNING c.id, c.profile_id, c.api_url, c.token, c.finished_at, c.imported,\n                     c.refetch_requested_at IS NOT NULL AS \"refetch!\", c.refetch_at,\n                     c.refetch_plays, c.refetch_new, c.refetch_left_out,\n                     a.username::text AS \"username!\", p.slug::text AS \"slug!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "profile_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "profile_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "api_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "api_url"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "token",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "token"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "finished_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "finished_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "imported",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "imported"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "refetch!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "refetch_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "refetch_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "refetch_plays",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "refetch_plays"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "refetch_new",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "refetch_new"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "refetch_left_out",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "yourspotify_connection",
+            "name": "refetch_left_out"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "username!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "slug!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      null,
+      true,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "0d196d9a46e0f23696a91ee4b4520520f88f81ec7a9094d646af2c35af51c969"
+}
